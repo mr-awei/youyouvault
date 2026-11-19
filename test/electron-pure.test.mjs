@@ -36,7 +36,7 @@ test('版本比较：脏输入不抛错，按 0 处理', () => {
 
 /* ---------------- 路径白名单：ipc 的 open-folder / drag-out / locate 全靠它 ---------------- */
 
-const root = path.resolve('E:/gemvault-storage');
+const root = path.resolve('E:/youyouvault-storage');
 
 test('路径白名单：根目录本身与子路径放行', () => {
   assert.equal(isPathInsideAny(root, [root]), true, '「打开存储文件夹」传的就是根目录');

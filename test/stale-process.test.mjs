@@ -23,7 +23,7 @@ test.after(() => {
   }
 });
 
-const entry = 'e:/gemvault/server/standalone.js';
+const entry = 'e:/youyouvault/server/standalone.js';
 const record = {
   pid: 4321,
   startedAt: '2026-11-06T03:00:00.000Z',
@@ -33,7 +33,7 @@ const record = {
 const audit = {
   pid: 4321,
   startedAt: '2026-11-06T03:00:00.500Z',
-  commandLine: '"C:\\Program Files\\node.exe" "E:\\gemvault\\server\\standalone.js"',
+  commandLine: '"C:\\Program Files\\node.exe" "E:\\youyouvault\\server\\standalone.js"',
 };
 
 test('PID 记录：字段校验能挡住脏数据 / PID 复用 / 伪造时间', () => {
@@ -48,7 +48,7 @@ test('命令行特征：只认本服务的 standalone.js，别的应用不能误
   assert.equal(isServiceCommandLine(audit.commandLine, entry), true);
   assert.equal(isServiceCommandLine('node.exe E:\\other\\app\\server.js', entry), false);
   assert.equal(isServiceCommandLine('', entry), false);
-  assert.equal(isServiceCommandLine('node.exe E:\\gemvault\\server\\standalone.js', entry), true);
+  assert.equal(isServiceCommandLine('node.exe E:\\youyouvault\\server\\standalone.js', entry), true);
 });
 
 test('WMI 进程审计：CreationDate 的 /Date(ms)/ 与 ISO 都能解析', () => {

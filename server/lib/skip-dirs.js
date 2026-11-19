@@ -31,7 +31,7 @@ export const SKIP_DIRS = new Set([
   '.tuku',
   // 旧版本用过这个名字，老库里还留着；继续跳过，否则升级后第一次扫描
   // 会把老库自己的缩略图当成新素材再吸一遍
-  '.gemvault',
+  '.youyouvault',
   '.codebuddy',
   'system volume information',
   '$recycle.bin',
