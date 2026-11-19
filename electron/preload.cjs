@@ -12,16 +12,10 @@ contextBridge.exposeInMainWorld('desktopAPI', {
   dragOut: (p) => ipcRenderer.send('drag-out', p),
   // 桌面端信息：实际生效的全局快捷键等（被其它软件占用时会自动换备用键）
   appInfo: () => ipcRenderer.invoke('app-info'),
-  // 保存并应用动态壁纸配置（主进程据此创建/销毁桌面层窗口）
-  controlLiveWallpaper: (patch) => ipcRenderer.invoke('live-wallpaper-control', patch),
-  // 选择单个文件（如动态壁纸视频）
+  // 选择单个文件
   pickFile: (filters) => ipcRenderer.invoke('pick-file', filters),
   // 视频片段导出：渲染进程编码出 data URL，主进程弹「另存为」写盘
   saveExport: (payload) => ipcRenderer.invoke('save-export', payload),
-  // 壁纸参数实时预览：拖滑块时即时推给桌面层窗口，不重开窗口
-  setLiveParams: (params) => ipcRenderer.invoke('live-params', params),
-  // 微博 Cookie：打开内置登录窗口，登录成功后自动回传整段 Cookie
-  weiboLogin: () => ipcRenderer.invoke('weibo-login'),
   // 同步原生控件（下拉弹层等）主题：dark / light / system
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   // 界面语言：让托盘菜单 / 原生对话框跟随界面（zh-CN / en-US）

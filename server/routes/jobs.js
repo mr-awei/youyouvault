@@ -15,11 +15,8 @@ import * as lib from '../library.js';
 import * as nd from '../lib/nondestructive.js';
 import { addImagesToFolder, removeImagesFromFolder } from '../folders.js';
 import { removeImage, restoreFromTrash } from '../lib/trash.js';
-import { startCrawl, stopCrawl } from '../crawler.js';
 import { cancelEditJob, startEditJob } from '../edit-job.js';
 import { cancelJob as cancelEnhanceJob, startJob as startEnhanceJob } from '../enhance-job.js';
-import { cancelMattingInstall, installMatting } from '../matting.js';
-import { cancelFaceInstall, cancelFaceScan, startFaceInstall, startFaceScan } from '../face.js';
 import { cancelEagleExport, startEagleExportJob } from '../eagle-export-job.js';
 import { cancelTimelineBackfill, startTimelineBackfill } from '../timeline-backfill.js';
 import { stopNightBatch } from '../lib/night-batch.js';
@@ -219,11 +216,9 @@ registerUndoer('import', async (p) => {
 /* -------------------------------- 路由 -------------------------------- */
 
 const KIND_TITLE = {
-  crawl: '采集',
   edit: '批量编辑',
   enhance: '画质增强',
   'model-install': '模型下载',
-  'face-scan': '人脸扫描',
   'eagle-export': '导出 Eagle 库',
   'timeline-backfill': '重建拍摄时间',
   'night-batch': 'AI 夜间批处理',
@@ -251,15 +246,10 @@ export function register(app) {
       return res.json({ ok: false, message: '任务已结束，无需停止' });
     }
     let ok = false;
-    if (job.kind === 'crawl') ok = stopCrawl();
     // cancelEditJob / cancelJob 返回的是任务状态对象，不是布尔：以前直接把对象当 ok 回给前端，
     // 前端 if (ok) 恒为真，取消失败也显示「已请求停止」。
-    else if (job.kind === 'edit') ok = !!cancelEditJob()?.cancelled;
+    if (job.kind === 'edit') ok = !!cancelEditJob()?.cancelled;
     else if (job.kind === 'enhance') ok = !!cancelEnhanceJob()?.cancelled;
-    else if (job.kind === 'model-install') {
-      // 人脸模型与去背景模型都走 model-install，取消要落到真正在下的那个
-      ok = cancelMattingInstall() || cancelFaceInstall();
-    } else if (job.kind === 'face-scan') ok = cancelFaceScan();
     else if (job.kind === 'eagle-export') ok = cancelEagleExport();
     else if (job.kind === 'timeline-backfill') {
       cancelTimelineBackfill();
@@ -281,15 +271,10 @@ export function register(app) {
     try {
       /** @type {any} 各子系统返回值形状不同（{ok,message} / 状态对象），这里只关心 ok 与 message */
       let out;
-      if (job.kind === 'crawl') out = startCrawl({ keywords: p.keywords, sources: p.sources, pages: p.pages });
-      else if (job.kind === 'edit') out = startEditJob(p.ids || [], p.op, p.params || {});
+      if (job.kind === 'edit') out = startEditJob(p.ids || [], p.op, p.params || {});
       else if (job.kind === 'enhance') out = startEnhanceJob(p.ids || [], p.model, p.standard);
       else if (job.kind === 'model-install') {
-        if (p.model === 'sr') out = { ok: false, message: '超分模型按需加载，无需预下载' };
-        else if (p.model === 'face') out = startFaceInstall();
-        else out = installMatting();
-      } else if (job.kind === 'face-scan') {
-        out = startFaceScan({ limit: p.limit || 0, force: p.force === true, minCos: p.minCos || 0 });
+        out = { ok: false, message: '超分模型按需加载，无需预下载' };
       } else if (job.kind === 'eagle-export') {
         out = startEagleExportJob({ destDir: p.destDir, name: p.name });
       } else if (job.kind === 'timeline-backfill') {

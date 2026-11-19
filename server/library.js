@@ -238,7 +238,7 @@ function addPhash(id, hex) {
   if (!parts) return;
   const [lo, hi] = parts;
   // 同一 id 重新派生/批量回填时先摘掉旧槽：否则旧哈希会永远留在分桶里，
-  // 查重与以图搜图会命中「幽灵图」（指向已改动的同一行，距离却是旧值）
+  // 查重与相似检索会命中「幽灵图」（指向已改动的同一行，距离却是旧值）
   if (phashSlot.has(id)) removePhash(id);
   let slot = phashFree.pop();
   if (slot === undefined) {
@@ -289,7 +289,7 @@ export function removePhash(id) {
 }
 
 /**
- * 取与给定 pHash 相近的若干条（以图搜图用）。
+ * 取与给定 pHash 相近的若干条（相似图检索用）。
  * 以前是 "SELECT * FROM images WHERE phash <> ''" 全表进内存再逐个算距离，
  * 库到十万级单次请求就要几百毫秒到几秒；这里复用同一套分桶索引。
  * @returns {{id:number, dist:number}[]} 按距离升序
@@ -378,14 +378,14 @@ function imageTypeOf(meta) {
 
 const INVALID_CHARS = /[\\/:*?"<>|\r\n\t]/g;
 
-/** 采集到的图片直接写入用户指定的本地文件夹，并使用可读文件名 */
+/** 入库的图片直接写入用户指定的本地文件夹，并使用可读文件名 */
 export function resolveStorageDir(settings = getSettings()) {
   const dir = settings.storageDir || IMAGE_DIR;
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
-// 单张采集 / 拖拽 / 投送没有「批次序号」，用一个进程内自增序号喂给 {index}
+// 单张导入 / 拖拽 / 投送没有「批次序号」，用一个进程内自增序号喂给 {index}
 let nameSeq = 0;
 const nextNameIndex = () => ++nameSeq;
 
@@ -420,7 +420,7 @@ export function buildFileName({
   // 6 位随机后缀：秒级时间戳 + 相同尺寸仍可能撞名（同一批两张不同图会生成同名文件，
   // 仅扩展名不同，曾被误当成「同名 jpg/png 同一张照片」）
   const suffix = crypto.randomBytes(3).toString('hex');
-  const parts = [safe(keyword) || '壁纸', source, `${width}x${height}`, stamp, suffix];
+  const parts = [safe(keyword) || '图库', source, `${width}x${height}`, stamp, suffix];
   return `${parts.join('_')}.${ext || extOf(format)}`;
 }
 
@@ -657,7 +657,7 @@ function bucketOf(w, h) {
 }
 
 /**
- * 文件名里带着采集时的分辨率（关键词_来源_宽x高_时间.jpg），且增强/旋转不会改名。
+ * 文件名里带着入库时的分辨率（关键词_来源_宽x高_时间.jpg），且增强/旋转不会改名。
  * 因此「当前尺寸 > 文件名里的尺寸」就说明这张图被放大过，可用于展示"增强前 → 后"。
  */
 function originalSizeOf(row) {
@@ -738,7 +738,7 @@ export function toDTO(row) {
     viewCount: row.view_count || 0,
     viewedAt: row.viewed_at || '',
     rating: row.rating || 0,
-    /** 采集收件箱：新采集默认 1，整理后置 0 */
+    /** 收件箱：新入库默认 1，整理后置 0 */
     inbox: Number(row.inbox) === 1,
     /** 颜色旗标：red/orange/.../gray；空串 = 未标记 */
     colorLabel: row.color_label || '',
@@ -788,14 +788,14 @@ export const KEEP_REASONS = {
  * @param {string} [params.absPath] 已存在于磁盘的文件（不复制）
  * @param {Buffer} [params.buffer] 内存中的图片数据（会落盘）
  * @param {string} [params.source] 来源标记
- * @param {string} [params.keyword] 采集关键词
+ * @param {string} [params.keyword] 文件名中的关键词
  * @param {string} [params.sourceUrl] 原始网页地址
  * @param {string} [params.title] 标题
  * @param {string} [params.tags] 逗号分隔标签
  * @param {boolean} [params.copyToStorage] 是否复制到素材目录
  * @param {boolean} [params.skipPhashDupe] 跳过 pHash 查重
  * @param {number|null} [params.libGeneration] 启动任务时的库代数（防跨库串图）
- * @param {boolean} [params.skipQuality] 用户主动采集时跳过质量门槛
+ * @param {boolean} [params.skipQuality] 用户主动导入时跳过质量门槛
  * @returns {Promise<{ok:boolean, id?:number, image?:any, reason?:string, format?:string, duplicateOf?:number, clipCos?:number, score?:number, reasons?:string[]}>}
  */
 export async function ingest(params, settings = getSettings()) {
@@ -814,8 +814,8 @@ export async function ingest(params, settings = getSettings()) {
     // 任务启动时记下的库代数：跨 await 的长任务（导入）中途若切了库，
     // 这里比对发现代数变了就放弃入库，避免把 A 库的图写进 B 库
     libGeneration = null,
-    // 用户主动采集（拖拽 / 右键「采集这张图片」）用：不过 minFileSize / minResolution 门槛。
-    // 「小于 30KB」「短边不到 800」是给爬虫批量抓图定的,拿来拦用户自己挑的图就是拦错人：
+    // 用户主动导入（拖拽 / 粘贴 / 上传）用：不过 minFileSize / minResolution 门槛。
+    // 「小于 30KB」「短边不到 800」对用户自己挑的图就是拦错人：
     // AI 生成站常常只把 512/768 的预览图放进 <img>，Eagle 照收，我们却判 lowres 丢掉了。
     skipQuality = false,
   } = params;
@@ -833,7 +833,7 @@ export async function ingest(params, settings = getSettings()) {
   // 与 mtime 取较早者，见 lib/taken-at.js 的 fileStamp()。
   let fsBirthtime = 0;
   // 复制进库时，目标文件的创建时间会被重置成复制时刻；留一份源文件的创建时间，
-  // 否则 time 线会把「采集进来的老图」排到导入那天。
+  // 否则 time 线会把「导入的老图」排到导入那天。
   let srcBirthtime = 0;
 
   if (buffer) {
@@ -884,7 +884,7 @@ export async function ingest(params, settings = getSettings()) {
     return { ok: false, reason: KEEP_REASONS.tooSmall, format };
   }
 
-  // 落盘：采集到的图片直接写入本地保存文件夹
+  // 落盘：入库的图片直接写入本地保存文件夹
   if (buffer || (copyToStorage && absPath)) {
     const dir = resolveStorageDir(settings);
     const name = buildFileName({
@@ -903,7 +903,7 @@ export async function ingest(params, settings = getSettings()) {
     else {
       await fsp.copyFile(absPath, finalPath);
       // 复制会重置 mtime / 创建时间（Windows 上两者都变成复制时刻），
-      // 不还原就等于「采集进来的图全堆在导入那天」。atime 一起还原，
+      // 不还原就等于「导入的图全堆在导入那天」。atime 一起还原，
       // 免得某些同步盘把「访问时间」当成异常。
       try {
         const src = await fsp.stat(absPath);
@@ -947,25 +947,20 @@ export async function ingest(params, settings = getSettings()) {
   // 入库时间绝不参与；两者都取不到就留空（时间线页会显示「N 张待校正」）。
   // 解析失败不阻断入库——一张照片进不了时间线，总好过导入时报错。
   let takenAt;
-  /** @type {Record<string, any>} */
-  let exif = {};
   try {
-    exif = parseExif(meta.exif) || {};
+    const exif = parseExif(meta.exif) || {};
     takenAt = resolveTakenAt({ exifTakenAt: exif.takenAt, fsMtime, fsBirthtime });
   } catch {
     takenAt = resolveTakenAt({ fsMtime, fsBirthtime });
   }
-  // 拍摄地点落列：地图视图按经纬度分组，不入库就得每次重读文件
-  const gpsLat = Number.isFinite(Number(exif.lat)) ? Number(exif.lat) : null;
-  const gpsLon = Number.isFinite(Number(exif.lon)) ? Number(exif.lon) : null;
 
   // OR IGNORE：abs_path 上有唯一索引，watch 与 rescan 并发时后到的那条直接放弃，
   // 不会因为约束冲突把整批导入打成「本批失败」
   const info = db
     .prepare(
       `INSERT OR IGNORE INTO images (title, abs_path, thumb, source, keyword, source_url, width, height,
-        size_bytes, mime, phash, favorite, tags, created_at, taken_at, fs_mtime, md5, media_kind, gps_lat, gps_lon, gps_checked)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 1)`
+        size_bytes, mime, phash, favorite, tags, created_at, taken_at, fs_mtime, md5, media_kind)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       title || path.basename(finalPath),
@@ -985,9 +980,7 @@ export async function ingest(params, settings = getSettings()) {
       takenAt,
       fsMtime,
       md5,
-      'image',
-      gpsLat,
-      gpsLon
+      'image'
     );
   const id = Number(info.lastInsertRowid);
   if (!info.changes) {
@@ -1010,7 +1003,7 @@ export async function ingest(params, settings = getSettings()) {
     console.error('[phash] 计算失败', finalPath, err.message);
   }
 
-  // pHash 查重（采集场景）：命中则撤销本次入库（删记录 + 缩略图 + 已落盘文件）
+  // pHash 查重（入库场景）：命中则撤销本次入库（删记录 + 缩略图 + 已落盘文件）
   if (phash && !skipPhashDupe) {
     const dupId = findDuplicateByPhash(phash, threshold);
     if (dupId) {
@@ -1085,7 +1078,7 @@ export async function ingest(params, settings = getSettings()) {
   setArgs.push(id);
   db.prepare(`UPDATE images SET ${setCols.join(', ')} WHERE id = ?`).run(...setArgs);
 
-  // 按磁盘目录归入文件夹树（本地导入的图有目录层级；采集到 root 的归入根）
+  // 按磁盘目录归入文件夹树（本地导入的图有目录层级；写入 root 的归入根）
   try {
     linkImageByPath(id, finalPath, settings.storageDir);
   } catch {
@@ -1266,7 +1259,7 @@ export async function backfillDominant(limit = 300, force = false) {
   return { done, skipped, remain };
 }
 
-/** 补算主体哈希（白底抠图+主体包围盒归一化后的 pHash），一次一批可重复调用。
+/** 补算主体哈希（白底去背+主体包围盒归一化后的 pHash），一次一批可重复调用。
  *  为什么存在：全图 pHash 被白底背景主导，不同商品也判相似——见 lib/subject.js 头注。
  *  从缩略图算（与全图 pHash 同源，整图内容一致；6000×4000 原图解码太慢）。
  *  抠不出主体（非白底/纯色图）写入 'SKIP' 占位，避免每次补算都重试同一批失败图。 */

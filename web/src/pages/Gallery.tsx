@@ -11,7 +11,7 @@ import type { CropItem } from '../components/BatchCropStudio';
 import MasonryGrid from '../components/MasonryGrid';
 import ActionsPanel from '../components/ActionsPanel';
 import { IconDownload, IconFolder, IconHeart, IconTrash } from '../components/Icons';
-import { IconWarning, IconImages, IconGear, IconRotateCcw, IconGlobe, IconFolderOpen, IconClose, IconPencil, IconCheck, IconStar, IconRefresh, IconSquare } from '../components/Icons';
+import { IconWarning, IconImages, IconGear, IconRotateCcw, IconFolderOpen, IconClose, IconPencil, IconCheck, IconStar, IconRefresh, IconSquare } from '../components/Icons';
 import Select from '../components/Select';
 import ToolbarCustomizer from '../components/ToolbarCustomizer';
 import { usePinnedActions } from '../lib/pinned';
@@ -19,7 +19,7 @@ import { IMAGE_MIME, TAG_MIME } from '../lib/dnd';
 import i18n from '../i18n';
 
 /**
- * 低频重浮层全部按需加载：它们只在用户点了「批量裁切 / 调色 / 水印 / 拼图 / 对比 / 导出」
+ * 低频重浮层全部按需加载：它们只在用户点了「批量裁切 / 调色 / 对比 / 导出」
  * 之后才出现，没必要压在首屏包里。装到裸静态 import 时，这 8 个组件
  * （画布、模板渲染、表格、对比台）合计把首包撑大两三百 KB，而首屏根本用不到。
  */
@@ -28,9 +28,7 @@ const BulkEditDialog = React.lazy(() => import('../components/BulkEditDialog'));
 const ExportDialog = React.lazy(() => import('../components/ExportDialog'));
 const RenameBatchDialog = React.lazy(() => import('../components/RenameBatchDialog'));
 const BulkMetadataDialog = React.lazy(() => import('../components/BulkMetadataDialog'));
-const StitchDialog = React.lazy(() => import('../components/StitchDialog'));
 const CompareView = React.lazy(() => import('../components/CompareView'));
-const WatermarkStudio = React.lazy(() => import('../components/WatermarkStudio'));
 // 「按文件夹收纳」是另一种视图，只在切过去时才有用；文件夹预览与拖放逻辑不压首屏
 const FolderGroupView = React.lazy(() => import('../components/FolderGroupView'));
 
@@ -68,7 +66,6 @@ interface Props {
   dupeCounts?: Record<string, number>;
   tags: { tag: string; count: number }[];
   hideFavorite?: boolean;
-  onStartCrawl: () => void;
   onRefresh: () => void;
   /** 撤销最近一次覆盖写回（裁切/旋转/调色/增强） */
   onUndo?: () => void;
@@ -149,11 +146,10 @@ const RESET_FILTERS: Partial<Filters> = {
   kind: 'all',
   pending: '',
   colorLabel: '',
-  bbox: '',
 };
 
 /** 批量条默认露出的动作（其余收在「更多」里，用户可在面板里自由调整） */
-const BULK_PINNED_DEFAULT = ['download', 'export', 'stitch', 'favorite', 'delete'];
+const BULK_PINNED_DEFAULT = ['download', 'export', 'favorite', 'delete'];
 
 /** 批量条上的一个可选动作；pinned 里命中 key 的露在条上，其余进「更多」菜单 */
 type BulkAct = {
@@ -289,15 +285,14 @@ function Gallery(props: Props) {
   const [metadataOpen, setMetadataOpen] = useState(false);
   /* 批量导出（Eagle 的导出面板：格式 / 质量 / 最长边，可原样打包） */
   const [exportIds, setExportIds] = useState<number[] | null>(null);
-  /* 拼接 / 对比 / 动作：都只对「当前页里选中的那几张」操作 */
-  const [stitchOpen, setStitchOpen] = useState(false);
+  /* 对比 / 动作：都只对「当前页里选中的那几张」操作 */
   const [cmpIds, setCmpIds] = useState<[number, number] | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
   /** 批量条的「更多」：低频批量操作收进菜单，别把 15 个按钮挤成一条 */
   const [bulkMore, setBulkMore] = useState(false);
   /* 拖拽入库统一交给 App 层的 GlobalImport（屏幕中央圆形靶盘），本页不再整页接管 */
-  /** 页面级右键菜单：原顶部工具栏的撤销 / 刷新 / 清理缺失 / 去采集 / 重置筛选 */
+  /** 页面级右键菜单：原顶部工具栏的撤销 / 刷新 / 清理缺失 / 重置筛选 */
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number } | null>(null);
   const pageMenuRef = useRef<HTMLDivElement | null>(null);
   /**
@@ -539,7 +534,6 @@ function Gallery(props: Props) {
   /* Ctrl+V 与拖拽入库都交给 App 层的 GlobalImport 统一处理，本页只负责展示 */
   const [bulkPinned, setBulkPinned] = usePinnedActions('bulk', BULK_PINNED_DEFAULT);
   const [tczOpen, setTczOpen] = useState(false);
-  const [watermarkIds, setWatermarkIds] = useState<number[]>([]);
 
   const bulkActs: BulkAct[] = [
     {
@@ -581,20 +575,6 @@ function Gallery(props: Props) {
           })
           .catch((err) => props.onToast?.((err as Error).message, 'error'));
       },
-    },
-    {
-      key: 'stitch',
-      label: i18n.t('k3715e24a'),
-      title: i18n.t('k609c5800'),
-      hint: i18n.t('ke761fb84'),
-      run: () => setStitchOpen(true),
-    },
-    {
-      key: 'watermark',
-      label: i18n.t('ka450c5a3'),
-      title: i18n.t('kd42baad8'),
-      hint: i18n.t('k70084bc9'),
-      run: () => setWatermarkIds([...selected]),
     },
     {
       key: 'favorite',
@@ -728,7 +708,6 @@ function Gallery(props: Props) {
       f.q ||
       f.tag ||
       f.colorLabel ||
-      f.bbox ||
       f.hue ||
       f.colorHex ||
       f.pending ||
@@ -878,9 +857,6 @@ function Gallery(props: Props) {
               <button className="btn primary" onClick={() => emptyFileRef.current?.click()}>
                 {i18n.t('k7c3f1c2f')}
               </button>
-              <button className="btn" onClick={props.onStartCrawl}>
-                {i18n.t('kff4a3771')}
-              </button>
               {filtersActive && (
                 <button className="btn ghost" onClick={() => props.onFiltersChange(RESET_FILTERS)}>
                   {i18n.t('k7c3f1c30')}
@@ -959,7 +935,7 @@ function Gallery(props: Props) {
               title={i18n.t('ka04229a8')}
               aria-pressed={props.filters.sort === 'new' || props.filters.sort === 'old'}
             >
-              采集时间{props.filters.sort === 'new' ? ' ↓' : props.filters.sort === 'old' ? ' ↑' : ''}
+              入库时间{props.filters.sort === 'new' ? ' ↓' : props.filters.sort === 'old' ? ' ↑' : ''}
             </button>
           </div>
           {/* 外层撑出总高度保持滚动条长度，内层平移后只渲染切片 */}
@@ -1374,14 +1350,6 @@ function Gallery(props: Props) {
         <ExportDialog ids={exportIds} onClose={() => setExportIds(null)} onToast={props.onToast} />
       )}
 
-      {stitchOpen && (
-        <StitchDialog
-          items={items.filter((x) => selected.has(x.id)).slice(0, 60)}
-          onClose={() => setStitchOpen(false)}
-          onToast={props.onToast}
-        />
-      )}
-
       {cmpIds && (
         <CompareView
           items={items.filter((x) => cmpIds.includes(x.id))}
@@ -1398,15 +1366,6 @@ function Gallery(props: Props) {
         onClose={() => setActionsOpen(false)}
         onToast={props.onToast}
         onRefresh={props.onRefresh}
-      />
-
-      {/* 水印 / 相框：单张与批量共用一个工作台 */}
-      <WatermarkStudio
-        open={watermarkIds.length > 0}
-        ids={watermarkIds}
-        onClose={() => setWatermarkIds([])}
-        onToast={props.onToast}
-        onDone={props.onRefresh}
       />
 
       {/* 批量条自定义：决定哪些动作直接露在条上，其余收进「更多」 */}
@@ -1483,14 +1442,6 @@ function Gallery(props: Props) {
               }}
             >
               <IconTrash size={13} /> 清理缺失{props.missingCount ? `（${props.missingCount}）` : ''}
-            </button>
-            <button
-              onClick={() => {
-                setPageMenu(null);
-                props.onStartCrawl();
-              }}
-            >
-              <IconGlobe size={13} /> {i18n.t('k7967c1f3')}
             </button>
             <div className="card-ctx-sep" />
             <button

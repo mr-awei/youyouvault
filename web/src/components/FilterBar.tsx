@@ -2,7 +2,7 @@ import { IconCamera, IconEyedropper } from './Icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Filters, ViewMode } from '../types';
-import { BUCKET_LABELS, ORIENTATION_LABELS, SOURCE_LABELS, api, desktop, quiet } from '../api';
+import { BUCKET_LABELS, ORIENTATION_LABELS, SOURCE_LABELS, desktop } from '../api';
 import { IconColumns, IconFolder, IconGrid, IconSearch } from './Icons';
 import { THUMB_DEFAULT, THUMB_MAX, THUMB_MIN, THUMB_PRESETS, clampThumbWidth, thumbPresetOf } from '../lib/thumb-size';
 import ColorPad from './ColorPad';
@@ -160,23 +160,9 @@ export default function FilterBar({
   const toggleDrop = (key: string) => setOpenKey((cur) => (cur === key ? null : key));
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // 来源筛选项来自后端（含「本地导入」），前端不再硬编码一份可能与后端脱节的列表
-  const [sources, setSources] = useState<string[]>([]);
-  const [labels, setLabels] = useState<Record<string, string>>({});
-  useEffect(() => {
-    let alive = true;
-    api
-      .crawlConfig()
-      .then((c) => {
-        if (!alive) return;
-        setSources(c.sources.map((s) => s.key));
-        setLabels(Object.fromEntries(c.sources.map((s) => [s.key, s.label])));
-      })
-      .catch(quiet);
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // 图库只剩本地导入与手机投送两类来源
+  const sources = ['local', 'lan'];
+  const labels: Record<string, string> = { local: i18n.t('ke2d96131'), lan: i18n.t('k102f36ba') };
 
   // 点击面板外 / Esc 关闭
   useEffect(() => {
@@ -221,10 +207,10 @@ export default function FilterBar({
 
   /* 颜色草稿：色盘拖动/选色高频变化，静止 150ms 后才提交筛选（与「停下即搜」一致）。
    * 用 useEffect 去抖（与智能检索页同款），比“事件内 setTimeout”更稳，不会被卸载清理误清。 */
-  const [draft, setDraft] = useState({ hex: filters.colorHex || '#ff4d6d', tol: filters.colorTol ?? 48 });
+  const [draft, setDraft] = useState({ hex: filters.colorHex || '#f97316', tol: filters.colorTol ?? 48 });
   const interactedRef = useRef(false);
   // 色号输入框的文本（允许中间态如 "ff4"，凑满 6 位合法十六进制才提交筛选）
-  const [hexText, setHexText] = useState((filters.colorHex || '#ff4d6d').replace('#', ''));
+  const [hexText, setHexText] = useState((filters.colorHex || '#f97316').replace('#', ''));
   // 屏幕吸管（桌面端）：截图覆盖层实现「左键取色 / 右键取消」；浏览器端退回 EyeDropper API
   const eyeDropperOk = typeof (window as { EyeDropper?: unknown }).EyeDropper === 'function';
   const [picking, setPicking] = useState(false);
@@ -305,8 +291,8 @@ export default function FilterBar({
 
   // 外部筛选变化（清空 / 来自大图“找同色系”等）时同步草稿，并清掉“已交互”标记
   useEffect(() => {
-    setDraft({ hex: filters.colorHex || '#ff4d6d', tol: filters.colorTol ?? 48 });
-    setHexText((filters.colorHex || '#ff4d6d').replace('#', '').toLowerCase());
+    setDraft({ hex: filters.colorHex || '#f97316', tol: filters.colorTol ?? 48 });
+    setHexText((filters.colorHex || '#f97316').replace('#', '').toLowerCase());
     if (!filters.colorHex) interactedRef.current = false;
   }, [filters.colorHex, filters.colorTol]);
   // 拖动/选色后静止 150ms 提交
@@ -370,17 +356,6 @@ export default function FilterBar({
       clear: () => onChange({ pending: '' }),
     });
   }
-  // 地点视图框出来的区域：一定要有可移除的 chip，否则用户不知道列表为什么只剩几张
-  if (filters.bbox) {
-    const [minLat, minLon] = filters.bbox.split(',').map(Number);
-    chips.push({
-      label:
-        Number.isFinite(minLat) && Number.isFinite(minLon)
-          ? i18n.t('k59c00af6', { p0: minLat.toFixed(1), p1: minLon.toFixed(1) })
-          : i18n.t('kfc1a7d3c'),
-      clear: () => onChange({ bbox: '' }),
-    });
-  }
 
   if (filters.colorLabel) {
     const names = filters.colorLabel
@@ -403,7 +378,6 @@ export default function FilterBar({
       colorHex: '',
       kind: 'all',
       pending: '',
-      bbox: '',
       colorLabel: '',
     });
 

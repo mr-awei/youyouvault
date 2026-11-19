@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { KNOWN_SHA256, pinnedSha, isPinned } from '../server/model-fetch.js';
-import { validateResult, sanitizeResults } from '../server/sanitize.js';
 
 const pins = JSON.parse(fs.readFileSync(new URL('../server/model-pins.json', import.meta.url), 'utf8'));
 
@@ -19,16 +18,9 @@ test('查哈希必须带仓库名：裸相对路径不许借别的仓库的哈�
   const [key, hex] = Object.entries(pins.models)[0];
   const short = key.split('/').slice(-2).join('/');
   assert.equal(pinnedSha(key), hex.toLowerCase());
-  // 回归：BiRefNet lite 的 repoPath 正好是 `onnx/model.onnx`，旧的后缀唯一匹配
-  // 会命中 U-2-Net 的哈希 → 224MB 下到 100% 后必然校验失败、文件被删、界面回退「未下载」
+  // 裸相对路径与短路径都查不到：避免不同仓库同名的 repoPath 串号
   assert.equal(pinnedSha(short), '');
   assert.equal(pinnedSha('onnx/model.onnx'), '');
-  // 全路径必须查得到（BiRefNet lite 自己有固化哈希，和 U-2-Net 那份互不干扰）
-  assert.equal(
-    pinnedSha('onnx-community/BiRefNet_lite-ONNX/onnx/model.onnx'),
-    '5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333'
-  );
-  assert.notEqual(pinnedSha('onnx-community/BiRefNet_lite-ONNX/onnx/model.onnx'), pinnedSha('sunseeker001/U-2-Net-Human-Seg/onnx/model.onnx'));
   assert.equal(isPinned(short), false);
   assert.equal(pinnedSha('onnx/unknown-model.onnx'), '');
 });
@@ -42,29 +34,7 @@ test('isPinned 与 pinnedSha 口径一致（同一路径不能「取得到哈希
   assert.equal(isPinned('nope/model.onnx'), false);
 });
 
-test('去背景 / 超分权重都在清单里（运行前必须能强校验）', () => {
-  const matting = Object.keys(pins.models).find((k) => k.includes('U-2-Net-Human-Seg'));
-  assert.ok(matting, 'matting 权重未固化哈希，首次被替换无法发现');
-  assert.match(pins.models[matting], /^[0-9a-f]{64}$/);
-
-  // 旗舰抠图档（BEN2）也必须强校验：它是自动选档里优先级最高的一档，被换掉影响面最大
-  const ben2 = Object.keys(pins.models).find((k) => k.startsWith('PramaLLC/BEN2/'));
-  assert.ok(ben2, 'BEN2 权重未固化哈希');
-
-  // 精细档（BiRefNet lite）同样要能强校验：它的 repoPath 是 onnx/model.onnx，
-  // 曾经因为裸路径查表串到 U-2-Net 的哈希，下到 100% 后必被删
-  const birefnet = Object.keys(pins.models).find((k) => k.includes('BiRefNet_lite'));
-  assert.ok(birefnet, 'BiRefNet lite 权重未固化哈希');
-  assert.equal(KNOWN_SHA256[birefnet], pins.models[birefnet].toLowerCase());
-
-  // 人脸：两个权重缺一个都等于没有强校验（检测模型被换掉同样能伪造结果）
-  for (const name of ['det_10g.onnx', 'w600k_r50.onnx']) {
-    const key = Object.keys(pins.models).find((k) => k.endsWith(`/buffalo_l/${name}`));
-    assert.ok(key, `人脸权重 ${name} 未固化哈希`);
-    assert.match(pins.models[key], /^[0-9a-f]{64}$/);
-    // 运行时代码用完整仓库路径查表，这里保证两边口径一致
-    assert.equal(KNOWN_SHA256[key], pins.models[key].toLowerCase());
-  }
+test('超分权重与运行库都在清单里（运行前必须能强校验）', () => {
   const zips = Object.keys(pins.zips);
   assert.ok(
     zips.some((u) => /realesrgan-ncnn-vulkan/i.test(u)),
@@ -128,7 +98,7 @@ test('downloadModelFile：前缀 + repoPath 只拼一次（误传完整 URL 不�
     });
     assert.equal(r1.size, Buffer.byteLength(body));
 
-    // 历史 bug 回归：matting/face 曾把整条文件 URL 当前缀传入，
+    // 历史 bug 回归：曾把整条文件 URL 当前缀传入，
     // 路径被拼成 models/a.onnxmodels/a.onnx，镜像永远 404
     const r2 = await downloadModelFile({
       mirrors: [`${base}models/a.onnx`],
@@ -155,7 +125,7 @@ test('downloadModelFile：前缀 + repoPath 只拼一次（误传完整 URL 不�
       downloadModelFile({
         mirrors: [base],
         repoPath: 'onnx/model.onnx',
-        pinKey: 'sunseeker001/U-2-Net-Human-Seg/onnx/model.onnx',
+        pinKey: 'Xenova/clip-vit-base-patch32/onnx/vision_model_quantized.onnx',
         dest: path.join(dir, 'd.onnx'),
         minBytes: 16,
         allowPrivate: true,
@@ -171,27 +141,3 @@ test('downloadModelFile：前缀 + repoPath 只拼一次（误传完整 URL 不�
   }
 });
 
-test('爬虫 7 源结果走字段级 schema 校验，拒绝项可追溯且不污染返回数组', () => {
-  const allowed = new Set(['bing']);
-  const good = { url: 'https://example.com/a.jpg', source: 'bing', referer: 'https://example.com/p' };
-  assert.equal(validateResult(good, allowed).ok, true);
-  for (const bad of [
-    { url: 'javascript:alert(1)', source: 'bing' },
-    { url: 'https://example.com/a\n.jpg', source: 'bing' },
-    { url: 'https://example.com/b.jpg', source: 'evil' },
-    { url: 'https://example.com/c.jpg', source: 'bing', extra: { nested: 1 } },
-    { url: 'https://example.com/d.jpg', source: 'bing', width: Number.POSITIVE_INFINITY },
-    { url: 'https://example.com/e.jpg', source: 'bing', title: 'x'.repeat(3000) },
-  ]) {
-    assert.equal(validateResult(bad, allowed).ok, false, `应拒绝：${JSON.stringify(bad).slice(0, 80)}`);
-  }
-
-  const out = sanitizeResults([good, { url: 'ftp://x/y.jpg', source: 'bing' }, { ...good }], {
-    limit: 10,
-    sources: ['bing'],
-  });
-  assert.equal(out.length, 1);
-  assert.equal(out.rejected.length, 2);
-  assert.deepEqual(Object.keys(out), ['0']);
-  assert.equal(JSON.stringify(out).includes('rejected'), false, '拒绝清单必须是非枚举的');
-});

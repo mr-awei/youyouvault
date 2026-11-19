@@ -11,16 +11,12 @@ export const VIEWS = [
   'timeline',
   'canvas',
   'favorites',
-  'people',
   'tidy',
   'playlists',
-  'crawl',
   'knowledge',
   'search',
   'smart',
-  'places',
   'enhance',
-  'bookmarks',
   'tutorial',
   'settings',
 ] as const;
@@ -40,7 +36,6 @@ export const DEFAULT_FILTERS: Filters = {
   hue: '',
   colorHex: '',
   colorTol: 48,
-  bbox: '',
   colorLabel: '',
 };
 
@@ -61,8 +56,6 @@ const FILTER_KEYS = [
   'kind',
   'pending',
   'colorLabel',
-  // 地图框选也进 URL：把「某个地点的照片」发出去，对方打开就是那块地图
-  'bbox',
 ] as const;
 
 type FilterKey = (typeof FILTER_KEYS)[number];
@@ -98,7 +91,6 @@ export function parseRoute(search: string): RouteState {
     hue: p.get('hue') || '',
     colorHex: p.get('colorHex') || '',
     colorTol: Number(p.get('colorTol')) || d.colorTol,
-    bbox: p.get('bbox') || '',
     colorLabel: p.get('colorLabel') || '',
   };
   const kind = p.get('kind');

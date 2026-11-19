@@ -7,7 +7,7 @@ import type { ModelItem, ModelsPayload, RuntimeComponent, RuntimeProbe } from '.
 import i18n from '../../i18n';
 
 /**
- * 下载中心：全软件所有模型的统一入口（超分 / 抠图 / 人脸 / 语义）。
+ * 下载中心：全软件所有模型的统一入口（超分 / 语义）。
  *
  * 以前每个功能各自在自己的分区里放一个下载按钮，用户要装齐得在设置里来回翻，
  * 也说不清「一共占了多大盘、哪些可以清理」。这里只做聚合与调度，

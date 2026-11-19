@@ -18,7 +18,6 @@ import { t, switchLocale } from './i18n-main.cjs';
 import { handleIpc, isLocalApiUrl, trustedSender, withApiToken } from './ipc-base.js';
 import { restartLocalServer } from './service.js';
 import { endRegionShot, grabScreenForShot, requestRegionShot } from './shot.js';
-import { weiboLoginFlow } from './weibo.js';
 import { openAppWindow } from './windows.js';
 import { refreshTray } from './tray.js';
 
@@ -271,7 +270,7 @@ export function registerAppIpc() {
   // 框选结束：还原窗口尺寸/显示状态
   handleIpc('end-shot', () => endRegionShot());
 
-  // 选择单个文件（动态壁纸视频等）；filters 形如 [{ name: '视频', extensions: ['mp4','webm'] }]
+  // 选择单个文件；filters 形如 [{ name: '图片', extensions: ['jpg','png'] }]
   handleIpc('pick-file', async (_e, filters) => {
     if (!ctx.mainWindow || ctx.mainWindow.isDestroyed()) return null;
     const result = await dialog.showOpenDialog(ctx.mainWindow, {
@@ -281,16 +280,6 @@ export function registerAppIpc() {
       filters: Array.isArray(filters) ? filters : [],
     });
     return result.canceled ? null : result.filePaths[0];
-  });
-
-  // 微博 Cookie：打开内置登录窗口，登录后自动回传
-  handleIpc('weibo-login', async () => {
-    try {
-      return await weiboLoginFlow();
-    } catch (err) {
-      console.error('[weibo] 登录窗口异常：', err?.message || err);
-      return { ok: false, msg: String(err?.message || err).slice(0, 160) };
-    }
   });
 
   // 用 Electron 下载管理器下载（弹「另存为」；不会产生空白窗口，也不影响当前页面）。

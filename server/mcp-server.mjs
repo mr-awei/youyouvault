@@ -2,11 +2,9 @@
 /**
  * 图库 · MCP Server（stdio 传输）
  * ------------------------------------------------------------
- * 把壁纸 / 图库操作暴露成 MCP 工具，让任意 MCP 客户端（Claude Desktop、
+ * 把图库操作暴露成 MCP 工具，让任意 MCP 客户端（Claude Desktop、
  * CodeBuddy、Cursor 等）直接驱动本机图库，例如：
- *   - "换张演唱会的 live 图"        → set_wallpaper_by_query
- *   - "切到有山的壁纸"             → set_wallpaper_by_query
- *   - "看看当前壁纸"              → current_wallpaper
+ *   - "按描述搜几张图"            → search_images
  *   - "把收藏里评分高的导出来"     → 组合 list_favorites + ...
  *
  * 运行：node server/mcp-server.mjs   （默认连接 http://127.0.0.1:3001）
@@ -124,72 +122,6 @@ const TOOLS = [
     async run({ query, limit = 12 }) {
       const r = await api('/api/search/ai', 'POST', { query, limit });
       return r.items.map((i) => ({ id: i.id, title: i.title, width: i.width, height: i.height }));
-    },
-  },
-  {
-    name: 'set_wallpaper',
-    description: '把指定图片设为桌面壁纸（竖图会自动合成完整居中、不裁切）。',
-    inputSchema: {
-      type: 'object',
-      properties: { imageId: { type: 'number', description: '图片 id（可从 search_images 获得）' } },
-      required: ['imageId'],
-    },
-    async run({ imageId }) {
-      const r = await api(`/api/images/${imageId}/wallpaper`, 'POST', {});
-      return { ok: true, imageId, screen: r.screen, fit: r.fit };
-    },
-  },
-  {
-    name: 'set_wallpaper_by_query',
-    description:
-      '按自然语言描述搜图并把最匹配的一张设为桌面壁纸。例如"换张演唱会的 live 图""切到有山的壁纸""来张红色礼服的"。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: '想要的壁纸描述' },
-        favoriteOnly: { type: 'boolean', description: '是否只在收藏里挑，默认 false' },
-      },
-      required: ['query'],
-    },
-    async run({ query, favoriteOnly = false }) {
-      const r = await api('/api/search/ai', 'POST', { query, limit: 12 });
-      if (!r.items.length) return { ok: false, reason: '没有匹配的图片' };
-      const pick = favoriteOnly ? r.items.find((i) => i.favorite) || r.items[0] : r.items[0];
-      const w = await api(`/api/images/${pick.id}/wallpaper`, 'POST', {});
-      return { ok: true, imageId: pick.id, title: pick.title, screen: w.screen, fit: w.fit };
-    },
-  },
-  {
-    name: 'next_wallpaper',
-    description: '立刻换下一张壁纸（按当前自动切换设置的范围/分数随机挑选）。',
-    inputSchema: { type: 'object', properties: {} },
-    async run() {
-      const r = await api('/api/wallpaper/now', 'POST', {});
-      return { ok: true, imageId: r.imageId, title: r.title };
-    },
-  },
-  {
-    name: 'current_wallpaper',
-    description: '查询当前桌面壁纸是哪张图。',
-    inputSchema: { type: 'object', properties: {} },
-    async run() {
-      return await api('/api/wallpaper/current');
-    },
-  },
-  {
-    name: 'favorite_current',
-    description: '把当前壁纸加入收藏（喜欢）。',
-    inputSchema: { type: 'object', properties: {} },
-    async run() {
-      return await api('/api/wallpaper/current/favorite', 'POST', {});
-    },
-  },
-  {
-    name: 'dislike_current',
-    description: '不喜欢当前壁纸：排除它并立刻换一张。',
-    inputSchema: { type: 'object', properties: {} },
-    async run() {
-      return await api('/api/wallpaper/current/dislike', 'POST', {});
     },
   },
   {

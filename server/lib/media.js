@@ -74,7 +74,7 @@ export async function ingestMedia({
     if (buffer) await fsp.writeFile(finalPath, buffer);
     else {
       await fsp.copyFile(absPath, finalPath);
-      // 还原源文件的修改时间：视频也一样，采集进来的不该显示成导入那天
+      // 还原源文件的修改时间：视频也一样，导入的不该显示成导入那天
       try {
         const src = await fsp.stat(absPath);
         await fsp.utimes(finalPath, src.atime, src.mtime);

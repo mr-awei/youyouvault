@@ -1,7 +1,7 @@
 ﻿/**
  * 统一的网络出口：
  * - 桌面端（Electron）：走 Chromium 网络栈 net.fetch，自动跟随「网络设置」里的代理
- *   （HTTP / HTTPS / SOCKS5 / SOCKS4 / 系统代理），采集、AI、下载全部生效
+ *   （HTTP / HTTPS / SOCKS5 / SOCKS4 / 系统代理），AI、下载、抓取全部生效
  * - 网页模式：退回 Node 原生 fetch
  *
  * 安全：所有出站请求先过 assertSafeUrl（拒本机/内网/云元数据地址），

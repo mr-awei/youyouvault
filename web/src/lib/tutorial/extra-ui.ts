@@ -129,13 +129,6 @@ export function uiTutorial(): TutorialCategory[] {
         body: i18n.t('k1e4f85d8'),
       },
       {
-        id: 'card-set-wallpaper',
-        title: i18n.t('kdf1226b0'),
-        summary: i18n.t('k9cbd15b4'),
-        keywords: [i18n.t('k8e92193d'), i18n.t('k97df311b'), i18n.t('kb91e3e16'), i18n.t('k2828b79c')],
-        body: i18n.t('k18cd5095'),
-      },
-      {
         id: 'card-cover',
         title: i18n.t('kace5a045'),
         summary: i18n.t('k1b683099'),

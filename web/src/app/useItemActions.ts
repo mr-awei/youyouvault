@@ -19,7 +19,7 @@ type Options = {
 };
 
 /**
- * 单张素材上的用户操作：收藏 / 改标签 / 删除（带原因）/ 设壁纸 / 下载。
+ * 单张素材上的用户操作：收藏 / 改标签 / 删除（带原因）/ 下载。
  * 全部是回调、没有 effect，所以调用位置不影响任何 effect 的执行顺序。
  */
 export function useItemActions({
@@ -97,22 +97,6 @@ export function useItemActions({
     [pendingDelete, refreshStats, showToast, setItems, setLb]
   );
 
-  const setWallpaper = useCallback(
-    async (item: ImageItem, style?: string) => {
-      try {
-        const res = await api.wallpaper(item.id, style);
-        showToast(
-          res.generated
-            ? i18n.t('kda5d9e82', { p0: res.screen.width, p1: res.screen.height })
-            : i18n.t('k31966daa')
-        );
-      } catch (err) {
-        showToast((err as Error).message);
-      }
-    },
-    [showToast]
-  );
-
   const download = useCallback((item: ImageItem) => {
     downloadFile(item.downloadUrl);
   }, []);
@@ -140,7 +124,6 @@ export function useItemActions({
     toggleFavorite,
     saveTags,
     deleteFromGrid,
-    setWallpaper,
     download,
   };
 }

@@ -55,6 +55,39 @@ const MIGRATIONS = [
       repairTakenAt(conn);
     },
   },
+  {
+    version: 5,
+    note: '移除人物、壁纸、水印与全网采集：清理对应数据表与设置项',
+    run(conn) {
+      conn.exec(`
+        DROP TRIGGER IF EXISTS trg_faces_delete;
+        DROP TABLE IF EXISTS faces;
+        DROP TABLE IF EXISTS persons;
+        DROP TABLE IF EXISTS wallpaper_fit;
+        DROP TABLE IF EXISTS wallpaper_log;
+        DROP TABLE IF EXISTS keywords;
+      `);
+      const hasSettings = !!conn
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'")
+        .get();
+      if (!hasSettings) return;
+      const keys = [
+        'sources',
+        'pagesPerKeyword',
+        'wallhavenApiKey',
+        'weiboCookie',
+        'weiboUserAgent',
+        'wallpaperFill',
+        'wallpaperMode',
+        'liveWallpaper',
+        'autoWallpaper',
+        'screensaver',
+        'watermarkPresets',
+      ];
+      const del = conn.prepare('DELETE FROM settings WHERE key = ?');
+      for (const k of keys) del.run(k);
+    },
+  },
 ];
 
 // 版本号是「热更包能不能装」的闸门之一（见 electron/main/hotfix.js），

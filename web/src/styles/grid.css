@@ -66,11 +66,11 @@
 .card-img:hover {
   transform: translateY(-4px);
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
-  border-color: rgba(255, 77, 141, 0.45);
+  border-color: rgba(249, 115, 22, 0.45);
 }
 /* 键盘可达性：Tab 聚焦卡片时给出清晰描边 */
 .card-img:focus-visible {
-  outline: 2px solid var(--accent, #ff4d8d);
+  outline: 2px solid var(--accent, #f97316);
   outline-offset: 2px;
 }
 /* 卡片右键菜单（portal 到 body，fixed 以视口定位；left/top 由组件内联写入） */
@@ -132,7 +132,7 @@
 }
 .card-img.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(255, 77, 141, 0.55);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.55);
 }
 .card-img img {
   display: block;
@@ -267,7 +267,7 @@
 }
 .card-badge.annot {
   top: 10px;
-  background: rgba(255, 77, 141, 0.85);
+  background: rgba(249, 115, 22, 0.85);
 }
 .card-badge.dupe {
   top: 10px;
@@ -303,7 +303,6 @@
 .card-badge.kind-office  { background: rgba(37, 99, 235, 0.92);  color: #fff; } /* 深蓝 */
 .card-badge.kind-design  { background: rgba(236, 72, 153, 0.92); color: #fff; } /* 粉 */
 .card-badge.kind-raw     { background: rgba(245, 158, 11, 0.92); color: #2a1a04; } /* 橙 */
-.card-badge.kind-bookmark{ background: rgba(100, 116, 139, 0.85); color: #fff; } /* 灰 */
 .card-badge.kind-other   { background: rgba(107, 114, 128, 0.85); color: #fff; }
 /* 同时有标注角标时往下让一格（dupe 在 DOM 里排在 annot 之前） */
 .card-badge.dupe:has(+ .card-badge.annot) {
@@ -534,7 +533,7 @@
   font-size: 13px;
   line-height: 1.8;
 }
-/* 空状态给「下一步动作」：导入 / 采集 / 清除筛选，而不是只有一句说明 */
+/* 空状态给「下一步动作」：导入 / 清除筛选，而不是只有一句说明 */
 .empty-actions {
   display: flex;
   flex-wrap: wrap;
@@ -570,13 +569,13 @@
 .list-row.tag-hint {
   outline: 1px dashed var(--accent);
   outline-offset: -3px;
-  background: rgba(255, 92, 168, 0.08);
+  background: rgba(249, 115, 22, 0.08);
 }
 /* 拖图到列表行上 = 叠成一堆 */
 .list-row.stack-hint {
   outline: 2px solid var(--accent);
   outline-offset: -3px;
-  background: rgba(255, 92, 168, 0.14);
+  background: rgba(249, 115, 22, 0.14);
 }
 .list-sort {
   background: none;
@@ -616,7 +615,7 @@
   background: rgba(255, 255, 255, 0.05);
 }
 .list-row.selected {
-  background: rgba(255, 77, 141, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 .list-check {
@@ -670,7 +669,7 @@
   line-height: 1.6;
   padding: 0 6px;
   border-radius: 20px;
-  background: rgba(255, 77, 141, 0.85);
+  background: rgba(249, 115, 22, 0.85);
   color: #fff;
 }
 .list-badge.dupe {
@@ -711,7 +710,7 @@
 }
 .thumb-size {
   width: 104px;
-  accent-color: var(--accent, #ff4d8d);
+  accent-color: var(--accent, #f97316);
   cursor: pointer;
 }
 /* 五档预设：小 / 中小 / 中 / 中大 / 大，当前档位高亮，滑块拖到别处就自然都不亮 */
@@ -741,7 +740,7 @@
 }
 .thumb-preset.on {
   color: #fff;
-  background: var(--accent, #ff4d8d);
+  background: var(--accent, #f97316);
 }
 /* 窄窗口：工具栏本来就允许换行，档位不收起（收起后用户就找不到五档预设了） */
 @media (max-width: 760px) {
@@ -767,7 +766,7 @@
   align-items: center;
   gap: 8px;
   padding: 48px 64px;
-  border: 2px dashed rgba(255, 77, 141, 0.7);
+  border: 2px dashed rgba(249, 115, 22, 0.7);
   border-radius: 18px;
   background: rgba(20, 20, 31, 0.9);
   color: var(--text);

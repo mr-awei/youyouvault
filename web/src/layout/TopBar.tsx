@@ -10,7 +10,6 @@ import {
   IconDownload,
   IconGear,
   IconGlobe,
-  IconLink,
   IconMoon,
   IconSun,
   IconWand,
@@ -28,8 +27,6 @@ interface Props {
   toolsActive: boolean;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
-  /** 保存网页（URL + 快照），和拖拽/粘贴并列的收集入口 */
-  onBookmark: () => void;
   /** 导出为 HTML 网页画廊 */
   onExportGallery: () => void;
   /** 生成只读分享链接（手机扫码浏览） */
@@ -46,21 +43,15 @@ export default function TopBar({
   toolsActive,
   theme,
   onToggleTheme,
-  onBookmark,
   onExportGallery,
   onShareLink,
 }: Props) {
   return (
     <header className="topbar" data-tour="topbar">
       <div className="topbar-brand">
-        {/* 与安装包/任务栏同一枚标：白色相片压在品牌渐变上。以前这里是一个「图」字，
-            字重和圆角跟图标完全不一样，截图里一眼就看得出「不是一套」 */}
+        {/* 与安装包/任务栏/托盘同一枚标：橙底白字「优」 */}
         <div className="logo-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <rect x="4" y="5" width="16" height="14" rx="2.4" />
-            <circle cx="9" cy="10" r="1.4" />
-            <path d="m4.4 16.6 4.3-4.3 3 3 2.7-2.7 5.2 5.2" />
-          </svg>
+          优
         </div>
         <div className="topbar-title">
           <b>{i18n.t('k6084bc4b')}</b>
@@ -98,9 +89,6 @@ export default function TopBar({
             </div>
           )}
         </div>
-        <button className="icon-btn" onClick={onBookmark} title={i18n.t('kdc09b8c4')}>
-          <IconLink />
-        </button>
         <button className="icon-btn" onClick={onShareLink} title={i18n.t('kb03671ff')}>
           <IconGlobe />
         </button>

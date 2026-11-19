@@ -3,7 +3,7 @@
  * 下载中心的静态清单 + 纯函数汇总。
  *
  * 为什么单独一个文件：清单要能被单测直接 import 而不触发数据库迁移
- * （registry 会 import face.js → db.js，测试里跑一次就会动真实库）。
+ * （registry 会 import clip.js → db.js，测试里跑一次就会动真实库）。
  * 这里只放常量与不依赖 IO 的纯函数，状态探测与安装分发在 model-registry.js。
  *
  * `sizeHint` 是官方文件树的字节数，只在「未安装」时用来显示预计体积；
@@ -17,8 +17,6 @@ export const MODEL_GROUPS = [
     label: '画质增强 / 超分',
     hint: 'Real-ESRGAN、Real-CUGAN 走 ncnn + Vulkan（吃显卡）；Swin2SR 走 ONNX（纯 CPU）。社区 .param 与内置模型同属 ESRGAN 架构，可直接互换',
   },
-  { id: 'matting', label: '去背景 / 抠图', hint: '轻量档秒出，精细档专治发丝与半透明边缘' },
-  { id: 'face', label: '人物聚类', hint: 'SCRFD 检测 + ArcFace 512 维特征，两个权重一起装' },
   { id: 'semantic', label: '语义检索', hint: 'CLIP 图文向量，支持用一句话搜图' },
 ];
 
@@ -163,58 +161,6 @@ export const MODEL_CATALOG = [
     license: 'Apache-2.0',
     required: false,
     pinned: false,
-  },
-
-  // ── 去背景 ───────────────────────────────────────────────
-  {
-    id: 'matting:u2net',
-    group: 'matting',
-    name: 'U-2-Net（轻量）',
-    desc: '320px 推理，秒级出图；人像头像够用，发丝边缘偏硬',
-    sizeHint: 4_574_652,
-    source: 'sunseeker001/U-2-Net-Human-Seg（ONNX）',
-    license: 'Apache-2.0',
-    required: false,
-    pinned: false,
-    note: '装了精细档之后，这档只作为「显卡/内存吃紧」时的退路',
-  },
-  {
-    id: 'matting:birefnet-lite',
-    group: 'matting',
-    name: 'BiRefNet lite（精细）',
-    desc: '1024px、Swin-T 主干；发丝、绒毛、玻璃与半透明边缘明显更干净',
-    sizeHint: 224_005_088,
-    source: 'onnx-community/BiRefNet_lite-ONNX（fp32 224MB）',
-    license: 'MIT',
-    required: false,
-    pinned: false,
-    note: 'BiRefNet 全量版 972MB 换来的提升已不明显，故选 lite；装了旗舰档之后这档是「想快一点」的退路',
-  },
-  {
-    id: 'matting:ben2',
-    group: 'matting',
-    name: 'BEN2（旗舰）',
-    desc: '1024px、官方 ONNX 导出；发丝、绒毛、半透明边缘最干净，CPU 单张约 6 秒',
-    sizeHint: 222_932_053,
-    source: 'PramaLLC/BEN2（BEN2_Base.onnx，222.9MB）',
-    license: 'MIT',
-    required: false,
-    pinned: true,
-    note: '输出已是 0~1 的遮罩（不是 logits），且只做 /255、不做 ImageNet 归一化，输入固定 1024×1024；装上后自动优先于 BiRefNet lite',
-  },
-
-  // ── 人物聚类 ─────────────────────────────────────────────
-  {
-    id: 'face:buffalo-l',
-    group: 'face',
-    name: 'SCRFD 检测 + ArcFace 特征',
-    desc: 'det_10g（16.9MB）做人脸框与五点，w600k_r50（174MB）出 512 维身份向量',
-    sizeHint: 191_307_687,
-    source: 'insightface buffalo_l',
-    license: 'insightface 模型库声明：权重仅限非商用研究（代码为 MIT）',
-    required: true,
-    pinned: true,
-    note: '换更强的 antelopev2（ResNet100@Glint360K，407MB）要重扫全库重新聚类，且同受非商用限制，收益不值这个代价；AdaFace 许可更严、没有现成 ONNX，不采用',
   },
 
   // ── 语义检索 ─────────────────────────────────────────────

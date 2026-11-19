@@ -114,7 +114,7 @@ function mobilePage(token, readOnly = false) {
 <html lang="zh-CN"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'"/>
-<meta name="theme-color" content="#ff4d8d"/>
+<meta name="theme-color" content="#f97316"/>
 <meta name="color-scheme" content="dark"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -138,7 +138,7 @@ p { color:#9a9cb0; font-size:13px; margin:0 0 16px; }
 .drop b { display:block; font-size:17px; margin-bottom:6px; }
 .drop span { color:#9a9cb0; font-size:12.5px; }
 input[type=file] { display:none; }
-button.act { width:100%; margin-top:16px; padding:13px; border:0; border-radius:12px; background:#ff4d8d; color:#fff; font-size:15px; font-weight:600; }
+button.act { width:100%; margin-top:16px; padding:13px; border:0; border-radius:12px; background:#f97316; color:#fff; font-size:15px; font-weight:600; }
 #list { margin-top:18px; }
 .row { padding:10px 12px; border-radius:10px; background:#1b1e2a; margin-bottom:8px; font-size:13px; display:flex; justify-content:space-between; gap:10px; }
 .ok { color:#6ee7a8; } .err { color:#ff849e; }
@@ -150,7 +150,7 @@ button.act { width:100%; margin-top:16px; padding:13px; border:0; border-radius:
 [hidden] { display:none !important; }
 .pwa { display:flex; gap:8px; align-items:center; margin:0 0 14px; padding:9px 11px; border-radius:10px; background:#1c2540; border:1px solid #2c3a63; font-size:12px; color:#c7d2ef; }
 .pwa span { flex:1; line-height:1.5; }
-.pwa button { flex:0 0 auto; border:0; border-radius:8px; padding:6px 10px; background:#ff4d8d; color:#fff; font-size:12px; }
+.pwa button { flex:0 0 auto; border:0; border-radius:8px; padding:6px 10px; background:#f97316; color:#fff; font-size:12px; }
 .pwa button.ghost { background:#2a3350; color:#c7d2ef; }
 .meta { margin:-8px 0 14px; font-size:12px; color:#8b95b2; }
 .viewer { position:fixed; inset:0; background:rgba(8,9,13,.96); display:flex; flex-direction:column; z-index:50; }
@@ -162,7 +162,7 @@ button.act { width:100%; margin-top:16px; padding:13px; border:0; border-radius:
 .viewer .vbody img { max-width:100%; max-height:100%; object-fit:contain; }
 .viewer .vfoot { padding:14px 16px calc(18px + env(safe-area-inset-bottom)); display:flex; gap:10px; }
 .viewer .vfoot a, .viewer .vfoot span { flex:1; text-align:center; padding:11px; border-radius:10px; background:#1b1e2a; color:#c7d2ef; font-size:13px; text-decoration:none; }
-.viewer .vfoot a.dl { background:#ff4d8d; color:#fff; font-weight:600; }
+.viewer .vfoot a.dl { background:#f97316; color:#fff; font-weight:600; }
 </style></head><body><div class="wrap">
 <div class="pwa" id="pwa"><span id="pwa-txt">用浏览器菜单「添加到主屏幕」，下次打开无需再扫码。离线浏览需要 HTTPS 访问。</span><button id="pwa-install" hidden>安装到桌面</button><button class="ghost" id="pwa-close">知道了</button></div>
 <h1>${readOnly ? '图库（只读）' : '投送到图库'}</h1>
@@ -473,7 +473,7 @@ function passwordPage() {
   return `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<meta name="theme-color" content="#ff4d8d"/>
+<meta name="theme-color" content="#f97316"/>
 <meta name="robots" content="noindex"/>
 <title>需要访问密码</title>
 <style>
@@ -484,7 +484,7 @@ body { margin:0; min-height:100vh; display:flex; align-items:center; justify-con
 h1 { font-size:19px; margin:0 0 6px; }
 p { margin:0 0 18px; color:#9a9cb0; font-size:13px; }
 input { width:100%; padding:12px 13px; border-radius:10px; border:1px solid #262a3a; background:#1b1e2a; color:#f4f4f8; font-size:16px; }
-button { width:100%; margin-top:12px; padding:12px; border:0; border-radius:10px; background:#ff4d8d; color:#fff; font-size:15px; font-weight:600; }
+button { width:100%; margin-top:12px; padding:12px; border:0; border-radius:10px; background:#f97316; color:#fff; font-size:15px; font-weight:600; }
 button:disabled { opacity:.6; }
 .err { margin-top:10px; color:#ff849e; font-size:12.5px; min-height:18px; }
 </style></head><body><div class="box">
@@ -636,7 +636,7 @@ self.addEventListener('fetch',function(e){
 const OFFLINE_PAGE = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/><title>暂时离线</title>
 <style>body{margin:0;padding:40px 22px;background:#11131a;color:#f4f4f8;font:15px/1.7 -apple-system,"PingFang SC",sans-serif;text-align:center}
-h1{font-size:20px}p{color:#9a9cb0;font-size:13px}a{color:#ff4d8d}</style></head>
+h1{font-size:20px}p{color:#9a9cb0;font-size:13px}a{color:#f97316}</style></head>
 <body><h1>暂时连不上图库</h1><p>请确认手机和电脑在同一 Wi-Fi、图库仍在运行，然后点下方重试。<br/>如果链接已过期，请重新扫电脑上的二维码。</p>
 <p><a href="/">重新连接</a></p></body></html>`;
 
@@ -718,7 +718,7 @@ export function buildLanApp(tokenOrGetter) {
         display: 'standalone',
         orientation: 'any',
         background_color: '#11131a',
-        theme_color: '#ff4d8d',
+        theme_color: '#f97316',
         icons: [192, 512].map((n) => ({
           src: `/icon-${n}.png`,
           sizes: `${n}x${n}`,
@@ -955,7 +955,7 @@ export function buildLanApp(tokenOrGetter) {
           folderWarning = `归类到文件夹失败：${err?.message || err}`;
           console.warn('[lan] 手机投送归类失败', folderWarning);
         }
-        // 采集收件箱：手机投送也是采集来源。已经明确归到文件夹的算整理过，不再塞进收件箱；
+        // 收件箱：手机投送也是入库来源。已经明确归到文件夹的算整理过，不再塞进收件箱；
         // 没选文件夹的裸投送先进收件箱，回桌面后统一过一遍。
         if (settings.inboxOnCapture !== false && !folderId) {
           db.prepare('UPDATE images SET inbox = 1 WHERE id = ?').run(r.id);

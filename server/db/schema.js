@@ -103,13 +103,6 @@ END;
   // 一层撤销。分两栈之后可以连续撤 / 重做，代价只是一列。
   ensureColumn('edit_history', 'undone', 'undone INTEGER NOT NULL DEFAULT 0');
   conn.exec('CREATE INDEX IF NOT EXISTS idx_edit_history_stack ON edit_history(undone, id DESC)');
-  // 拍摄地点：EXIF 里的经纬度单独落列（以前只在检查器里现算，地图视图无从索引）。
-  // NULL = 没有 GPS（绝大多数截图/网图），不是 0,0 —— 几内亚湾那个点会污染地图。
-  ensureColumn('images', 'gps_lat', 'gps_lat REAL');
-  ensureColumn('images', 'gps_lon', 'gps_lon REAL');
-  // 是否已经为这张图找过 GPS：没有的话，每次点「补算地点」都会把没 GPS 的图重读一遍
-  ensureColumn('images', 'gps_checked', 'gps_checked INTEGER NOT NULL DEFAULT 0');
-  conn.exec('CREATE INDEX IF NOT EXISTS idx_images_gps ON images(gps_lat, gps_lon)');
   ensureColumn('images', 'viewed_at', "viewed_at TEXT NOT NULL DEFAULT ''");
   ensureColumn('images', 'view_count', 'view_count INTEGER NOT NULL DEFAULT 0');
   conn.exec('CREATE INDEX IF NOT EXISTS idx_images_viewed ON images(view_count)');
@@ -124,10 +117,6 @@ END;
   // 封面版本号：换/恢复自定义封面只重写缩略图文件、不动原文件，fs_mtime 不会变，
   // 单独用它让缩略图 URL 变化，避免浏览器 7 天强缓存里一直是旧封面
   ensureColumn('images', 'cover_ver', 'cover_ver INTEGER NOT NULL DEFAULT 0');
-  // 人脸扫描进度：0 = 还没扫过（含扫过但一张脸都没有的照片，扫完置 1）。
-  // 用部分索引只索引「待扫」的行，百万库清空后索引几乎为空，续扫不必全表反连接。
-  ensureColumn('images', 'face_scanned', 'face_scanned INTEGER NOT NULL DEFAULT 0');
-  conn.exec('CREATE INDEX IF NOT EXISTS idx_images_face_pending ON images(id) WHERE face_scanned = 0');
   // 文件夹封面：NULL = 自动用夹内最新一张；有值 = 用户手动指定的那一张
   ensureColumn('folders', 'cover_image_id', 'cover_image_id INTEGER');
   // 文件夹标签（Eagle：给文件夹打标签，里面素材自动带上）：只存逗号串，查询期沿路径继承，
@@ -163,7 +152,7 @@ END;
       console.info('[db] 主色 OKLab 索引回填完成');
     }
   }
-  // 主体哈希（白底抠图+主体包围盒归一化后的 pHash）：全图哈希被白底背景主导导致
+  // 主体哈希（白底去背+主体包围盒归一化后的 pHash）：全图哈希被白底背景主导导致
   // 不同商品误判相似，主体化后彻底解决；'' = 尚未补算（相似分组退回全图 phash）
   ensureColumn('images', 'obj_phash', "obj_phash TEXT NOT NULL DEFAULT ''");
   conn.exec('CREATE INDEX IF NOT EXISTS idx_images_rating ON images(rating)');
@@ -215,7 +204,7 @@ END;
   // stack_id = 0 表示没堆叠；否则指向「组主」那张图的 id（组主自己的 stack_id = 自己的 id）。
   // 列表默认只显示组主，成员在灯箱里展开 —— 否则同素材几个版本会把网格占满。
   ensureColumn('images', 'stack_id', 'stack_id INTEGER NOT NULL DEFAULT 0');
-  // 采集收件箱：新采集先落这里，整理完再移出。老库默认 0（不要把已有素材倒进收件箱）。
+  // 收件箱：新导入先落这里，整理完再移出。老库默认 0（不要把已有素材倒进收件箱）。
   ensureColumn('images', 'inbox', 'inbox INTEGER NOT NULL DEFAULT 0');
   // 颜色旗标：red/orange/yellow/green/blue/purple/gray，空串 = 未标记。
   // 与评分互补：评分表达好坏，旗标表达流程状态（待修/已选/已交付）。
@@ -228,24 +217,6 @@ END;
   ensureColumn('images', 'export_count', 'export_count INTEGER NOT NULL DEFAULT 0');
   ensureColumn('images', 'last_used_at', "last_used_at TEXT NOT NULL DEFAULT ''");
   conn.exec('CREATE INDEX IF NOT EXISTS idx_images_last_used ON images(last_used_at)');
-
-  // 人脸质量（0..1）/ 正面程度（0..1）/ 排除标记：
-  // quality、frontal 为 -1 表示老数据未评估，扫描或「清理模糊人脸」后回填；
-  // hidden: 0 正常、1 低质量自动排除（不聚类/不当封面/不显示）、2 用户手动保留。
-  ensureColumn('faces', 'quality', 'quality REAL NOT NULL DEFAULT -1');
-  ensureColumn('faces', 'frontal', 'frontal REAL NOT NULL DEFAULT -1');
-  ensureColumn('faces', 'hidden', 'hidden INTEGER NOT NULL DEFAULT 0');
-  conn.exec('CREATE INDEX IF NOT EXISTS idx_faces_quality ON faces(person_id, hidden, quality)');
-
-  // 封面脸的原图像素短边：0 表示「这个人没有够格当封面的清晰脸」。
-  // 存成列而不是每次 JOIN images 现算，是因为人物列表按它做筛选（默认只列有清晰封面的），
-  // 2241 个人物乘一次 JOIN 足够卡顿，而它只在聚簇重算/清理时变一次。
-  ensureColumn('persons', 'cover_px', 'cover_px REAL NOT NULL DEFAULT 0');
-
-  // 用户手动指定的封面：1 = 锁住，聚类重算 / 清理 / 扫描新增都不许再自动换人。
-  // 不加这一列的话，手动选了一张「不够清晰但好看」的封面，下一次扫描就会被 coverRank 顶掉，
-  // 用户会以为「设封面」这个功能根本没生效。
-  ensureColumn('persons', 'cover_locked', 'cover_locked INTEGER NOT NULL DEFAULT 0');
 
   // abs_path 唯一索引：watch 防抖回调与手动 rescan 可能同时进入，两边都判「不存在」就各插一条。
   // 老库里若已经有重复路径，唯一索引建不起来 —— 不阻断启动，但状态要能被界面读到（见 getPathIndexState）。

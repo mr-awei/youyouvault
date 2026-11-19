@@ -449,7 +449,7 @@ function curveOf(a: { x1: number; y1: number; x2: number; y2: number }) {
 }
 
 /** 连线可选颜色 / 粗细（新线用当前选择，选中旧线时直接改那一条） */
-const ARROW_COLORS = ['#ff4d8d', '#7c6cf0', '#38c8ff', '#4cd964', '#ffcc00', '#8f8fab'];
+const ARROW_COLORS = ['#f97316', '#7c6cf0', '#38c8ff', '#4cd964', '#ffcc00', '#8f8fab'];
 const ARROW_WIDTHS = [1, 2, 4];
 
 function LinkView({
@@ -680,7 +680,7 @@ export default function CanvasBoard({
   /** 最近的角 / 边中点：悬停时高亮，提示「松手就吸这里」 */
   const [snapHint, setSnapHint] = useState<SnapAnchor | null>(null);
   /** 新连线使用的颜色 / 粗细；选中已有连线时改的是那一条 */
-  const [arrowStyle, setArrowStyle] = useState<{ color: string; width: number }>({ color: '#ff4d8d', width: 2 });
+  const [arrowStyle, setArrowStyle] = useState<{ color: string; width: number }>({ color: '#f97316', width: 2 });
   const [arrowSel, setArrowSel] = useState<string | null>(null);
   const [templateMenu, setTemplateMenu] = useState(false);
   /** 工具条里的形状菜单：一次给出全部形状 */
@@ -1023,7 +1023,7 @@ export default function CanvasBoard({
     return () => window.removeEventListener('paste', onPaste);
   }, [uploadAndAdd]);
 
-  /** 直接加到「当前画布」：扩展采集等后台来源不弹选择框，避免打断用户 */
+  /** 直接加到「当前画布」：后台入库等来源不弹选择框，避免打断用户 */
   const addIdsToActive = useCallback(
     async (ids: number[]) => {
       const known = new Set(docRef.current?.cards.map((c) => c.id) ?? []);
@@ -1049,7 +1049,7 @@ export default function CanvasBoard({
       // 画布已经开着时队列没人消费，清掉，避免下次进来又弹一次选择框
       window.setTimeout(() => takeQueuedCanvasAdd(), 0);
     };
-    // 扩展采集等后台来源：不抢当前页面，直接落到当前画布
+    // 后台入库等来源：不抢当前页面，直接落到当前画布
     const onPush = (e: Event) => {
       const d = (e as CustomEvent<{ ids?: number[] }>).detail;
       const ids = Array.isArray(d?.ids) ? d.ids.map(Number).filter((n) => n > 0) : [];

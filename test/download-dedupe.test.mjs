@@ -3,8 +3,8 @@ import test from 'node:test';
 
 import { createDownloadDedupe } from '../electron/lib/download-dedupe.js';
 
-const A = 'http://127.0.0.1:1/api/export/stitch?ids=1,2,3&token=t';
-const B = 'http://127.0.0.1:1/api/export/stitch?ids=4,5,6&token=t';
+const A = 'http://127.0.0.1:1/api/images/1/export?format=jpeg&token=t';
+const B = 'http://127.0.0.1:1/api/images/2/export?format=jpeg&token=t';
 
 test('窗口期内同址第二次请求被拦掉（连点只弹一个保存框）', () => {
   const d = createDownloadDedupe(1500);

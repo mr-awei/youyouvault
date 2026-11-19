@@ -1,5 +1,5 @@
 // @ts-check
-// 画质增强路由：内置标准档位、AI 超分、Swin2SR、cugan、matting、线上服务测试（从 app.js 拆出）
+// 画质增强路由：内置标准档位、AI 超分、Swin2SR、cugan、线上服务测试（从 app.js 拆出）
 import * as aiUpscale from '../ai-upscale.js';
 import * as enhanceJob from '../enhance-job.js';
 import * as lib from '../library.js';

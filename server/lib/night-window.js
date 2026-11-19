@@ -7,7 +7,7 @@
  */
 
 /** 可选的批处理任务 */
-export const NIGHT_TASKS = /** @type {const} */ (['semantic', 'face']);
+export const NIGHT_TASKS = /** @type {const} */ (['semantic']);
 
 /**
  * 'HH:MM' → 当天分钟数；非法值回落到 fallback。

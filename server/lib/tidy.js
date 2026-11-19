@@ -219,7 +219,7 @@ export function listSimilarGroups(threshold = 10, maxGroups = 60, scanLimit = 40
         .all(Math.max(50, Math.min(20000, scanLimit)));
   clip.ensureVecCache(clip.CLIP_DIM); // 复核要按 id 取向量，先建全量缓存
   const vecOf = (id) => clip.cachedVector(id);
-  // 候选哈希：优先主体哈希（白底抠图归一化，背景零贡献——误判根治，见 lib/subject.js）。
+  // 候选哈希：优先主体哈希（白底去背归一化，背景零贡献——误判根治，见 lib/subject.js）。
   // 首选双方的 obj_phash，任一方缺（SKIP/未补算）则退回全图 phash，保证补算完成前功能可用。
   const hashOf = (row) => row.obj_phash && row.obj_phash !== 'SKIP' ? row.obj_phash : row.phash;
   const sameSubject = (a, b, dist) => {
@@ -277,7 +277,7 @@ export function listSimilarGroups(threshold = 10, maxGroups = 60, scanLimit = 40
  */
 export function listFormatDupes(opts = {}) {
   const FORMAT_RANK = { '.png': 3, '.webp': 2, '.jpeg': 1, '.jpg': 1, '.bmp': 1 };
-  // 内容一致性阈值：同名不等于同图（旧版采集器曾因「秒级时间戳 + 相同尺寸」撞名，
+  // 内容一致性阈值：同名不等于同图（旧版导入器曾因「秒级时间戳 + 相同尺寸」撞名，
   // 把两张不同的图存成同名 png/jpg）。同一张照片换格式后 pHash 距离通常 ≤ 6，
   // 不同照片一般 > 20，取 max(10, phashThreshold) 兼容较重的 JPEG 压缩。
   const contentThreshold = Math.max(10, Number(getSettings().phashThreshold) || 10);

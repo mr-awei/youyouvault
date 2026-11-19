@@ -9,7 +9,6 @@ import { invalidateQuality } from './quality.js';
 import { ingestMedia, isMediaPath, MEDIA_EXTS } from './lib/media.js';
 import { SCAN_IMAGE_EXTS } from './lib/media-kind.js';
 import { bulkImportLocal } from './bulk-import.js';
-import { SOURCES } from './crawler.js';
 import { shouldSkipDir, isSkippedPath } from './lib/skip-dirs.js';
 import { md5File } from './lib/hash.js';
 import { mapLimit } from './lib/utils.js';
@@ -23,25 +22,13 @@ import { linkImageByPath } from './folders.js';
 const EXTS = new Set([...SCAN_IMAGE_EXTS, ...MEDIA_EXTS].map((e) => `.${e}`));
 const DEFAULT_MAX_DEPTH = 4;
 
-/**
- * 来源推断：目录名正好是某个采集源的 key（bing / baidu / weibo…）就沿用该来源，
- * 否则一律按用户自己的本地素材登记。
- * 以前只特判了 `raw`（`folder === 'raw' ? 'bing' : 'local'`）——既漏掉了别的源目录，
- * 也把“父目录恰好叫 raw”的普通素材误标成 bing。
- */
-const SOURCE_DIRS = new Set(Object.keys(SOURCES));
-function sourceFromDir(dirName) {
-  const key = String(dirName || '').toLowerCase();
-  return SOURCE_DIRS.has(key) ? key : 'local';
-}
-
 /** 遍历深度上限：与 bulk-import 共用设置项 importMaxDepth（默认 4 层） */
 function resolveMaxDepth() {
   const v = Number(getSettings().importMaxDepth);
   return Number.isFinite(v) && v > 0 ? Math.min(16, Math.floor(v)) : DEFAULT_MAX_DEPTH;
 }
 
-/** 递归扫描壁纸库文件夹下的所有图片 */
+/** 递归扫描素材文件夹下的所有图片 */
 export function scanLocalImages(dirs = LEGACY_DIRS, depth = 0, maxDepth = null) {
   const files = [];
   const limit = maxDepth ?? resolveMaxDepth();
@@ -68,7 +55,7 @@ export function scanLocalImages(dirs = LEGACY_DIRS, depth = 0, maxDepth = null) 
 }
 
 /**
- * 导入壁纸库文件夹内的图片（不复制原文件，只登记并生成缩略图）
+ * 导入素材文件夹内的图片（不复制原文件，只登记并生成缩略图）
  */
 let scanRunning = false;
 let scanCancel = false;
@@ -272,18 +259,17 @@ function scheduleWatchIngest(delayMs = 2000) {
         }
         return;
       }
-      const folder = path.basename(path.dirname(f));
       try {
         const res = isMediaPath(f)
           ? await ingestMedia({
               absPath: f,
-              source: sourceFromDir(folder),
+              source: 'local',
               keyword: libName,
             })
           : await ingest(
               {
                 absPath: f,
-                source: sourceFromDir(folder),
+                source: 'local',
                 keyword: libName,
                 skipPhashDupe: true,
                 libGeneration: generation,

@@ -2,7 +2,6 @@ import { Suspense, lazy } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { api, desktop } from '../api';
 import BatchCreateDialog from '../components/BatchCreateDialog';
-import BookmarkDialog from '../components/BookmarkDialog';
 import CommandPalette, { type PaletteCommand } from '../components/CommandPalette';
 import CreateLibraryDialog from '../components/CreateLibraryDialog';
 import DeleteReasonDialog from '../components/DeleteReasonDialog';
@@ -16,7 +15,6 @@ import ForcedUpdateOverlay from '../components/ForcedUpdateOverlay';
 import HotkeyHelp from '../components/HotkeyHelp';
 import OnboardingTour from '../components/OnboardingTour';
 import QuickClassifyDialog from '../components/QuickClassifyDialog';
-import ReverseSearchDialog, { type ReverseTarget } from '../components/ReverseSearchDialog';
 import ShareLinkDialog from '../components/ShareLinkDialog';
 import StackViewer from '../components/StackViewer';
 import TagMetaDialog from '../components/TagMetaDialog';
@@ -56,8 +54,6 @@ type Props = {
     aiAnalysis: string;
     learn: boolean;
   }) => Promise<void>;
-  rsTarget: ReverseTarget | null;
-  setRsTarget: Dispatch<SetStateAction<ReverseTarget | null>>;
   paletteCommands: PaletteCommand[];
   lockFolderId: number | null;
   lockFolder: FolderNode | null;
@@ -70,7 +66,6 @@ type Props = {
   toggleFavorite: (item: ImageItem) => Promise<void>;
   saveTags: (item: ImageItem, tagList: string[]) => Promise<void>;
   requestDelete: (item: ImageItem) => void;
-  setWallpaper: (item: ImageItem, style?: string) => Promise<void>;
   enhanceOne: (item: ImageItem) => Promise<void>;
   patchItem: (updated: ImageItem) => void;
   download: (item: ImageItem) => void;
@@ -82,7 +77,6 @@ type Props = {
   setView: Dispatch<SetStateAction<View>>;
   setFolderId: Dispatch<SetStateAction<number | null>>;
   setLb: Dispatch<SetStateAction<LightboxState>>;
-  setPeopleFocus: Dispatch<SetStateAction<{ id: number; n: number } | null>>;
   setPendingDelete: Dispatch<SetStateAction<ImageItem | null>>;
   setLockFolderId: Dispatch<SetStateAction<number | null>>;
   onFiltersChange: (patch: Partial<Filters>) => void;
@@ -99,11 +93,11 @@ type Props = {
 export default function AppDialogs(props: Props) {
   const {
     ui, dialogs, view, filters, folders, folderId, selected, stats, tags, lb, activeLib, activeLibName,
-    activeFolder, onboarding, tourOpen, pendingDelete, confirmDelete, rsTarget, setRsTarget,
+    activeFolder, onboarding, tourOpen, pendingDelete, confirmDelete,
     paletteCommands, lockFolderId, lockFolder, enhancingId, pageRef, load, refreshStats, openItem,
-    revealGalleryItem, toggleFavorite, saveTags, requestDelete, setWallpaper, enhanceOne, patchItem,
+    revealGalleryItem, toggleFavorite, saveTags, requestDelete, enhanceOne, patchItem,
     download, setAnnotationCounts, setFolders, setTags, setTagGroups, setSelected, setView, setFolderId,
-    setLb, setPeopleFocus, setPendingDelete, setLockFolderId, onFiltersChange, finishTour,
+    setLb, setPendingDelete, setLockFolderId, onFiltersChange, finishTour,
     finishOnboarding, onLibraryCreated, showToast,
   } = props;
   const {
@@ -113,8 +107,6 @@ export default function AppDialogs(props: Props) {
     serviceError,
     showCreateLib,
     setShowCreateLib,
-    bookmarkOpen,
-    setBookmarkOpen,
     exportOpen,
     setExportOpen,
     coverFolderId,
@@ -163,7 +155,7 @@ export default function AppDialogs(props: Props) {
       )}
 
       {lb && (
-        // 大图/水印面板在内容区那个 ErrorBoundary 之外（它是全屏浮层），
+        // 大图面板在内容区那个 ErrorBoundary 之外（它是全屏浮层），
         // 一旦渲染期抛错整棵树会被卸载 —— 用户看到的是一片白，连侧栏都没了。
         // 这里单独兜一层：崩了就显示错误卡片，换张图自动重置。
         <ErrorBoundary resetKey={`lb:${lb.items[lb.index]?.id ?? ''}`}>
@@ -189,7 +181,6 @@ export default function AppDialogs(props: Props) {
               onToggleFavorite={toggleFavorite}
               onSaveTags={saveTags}
               onDelete={requestDelete}
-              onSetWallpaper={setWallpaper}
               onEnhance={enhanceOne}
               enhancing={enhancingId === lb.items[lb.index]?.id}
               onViewed={patchItem}
@@ -211,12 +202,6 @@ export default function AppDialogs(props: Props) {
                 setLb(null);
                 setView('gallery');
                 setFolderId(fid);
-              }}
-              onGotoPerson={(pid) => {
-                // 详情面板里点「人物 #123」：关掉大图，进人物页直接打开这个人的照片墙
-                setLb(null);
-                setView('people');
-                setPeopleFocus({ id: pid, n: Date.now() });
               }}
               onChangeToast={(msg) => {
                 showToast(msg);
@@ -257,9 +242,6 @@ export default function AppDialogs(props: Props) {
 
       {/* 应用内 prompt/confirm 对话框（替代原生弹窗，全局唯一挂载点） */}
       <DialogHost />
-
-      {/* 全网以图搜图：图库右键、人物右键、灯箱都唤起同一个面板 */}
-      <ReverseSearchDialog target={rsTarget} onClose={() => setRsTarget(null)} onToast={showToast} />
 
       {/* 本地服务重启中：端口可能变，界面此刻的请求都会失败，先遮住再重载 */}
       {serviceRestarting && (
@@ -356,21 +338,6 @@ export default function AppDialogs(props: Props) {
           onCancel={() => setShowCreateLib(false)}
           onDone={onLibraryCreated}
           onToast={showToast}
-        />
-      )}
-
-      {bookmarkOpen && (
-        <BookmarkDialog
-          onClose={() => setBookmarkOpen(false)}
-          onToast={showToast}
-          onSaved={() => {
-            setBookmarkOpen(false);
-            // 书签是按当前库入库的：留在原视图刷新首屏即可看到
-            setView('gallery');
-            pageRef.current = 1;
-            load(1, true);
-            refreshStats();
-          }}
         />
       )}
 

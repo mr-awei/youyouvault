@@ -17,7 +17,7 @@ import { fkTail } from './foreign-keys.js';
 /** 建表 + 索引（不含依赖后加列的索引） */
 export const LIBRARY_SCHEMA_SQL = `
 -- 库内设置表：除应用级键（主题/首次引导/自启/更新源，见 GLOBAL_SETTING_KEYS）外的
--- 所有设置都存在这里——每个资源库一套独立的采集源、AI、壁纸、网络配置
+-- 所有设置都存在这里——每个资源库一套独立的 AI、网络配置
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -120,14 +120,6 @@ CREATE TABLE IF NOT EXISTS tidy_skip (
   recommend_id INTEGER PRIMARY KEY
 );
 
-CREATE TABLE IF NOT EXISTS wallpaper_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  image_id INTEGER,
-  scope TEXT NOT NULL DEFAULT '',
-  title TEXT NOT NULL DEFAULT '',
-  applied_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS ai_desc (
   image_id INTEGER PRIMARY KEY,
   description TEXT NOT NULL DEFAULT '',
@@ -144,47 +136,10 @@ CREATE TABLE IF NOT EXISTS clip_vec (
   created_at TEXT NOT NULL${fkTail('clip_vec')}
 );
 
--- 人脸：一张图可检出多张脸，每张脸存 512 维归一化特征（ArcFace）。
--- vec 存原始 float32 小端字节（与 clip_vec 一致，不入库量化），对齐后的 112 裁剪按 bbox 现算。
-CREATE TABLE IF NOT EXISTS faces (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  image_id INTEGER NOT NULL,
-  person_id INTEGER,
-  x1 REAL NOT NULL, y1 REAL NOT NULL, x2 REAL NOT NULL, y2 REAL NOT NULL,
-  score REAL NOT NULL DEFAULT 0,
-  det REAL NOT NULL DEFAULT 0,
-  vec BLOB NOT NULL,
-  created_at TEXT NOT NULL${fkTail('faces')}
-);
-CREATE INDEX IF NOT EXISTS idx_faces_image ON faces(image_id);
-CREATE INDEX IF NOT EXISTS idx_faces_person ON faces(person_id);
-
--- 人物：聚类结果。centroid 存归一化质心，增量聚类时不必每次重算全表平均。
-CREATE TABLE IF NOT EXISTS persons (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL DEFAULT '',
-  cover_face_id INTEGER,
-  count INTEGER NOT NULL DEFAULT 0,
-  centroid BLOB,
-  created_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS image_quality (
   image_id INTEGER PRIMARY KEY,
   sharpness REAL NOT NULL,
   created_at TEXT NOT NULL${fkTail('image_quality')}
-);
-
-CREATE TABLE IF NOT EXISTS wallpaper_fit (
-  image_id INTEGER PRIMARY KEY,
-  score INTEGER NOT NULL DEFAULT 60,
-  safe_area TEXT NOT NULL DEFAULT 'center',
-  reason TEXT NOT NULL DEFAULT '',
-  source TEXT NOT NULL DEFAULT 'local',
-  brightness INTEGER,
-  likes INTEGER NOT NULL DEFAULT 0,
-  dislikes INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL${fkTail('wallpaper_fit')}
 );
 
 CREATE TABLE IF NOT EXISTS smart_folders (
@@ -289,7 +244,7 @@ CREATE TABLE IF NOT EXISTS edit_history (
 );
 CREATE INDEX IF NOT EXISTS idx_edit_history_image ON edit_history(image_id, id);
 
--- 后台任务（采集 / 批量编辑 / 增强 / 模型下载）：
+-- 后台任务（批量编辑 / 增强 / 模型下载）：
 -- 以前这些任务全是内存里的单例，进程一退就没了 —— 既没有历史，也没法重试，
 -- 崩了以后连「上次跑到哪」都查不到。这里落表，做历史 + 中断标记 + 重试依据。
 CREATE TABLE IF NOT EXISTS jobs (
@@ -387,11 +342,6 @@ CREATE TRIGGER IF NOT EXISTS trg_item_tags_delete AFTER DELETE ON images BEGIN
 END;
 CREATE TRIGGER IF NOT EXISTS trg_image_notes_delete AFTER DELETE ON images BEGIN
   SELECT delete_image_notes(OLD.id);
-END;
--- 素材被彻底删除时一并清掉人脸记录：否则人物页会一直挂着已删素材的裁切图，
--- 聚类质心也被幽灵向量污染。人物行本身保留（用户可能已改名，宁可空着也不丢名字）。
-CREATE TRIGGER IF NOT EXISTS trg_faces_delete AFTER DELETE ON images BEGIN
-  DELETE FROM faces WHERE image_id = OLD.id;
 END;
 -- 同理清掉「图 ↔ 文件夹」关联：以前只有回收站/导入两条路径手工清，
 -- 去重回滚与批量淘汰直接 DELETE images 就留下了孤儿 —— 侧栏张数虚高、封面指向已删图。

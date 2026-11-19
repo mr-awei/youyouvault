@@ -269,7 +269,7 @@ export function register(app, ctx) {
           ? nd.effectiveSize(row, nd.listOps(row.id))
           : { width: row.width, height: row.height };
       const ext = path.extname(src) || path.extname(row.abs_path) || '.jpg';
-      const name = `壁纸_${row.id}_${size.width}x${size.height}${ext}`;
+      const name = `图片_${row.id}_${size.width}x${size.height}${ext}`;
       res.set(
         'Content-Disposition',
         `attachment; filename="tuku_${row.id}${ext}"; filename*=UTF-8''${encodeURIComponent(name)}`
@@ -282,7 +282,7 @@ export function register(app, ctx) {
 
   /**
    * 批量打包：默认原样打包；带 format/quality/maxSide 时逐张重编码（对标 Eagle 的批量导出）。
-   * 文件名优先用素材标题（重名自动加序号），比「壁纸_WxH_id」更好认。
+   * 文件名优先用素材标题（重名自动加序号），比「图片_WxH_id」更好认。
    */
   async function streamZip(ids, res, opts = {}) {
     // 先截断再查库：请求体可能塞入几十万个 id，不能在 500 张上限生效前做几十万次 SQL + stat

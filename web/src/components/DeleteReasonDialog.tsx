@@ -9,9 +9,7 @@ export const REASON_OPTIONS = [
   { key: 'blur', label: i18n.t('kc3f69d7a') },
   { key: 'lowres', label: i18n.t('kf20fd188') },
   { key: 'watermark', label: i18n.t('kd60f1419') },
-  { key: 'notHer', label: i18n.t('k5013302d') },
   { key: 'duplicate', label: i18n.t('k46048d6a') },
-  { key: 'tinyPerson', label: i18n.t('k36994cac') },
   { key: 'faceCovered', label: i18n.t('kbedd5d59') },
   { key: 'expression', label: i18n.t('kf36a543a') },
   { key: 'pose', label: i18n.t('k8bc9bc7b') },
@@ -24,12 +22,11 @@ export const REASON_OPTIONS = [
   { key: 'overedited', label: i18n.t('k78773bcc') },
   { key: 'outfit', label: i18n.t('k3311bc9e') },
   { key: 'era', label: i18n.t('k5b1024ae') },
-  { key: 'notWallpaper', label: i18n.t('k93bbc3c2') },
   { key: 'ad', label: i18n.t('k9860d937') },
   { key: 'other', label: i18n.t('k0d98c747') },
 ];
 
-/** 把内部原因代码翻译成中文（notHer → 不是目标人物） */
+/** 把内部原因代码翻译成中文 */
 export const reasonLabel = (key: string) =>
   REASON_OPTIONS.find((r) => r.key === key)?.label || key;
 

@@ -26,8 +26,6 @@ test('清单：每个条目字段完整，id 唯一', () => {
 test('清单：id 前缀与分组一致（分发靠前缀，错了就永远装不上）', () => {
   const prefixOf = {
     upscale: ['upscale:', 'esrgan:', 'onnx:'],
-    matting: ['matting:'],
-    face: ['face:'],
     semantic: ['semantic:'],
   };
   for (const m of MODEL_CATALOG) {
@@ -55,7 +53,7 @@ test('catalogItem：找不到返回 null 而不是 undefined', () => {
 });
 
 test('mergeCatalog：未安装不虚报体积，安装后取磁盘实际值', () => {
-  const id = 'matting:u2net';
+  const id = 'upscale:realesrgan';
   const notInstalled = mergeCatalog({}).find((m) => m.id === id);
   assert.equal(notInstalled.installed, false);
   assert.equal(notInstalled.size, 0, '没装就该是 0，不能拿 sizeHint 冒充占用');
@@ -81,9 +79,9 @@ test('mergeCatalog：进度被夹到 0~100，-1 保留表示「不知道总量�
 
 test('summarizeCatalog：汇总已装数、占用、可清理与下载中项', () => {
   const items = mergeCatalog({
-    'matting:u2net': { installed: true, size: 100 },
-    'matting:birefnet-lite': { installed: true, size: 200, state: 'downloading', progress: 40 },
-    'face:buffalo-l': { installed: false },
+    'upscale:realesrgan': { installed: true, size: 100 },
+    'upscale:realcugan': { installed: true, size: 200, state: 'downloading', progress: 40 },
+    'semantic:clip-vit-b32': { installed: false },
   });
   const s = summarizeCatalog(items);
   assert.equal(s.total, MODEL_CATALOG.length);
@@ -91,10 +89,10 @@ test('summarizeCatalog：汇总已装数、占用、可清理与下载中项', (
   assert.equal(s.bytes, 300);
   assert.equal(s.removableBytes, 300);
   assert.equal(s.active, 1);
-  assert.equal(s.activeId, 'matting:birefnet-lite');
-  const mattingGroup = s.groups.find((g) => g.id === 'matting');
-  assert.equal(mattingGroup.installed, 2);
-  assert.equal(mattingGroup.bytes, 300);
+  assert.equal(s.activeId, 'upscale:realcugan');
+  const upscaleGroup = s.groups.find((g) => g.id === 'upscale');
+  assert.equal(upscaleGroup.installed, 2);
+  assert.equal(upscaleGroup.bytes, 300);
 });
 
 test('summarizeCatalog：空清单不会除零或抛错', () => {

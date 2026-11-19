@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS libraries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   path TEXT NOT NULL UNIQUE,        -- 库目录绝对路径
-  root_path TEXT NOT NULL DEFAULT '', -- 库挂载的素材根目录（桌面端壁纸库文件夹）
+  root_path TEXT NOT NULL DEFAULT '', -- 库挂载的素材根目录
   thumb_dir TEXT NOT NULL DEFAULT '', -- 该库缩略图目录（默认库沿用历史 storage/thumbs）
   created_at TEXT NOT NULL,
   last_opened TEXT NOT NULL DEFAULT '',
@@ -70,6 +70,10 @@ CREATE TABLE IF NOT EXISTS libraries (
   lock_salt TEXT NOT NULL DEFAULT ''         -- 哈希用的随机盐
 );
 `);
+// 已移除的功能对应的全局设置键：老版本写入的凭据/配置不再保留
+globalDb.exec(
+  "DELETE FROM settings WHERE key IN ('weiboCookie','weiboUserAgent','screensaver','watermarkPresets')"
+);
 // 存量库迁移：libraries 表的多库字段是分批加的，老全局库缺列时
 // 启动查询直接报 no such column 导致服务起不来（listen 回调抛错）。
 {
@@ -239,45 +243,6 @@ function ensureDefaultLibrary() {
     )
     .run('默认图库', DATA_DIR, rootPath, THUMB_DIR, now, now, others > 0 ? 0 : 1);
 }
-
-/* ------------------------------- keywords ------------------------------- */
-
-export function listKeywords() {
-  return db.prepare('SELECT * FROM keywords ORDER BY id ASC').all();
-}
-
-export function addKeyword(text) {
-  const value = String(text || '').trim();
-  if (!value) throw new Error('关键词不能为空');
-  const exists = db.prepare('SELECT id FROM keywords WHERE text = ?').get(value);
-  if (exists) return exists.id;
-  const info = db
-    .prepare('INSERT INTO keywords(text, enabled, created_at) VALUES (?, 1, ?)')
-    .run(value, new Date().toISOString());
-  return Number(info.lastInsertRowid);
-}
-
-export function updateKeyword(id, patch) {
-  const fields = [];
-  const values = [];
-  if (patch.text !== undefined) {
-    fields.push('text = ?');
-    values.push(String(patch.text).trim());
-  }
-  if (patch.enabled !== undefined) {
-    fields.push('enabled = ?');
-    values.push(patch.enabled ? 1 : 0);
-  }
-  if (!fields.length) return;
-  values.push(id);
-  db.prepare(`UPDATE keywords SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-}
-
-export function deleteKeyword(id) {
-  db.prepare('DELETE FROM keywords WHERE id = ?').run(id);
-}
-
-// seedDefaults() 已删除：DEFAULT_KEYWORDS 是空数组，这个函数永远是空操作。
 
 /* ------------------------------- 启动初始化 ------------------------------- */
 

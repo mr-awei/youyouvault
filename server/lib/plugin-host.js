@@ -95,6 +95,18 @@ export function findPlugin(id) {
   return listPlugins().find((p) => p.id === id) || null;
 }
 
+/** 卸载：只允许删用户目录里的插件；删完宿主立刻不再返回（findPlugin 每次读盘） */
+export async function uninstallPlugin(id) {
+  const plugin = findPlugin(String(id || ''));
+  if (!plugin) throw new Error('插件不存在');
+  if (plugin.builtin) throw new Error('内置插件不能卸载');
+  const root = path.resolve(PLUGIN_DIRS[1]);
+  const dir = path.resolve(plugin.dir);
+  if (!dir.startsWith(root + path.sep)) throw new Error('只能卸载用户插件目录里的插件');
+  await fsp.rm(dir, { recursive: true, force: true });
+  return { ok: true, id: plugin.id, restoredBuiltin: !!findPlugin(plugin.id) };
+}
+
 /** 应用 patch：只允许追加标签 / 改备注 / 评分 / 收藏，绝不动文件与路径 */
 export function applyPluginPatch(imageId, patch) {
   const applied = [];

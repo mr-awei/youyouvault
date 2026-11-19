@@ -11,7 +11,7 @@ import { phashFromGrey32 } from '../phash.js';
  * 根治：抠掉白底 → 裁到主体包围盒 → 主体占满画面后再算 pHash。
  * 此后背景对哈希的贡献为零，不同产品的主体差异直接反映到汉明距离上。
  *
- * 抠图方式：阈值法（背景 ≈ 四角中位色的近白像素），不做 AI 分割——
+ * 主体提取方式：阈值法（背景 ≈ 四角中位色的近白像素），不做 AI 分割——
  * 本库图片全为白底商品图，阈值法零成本且够准；AI 分割（RMBG-1.4，1024² 输入）
  * 留作非白底图占比上升后的升级路径。
  */
@@ -68,7 +68,7 @@ function foregroundBox(data, W, H) {
   }
   if (maxX < 0) return null;
   const ratio = fg / (W * H);
-  if (ratio < MIN_FOREGROUND || ratio > 0.97) return null; // 无主体 / 抠图疑似失效
+  if (ratio < MIN_FOREGROUND || ratio > 0.97) return null; // 无主体 / 主体提取疑似失效
   // 外扩并夹紧
   const pw = Math.round((maxX - minX) * PAD_FRAC) + 2;
   const ph = Math.round((maxY - minY) * PAD_FRAC) + 2;

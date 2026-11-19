@@ -6,12 +6,10 @@ import i18n from '../../i18n';
 
 interface Props {
   onToast: (m: string, kind?: 'info' | 'error') => void;
-  /** 跳到设置侧栏的「插件市场」 */
-  onOpenMarket?: () => void;
 }
 
 /** 插件 / 脚本宿主：清单、权限、试运行、打开用户插件目录 */
-export default function PluginSection({ onToast, onOpenMarket }: Props) {
+export default function PluginSection({ onToast }: Props) {
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [prefix, setPrefix] = useState(i18n.t('ke17a6882'));
@@ -92,11 +90,6 @@ export default function PluginSection({ onToast, onOpenMarket }: Props) {
           <button className="btn ghost" onClick={load}>
             {i18n.t('k694fc5ef')}
           </button>
-          {onOpenMarket && (
-            <button className="btn" onClick={onOpenMarket}>
-              {i18n.t('ke4f6a8f7')}
-            </button>
-          )}
         </div>
 
         {!plugins.length && <div className="hint">{i18n.t('k47501c95')}</div>}

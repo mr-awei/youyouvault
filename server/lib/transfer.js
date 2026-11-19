@@ -703,7 +703,7 @@ export async function importEagleLibrary({ srcDir, name, rootPath, limit } = {})
         title: meta.name || path.parse(pick).name,
         tags: tags.join(','),
         sourceUrl: meta.url || '',
-        // 迁库不是采集：Eagle 里的相似图/重复图都要原样保留下来
+        // 迁库不是导入：Eagle 里的相似图/重复图都要原样保留下来
         skipPhashDupe: true,
       })
       .catch((err) => ({ ok: false, reason: err.message }));

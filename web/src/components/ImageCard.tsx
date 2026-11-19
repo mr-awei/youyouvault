@@ -33,7 +33,6 @@ import {
   IconStar,
   IconTag,
   IconTrash,
-  IconWallpaper,
   IconWarning,
   IconWand,
 } from './Icons';
@@ -42,7 +41,7 @@ import i18n from '../i18n';
 interface Props {
   item: ImageItem;
   selected: boolean;
-  /** 可选的附加标注（如以图搜图的「几乎相同 / 高度相似」） */
+  /** 可选的附加标注（如相似图的「几乎相同 / 高度相似」） */
   note?: string;
   onOpen: (item: ImageItem) => void;
   onToggleSelect: (id: number) => void;
@@ -101,7 +100,6 @@ const KIND_LABEL: Record<string, string> = {
   model: i18n.t('kd9b444f7'),
   design: i18n.t('kfdb21fa1'),
   raw: 'RAW',
-  bookmark: i18n.t('k18a481ea'),
   other: i18n.t('k2a0c4740'),
 };
 
@@ -114,7 +112,6 @@ const KIND_ICON: Record<string, (p: { size?: number }) => React.ReactElement> = 
   model: IconCube,
   design: IconPalette,
   raw: IconCamera,
-  bookmark: IconLink,
   other: IconBox,
 };
 
@@ -127,7 +124,6 @@ const KIND_TAG: Record<string, string> = {
   model: '3D',
   design: 'PSD',
   raw: 'RAW',
-  bookmark: 'LINK',
   other: 'FILE',
 };
 
@@ -524,9 +520,9 @@ const ImageCard = React.memo(function ImageCard({
       // 封面也可能因为补图/换盘暂时取不到，走统一重试链路，不要一次失败就判死。
       return <img src={thumbSrc} alt={item.title} loading="lazy" decoding="async" onError={onThumbError} onLoad={onThumbLoad} />;
     }
-    // 设计文件 / RAW / 网页书签：入库时已经备好了画面（PSD 合成图、Sketch 的
-    // preview.png、RAW 内嵌 JPEG、网页 og:image），直接当缩略图用
-    if (kind === 'design' || kind === 'raw' || kind === 'bookmark') {
+    // 设计文件 / RAW：入库时已经备好了画面（PSD 合成图、Sketch 的
+    // preview.png、RAW 内嵌 JPEG），直接当缩略图用
+    if (kind === 'design' || kind === 'raw') {
       // 不能一次 onError 就判死：补图/换盘/首次打开时后台可能还没生成好，
       // 走统一的重试链路（URL 带 tick 变化，绕开可能被缓存的 404），多次拿不到才显示「暂无预览」。
       return <img src={thumbSrc} alt={item.title} loading="lazy" decoding="async" onError={onThumbError} onLoad={onThumbLoad} />;
@@ -620,15 +616,6 @@ const ImageCard = React.memo(function ImageCard({
     const ok = await copyText(fullUrl);
     if (ok) void api.bumpUsage('copy', [item.id]).catch(() => undefined);
     onToast?.(ok ? i18n.t('k035afe33') : i18n.t('ka2ddaa77'), ok ? 'info' : 'error');
-  };
-
-  const setWall = async () => {
-    try {
-      await api.wallpaper(item.id);
-      onToast?.(i18n.t('k388e4fd9'));
-    } catch (err) {
-      onToast?.((err as Error).message);
-    }
   };
 
   /* 右键菜单进阶操作（旋转 / 标签 / 文件路径 / 回收站） */
@@ -1011,7 +998,7 @@ const ImageCard = React.memo(function ImageCard({
           <button
             onClick={() => {
               setMenu(null);
-              // 不在这里重复实现命令表：交给 App 的命令面板，右键即可搜「导出 / 拼接 / 对比…」
+              // 不在这里重复实现命令表：交给 App 的命令面板，右键即可搜「导出 / 对比…」
               window.dispatchEvent(new CustomEvent('tuku:palette', { detail: { mode: 'command', itemId: item.id } }));
             }}
             title={i18n.t('k4ea06074')}
@@ -1034,9 +1021,6 @@ const ImageCard = React.memo(function ImageCard({
           )}
           <button onClick={() => { setMenu(null); onToggleFavorite(item); }}>
             <IconHeart filled={item.favorite} /> {item.favorite ? i18n.t('kf22cec28') : i18n.t('kae336cd0')}
-          </button>
-          <button onClick={() => { setMenu(null); setWall(); }}>
-            <IconWallpaper /> {i18n.t('kb91e3e16')}
           </button>
           {canSetCover && (
             <button disabled={coverBusy} onClick={() => { setMenu(null); setCoverFromCard(); }}>
@@ -1070,19 +1054,6 @@ const ImageCard = React.memo(function ImageCard({
               <IconFile /> {i18n.t('k87f5fb6d')}
             </button>
           )}
-          <button
-            onClick={() => {
-              setMenu(null);
-              // 搜图面板由 App 统一挂载，这里只把目标丢过去
-              window.dispatchEvent(
-                new CustomEvent('tuku:reverse-search', {
-                  detail: { imageId: item.id, title: item.title, previewUrl: `${BASE}${item.thumbUrl}` },
-                })
-              );
-            }}
-          >
-            <IconSearch /> {i18n.t('k375e3ed7')}
-          </button>
           {item.path && (
             <button onClick={() => { setMenu(null); reveal(); }}>
               <IconFolderOpen /> {i18n.t('kc24fc05a')}

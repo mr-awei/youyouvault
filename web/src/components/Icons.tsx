@@ -76,15 +76,6 @@ export const IconHeart = ({ filled, ...rest }: BaseProps) => {
   return <Icon filled={filled ?? false} {...rest} />;
 };
 
-/** 人物：一个人头 + 肩线（与 Eagle 的「人物」入口视觉一致） */
-export const IconUsers = strokeIcon(
-  <>
-    <circle cx="10" cy="8" r="3.4" />
-    <path d="M3.6 20c.5-3.4 3.2-5.4 6.4-5.4s5.9 2 6.4 5.4" />
-    <path d="M17.4 5.6a3 3 0 0 1 0 5.6M19.6 14.9c1.6.7 2.6 2 2.9 3.9" />
-  </>
-);
-
 /** 时间线：日历（按拍摄时间浏览的前提就是「日期」） */
 export const IconCalendar = strokeIcon(
   <>
@@ -142,13 +133,6 @@ export const IconDashboard = strokeIcon(
   </>
 );
 
-export const IconSpider = strokeIcon(
-  <>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 9V3m0 18v-6M9 12H3m18 0h-6M9.9 9.9 5.6 5.6m12.8 12.8-4.3-4.3M14.1 9.9l4.3-4.3M5.6 18.4l4.3-4.3" />
-  </>
-);
-
 export const IconGear = strokeIcon(
   <>
     <circle cx="12" cy="12" r="3" />
@@ -168,14 +152,6 @@ export const IconBrain = strokeIcon(
     <path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8V15a3 3 0 0 0 3 3h1v-4" />
     <path d="M15 4a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8V15a3 3 0 0 1-3 3h-1v-4" />
     <path d="M12 4v14M9 8h6M9 12h6" />
-  </>
-);
-
-export const IconWallpaper = strokeIcon(
-  <>
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M3 14l4-4 4 4 3-3 7 7" />
-    <circle cx="8.5" cy="8.5" r="1.3" />
   </>
 );
 
@@ -260,20 +236,22 @@ export const IconBook = strokeIcon(
   </>
 );
 
-/** 代码 / 接口：一对尖括号中间一道斜杠 */
-export const IconCode = strokeIcon(
-  <>
-    <path d="m8.6 8.4-4 3.6 4 3.6M15.4 8.4l4 3.6-4 3.6" />
-    <path d="m13.4 5.6-2.8 12.8" />
-  </>
-);
-
 /** 关于：圆圈里一个 i */
 export const IconInfo = strokeIcon(
   <>
     <circle cx="12" cy="12" r="8.6" />
     <path d="M12 11v5.4" />
     <path d="M12 7.8v.1" />
+  </>
+);
+
+/** 授权：一枚钥匙 */
+export const IconKey = strokeIcon(
+  <>
+    <circle cx="8.4" cy="15.6" r="3.8" />
+    <path d="M11.1 12.9 20 4" />
+    <path d="m16.4 7.6 2.3 2.3" />
+    <path d="m18.7 5.3 2.1 2.1" />
   </>
 );
 
@@ -314,15 +292,6 @@ export const IconStar = ({ filled = true, ...rest }: BaseProps) => {
 /** 打勾（已应用 / 已选中） */
 export const IconCheck = strokeIcon(<path d="m4.5 12.6 4.8 4.8L19.5 6.8" />);
 
-/** 剪刀（裁切） */
-export const IconScissors = strokeIcon(
-  <>
-    <circle cx="6.2" cy="6.2" r="2.6" />
-    <circle cx="6.2" cy="17.8" r="2.6" />
-    <path d="M20 4 8.4 15.6M20 20 8.4 8.4" />
-  </>
-);
-
 /** 文件（文档类素材） */
 export const IconFile = strokeIcon(
   <>
@@ -349,7 +318,7 @@ export const IconEyedropper = strokeIcon(
   </>
 );
 
-/** 相机（截图 / 采集） */
+/** 相机（截图） */
 export const IconCamera = strokeIcon(
   <>
     <path d="M3 8.6a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -376,14 +345,6 @@ export const IconEye = strokeIcon(
   <>
     <path d="M2.6 12S6 5.6 12 5.6 21.4 12 21.4 12 18 18.4 12 18.4 2.6 12 2.6 12z" />
     <circle cx="12" cy="12" r="3.1" />
-  </>
-);
-
-/** 定位图钉（地点） */
-export const IconPin = strokeIcon(
-  <>
-    <path d="M12 21s6.5-6 6.5-11a6.5 6.5 0 1 0-13 0C5.5 15 12 21 12 21z" />
-    <circle cx="12" cy="10" r="2.4" />
   </>
 );
 
@@ -468,15 +429,7 @@ export const IconPencil = strokeIcon(
   </>
 );
 
-/** 显示器（壁纸预览 / 屏幕相关） */
-export const IconMonitor = strokeIcon(
-  <>
-    <rect x="2.6" y="3.6" width="18.8" height="12.8" rx="2" />
-    <path d="M9 20.4h6M12 16.4v4" />
-  </>
-);
-
-/** 字形 Aa（文字类工具：OCR / 水印文案 / 字体） */
+/** 字形 Aa（文字类工具：OCR / 字体） */
 export const IconType = strokeIcon(
   <>
     <path d="M3 6.5h8M7 6.5v11" />

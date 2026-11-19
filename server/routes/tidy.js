@@ -114,7 +114,7 @@ export function register(app, ctx) {
     })
   );
 
-  /* 补算主体哈希（白底抠图归一化 pHash）：相似分组的候选哈希升级，分次执行可重复调用 */
+  /* 补算主体哈希（白底去背归一化 pHash）：相似分组的候选哈希升级，分次执行可重复调用 */
   app.post(
     '/api/maintenance/subject',
     asyncRoute(async (req, res) => {

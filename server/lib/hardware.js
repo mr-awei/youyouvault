@@ -2,7 +2,7 @@
 /**
  * 本机硬件探测 + 「大模型功能最低配置」判定。
  *
- * 为什么要这一层：抠图 / 超分这类功能要么吃内存、要么必须有一块能跑 Vulkan 的显卡，
+ * 为什么要这一层：超分 / 语义这类功能要么吃内存、要么必须有一块能跑 Vulkan 的显卡，
  * 用户点下去才发现跑不动（黑图、闪退、几分钟无响应）时根本不知道是机器不行还是软件坏了。
  * 所以在真正开跑之前先把「你的配置」和「最低配置」摆在一起，不达标就明说原因。
  *
@@ -11,7 +11,7 @@
  *   没有 CPU 开关、显存靠 `-t tile-size` 控制。这里「显存约 1GB」是我们按 x4plus
  *   默认 tile 的保守阈值，文案里必须写成「估算/保守阈值」，不能写成官方要求。
  * - onnxruntime 官方兼容页只承诺 Windows 10 实测，同样不发布内存与指令集下限；
- *   抠图/超分的内存门槛是按「权重常驻 + 输入 1024² 中间张量」的峰值估算。
+ *   超分/语义的内存门槛是按「权重常驻 + 输入 1024² 中间张量」的峰值估算。
  * - 消除（擦除修复）**不用模型也不用显卡**：`lib/inpaint.js` 是 chamfer 距离变换 +
  *   邻域 Jacobi 平滑的纯像素算法。它在表里存在的意义是「说清它不需要检查」，
  *   不能为了凑数给它编一条显卡要求。
@@ -243,33 +243,6 @@ export async function probeHardware(opts = {}) {
  */
 export const HARDWARE_FEATURES = [
   {
-    id: 'matting',
-    label: 'AI 抠图（去背景）',
-    engine: 'onnxruntime-node · 显卡优先（DirectML / CUDA），失败回退 CPU',
-    models: 'U-2-Net 4.5MB / BiRefNet lite 224MB / BEN2 213MB，输入 1024×1024',
-    min: { ramMB: 4096, cores: 2 },
-    recommend: { ramMB: 8192, cores: 4 },
-    basis: [
-      'onnxruntime 官方兼容页只承诺 Windows 10 实测，不发布内存与 CPU 指令集下限',
-      '内存门槛按「224MB 权重常驻 + 1024² 中间张量」的峰值估算（约 1.5GB），留一倍余量取 4GB',
-      '有可用显卡时自动走 DirectML / CUDA（同一份权重实测 62ms → 11ms），没有则回退 CPU，单张从毫秒级到数秒',
-    ],
-  },
-  {
-    id: 'face',
-    label: '人脸检测与聚类',
-    engine: 'onnxruntime-node · 显卡优先（DirectML / CUDA），失败回退 CPU',
-    models: 'det_10g 16.9MB + w600k_r50 174MB，检测 640×640、识别 112×112',
-    min: { ramMB: 4096, cores: 2 },
-    recommend: { ramMB: 8192, cores: 4 },
-    basis: [
-      'insightface buffalo_l 两套权重合计约 191MB，扫描时都要常驻内存',
-      'onnxruntime 官方不发布内存下限；4GB 按「权重常驻 + 640² 检测批处理」的峰值（约 1.2GB）留余量估',
-      '扫全库是逐张推理：显卡可用时自动上显卡，没有则回退 CPU，核心少只影响速度',
-      '这一档是「扫一遍全库」的批量活，内存不足更容易在中途被系统结束',
-    ],
-  },
-  {
     id: 'upscale-vulkan',
     label: 'AI 超分（Real-ESRGAN / Real-CUGAN）',
     engine: 'realesrgan-ncnn-vulkan.exe · 外部 Vulkan 程序',
@@ -291,7 +264,7 @@ export const HARDWARE_FEATURES = [
     min: { ramMB: 8192, cores: 4 },
     recommend: { ramMB: 16384, cores: 8 },
     basis: [
-      '窗口注意力（window=64）的中间张量比抠图大得多，内存门槛按 8GB 估',
+      '窗口注意力（window=64）的中间张量比普通图像任务大得多，内存门槛按 8GB 估',
       '官方同样不发布内存下限；这一档 CPU 单张就要数十秒，配置不足时体验极差',
       '显卡可用时由 transformers.js 挂在 DirectML / CUDA 上跑，没有则回退 CPU 执行器',
     ],

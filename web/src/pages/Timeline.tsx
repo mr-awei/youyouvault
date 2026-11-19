@@ -23,7 +23,6 @@ const KIND_TAG: Record<string, string> = {
   office: 'DOC',
   design: 'PSD',
   raw: 'RAW',
-  bookmark: 'LINK',
   other: 'FILE',
 };
 
@@ -477,11 +476,6 @@ export function Timeline({ onToast, onOpen }: Props) {
               onToast(item.favorite ? i18n.t('kf22cec28') : i18n.t('kae336cd0'));
             }),
           },
-          {
-            label: i18n.t('kb91e3e16'),
-            icon: '🖼',
-            action: run(async () => { await api.wallpaper(item.id); onToast(i18n.t('kb91e3e16')); }),
-          },
           { label: i18n.t('k0d403239'), icon: '↻', action: run(async () => { await api.rotateImage(item.id, 'cw'); onToast(i18n.t('k015f7038')); }) },
           { label: i18n.t('k9b95ba68'), icon: '↺', action: run(async () => { await api.rotateImage(item.id, 'ccw'); onToast(i18n.t('k015f7038')); }) },
           {
@@ -519,18 +513,6 @@ export function Timeline({ onToast, onOpen }: Props) {
               const ok = await copyText(item.path);
               onToast(ok ? i18n.t('k5f0a2b31', { p0: item.path }) : item.path, ok ? 'info' : 'error');
             }),
-          },
-          {
-            label: i18n.t('k375e3ed7'),
-            icon: '🔎',
-            action: () => {
-              setCtxMenu(null);
-              window.dispatchEvent(
-                new CustomEvent('tuku:reverse-search', {
-                  detail: { imageId: item.id, title: item.title, previewUrl: `${BASE}${item.thumbUrl}` },
-                })
-              );
-            },
           },
           { label: i18n.t('k69c50ffd'), icon: '📁', action: run(() => revealFile(item.path)) },
           {

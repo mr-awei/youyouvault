@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * node --test 的包装器：原样流式输出测试结果，正常退出时把「通过数」登记到
- * docs/.verify-stats.json，供 scripts/doc-stats.mjs 回写文档。
+ * docs/.verify-stats.json，供 scripts/doc-stats.mjs 汇总统计。
  * 失败时绝不登记（文档不能出现一轮失败的数字）。
  */
 import { spawn } from 'node:child_process';

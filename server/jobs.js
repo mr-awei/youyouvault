@@ -1,7 +1,7 @@
 /**
  * 后台任务表（持久化 + 历史 + 中断标记）。
  *
- * 为什么需要：采集 / 批量编辑 / 画质增强 / 模型下载原先都是模块内的内存单例，
+ * 为什么需要：批量编辑 / 画质增强 / 模型下载原先都是模块内的内存单例，
  * 进程一退就什么都不剩 —— 没有历史、不能重试、崩溃后连「上次跑到第几张」都查不到，
  * 界面上只能看到一个当前任务。这里把它们统一落表：
  *   - 运行中定期写 progress/message（节流，别把 SQLite 写爆）
@@ -142,12 +142,12 @@ export function listJobs({ kind = '', limit = 20 } = {}) {
   return rows.map(toDto);
 }
 
-/** 某类任务最近一次（界面用它显示「上次采集」/「可继续」） */
+/** 某类任务最近一次（界面用它显示「上次运行」/「可继续」） */
 export function lastJob(kind) {
   return toDto(db.prepare('SELECT * FROM jobs WHERE kind = ? ORDER BY id DESC LIMIT 1').get(String(kind)));
 }
 
-/** 还有没有在跑的同类型任务（并发上限 = 每类 1 个，避免两个采集互相打架） */
+/** 还有没有在跑的同类型任务（并发上限 = 每类 1 个，避免两个同类任务互相打架） */
 export function hasRunning(kind) {
   const row = db.prepare(`SELECT COUNT(*) n FROM jobs WHERE kind = ? AND status IN ('queued','running')`).get(
     String(kind)

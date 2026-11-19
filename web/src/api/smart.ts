@@ -4,7 +4,6 @@
  */
 import { request } from './core';
 import type { SmartFolder, VersionInfo, ActionStep, ActionConditions, ActionDef, ActionPreviewStep } from './types';
-import type { FaceStatus, FacePerson, ReverseEngine, ReverseNetwork, ReverseSearchResponse, StitchTemplate, StitchCrop, StitchPlan } from './models';
 import type { ImageItem } from '../types';
 
 /** AI 夜间批处理：配置 + 时段判断 + 待办 + 当前进度（服务端一次给全） */
@@ -18,9 +17,9 @@ export interface NightBatchState {
   tasks: string[];
   nowMin: number;
   inWindow: boolean;
-  pending: { semantic: number; face: number; total: number };
+  pending: { semantic: number; total: number };
   running: boolean;
-  task: '' | 'semantic' | 'face';
+  task: '' | 'semantic';
   jobId: number;
   done: number;
   total: number;
@@ -50,7 +49,7 @@ export const smartAPI = {
     }),
   deleteSmartFolder: (id: number) =>
     request<{ ok: boolean; folders: SmartFolder[] }>(`/api/smart-folders/${id}`, { method: 'DELETE' }),
-  // AI 夜间批处理：低峰时段补语义 / 人脸索引
+  // AI 夜间批处理：低峰时段补语义索引
   nightBatch: () => request<NightBatchState>('/api/night-batch'),
   saveNightBatch: (patch: { enabled?: boolean; start?: string; end?: string; tasks?: string[] }) =>
     request<NightBatchState>('/api/night-batch', { method: 'POST', body: JSON.stringify(patch) }),
@@ -96,48 +95,6 @@ export const smartAPI = {
       truncated: boolean;
       results: { id: number; ok: boolean; error?: string; text?: string; chars?: number; cached?: boolean }[];
     }>('/api/images/ocr-batch', { method: 'POST', body: JSON.stringify({ ids, force }) }),
-
-  /* --------------------- 来源：以图搜图 / 换大图 --------------------- */
-  searchProviders: (id: number) =>
-    request<{
-      ok: boolean;
-      sourceUrl: string;
-      pageUrl: string;
-      providers: {
-        id: string;
-        name: string;
-        kind: 'upload' | 'url' | 'keyword';
-        desc: string;
-        ready: boolean;
-        reason: string;
-        url?: string;
-      }[];
-    }>(`/api/images/${id}/search-providers`),
-  reverseSearch: (id: number, engine: string) =>
-    request<{
-      ok: boolean;
-      engine: string;
-      mode: 'upload' | 'url' | 'keyword';
-      url?: string;
-      note: string;
-      results?: { similarity: number; title: string; detail: string; thumb: string; link: string }[];
-    }>(`/api/images/${id}/reverse-search`, { method: 'POST', body: JSON.stringify({ engine }) }),
-  upgradePreview: (id: number, minGain = 1.1) =>
-    request<{
-      ok: boolean;
-      found: boolean;
-      before: { width: number; height: number };
-      after: { width: number; height: number; url: string } | null;
-      tried: { url: string; error?: string; width?: number; height?: number }[];
-    }>(`/api/images/${id}/upgrade-source/preview?minGain=${minGain}`),
-  upgradeSource: (id: number, minGain = 1.1) =>
-    request<{
-      ok: boolean;
-      before: { width: number; height: number };
-      after: { width: number; height: number; url: string };
-      bytes: number;
-      item: ImageItem;
-    }>(`/api/images/${id}/upgrade-source`, { method: 'POST', body: JSON.stringify({ minGain }) }),
 
   /* ------------------------ 检查器：EXIF / PDF / 版本 ------------------------ */
   exif: (id: number) =>
@@ -353,194 +310,4 @@ export const smartAPI = {
       body: JSON.stringify({ destDir, name }),
     }),
 
-  /* ------------------------------ 图片拼接 ------------------------------ */
-  stitchUrl: (
-    ids: number[],
-    opts: {
-      template?: string;
-      crops?: string;
-      layout?: string;
-      ratio?: string;
-      outWidth?: number;
-      columns?: number;
-      gap?: number;
-      bg?: string;
-      cell?: number;
-      radius?: number;
-      shadow?: number;
-      border?: boolean;
-      backdrop?: boolean;
-      /** 无缝：留白 / 缝隙 / 圆角 / 描边 / 投影全部归零 */
-      seamless?: boolean;
-      format?: string;
-      quality?: number;
-      title?: string;
-      subtitle?: string;
-      billing?: string;
-      /** 海报文字样式：本机字体 key（sys:家族名）/ 标题字号倍率 / 标题颜色 #rrggbb */
-      font?: string;
-      titleScale?: number;
-      titleColor?: string;
-      file?: string;
-    } = {}
-  ) => {
-    const q = new URLSearchParams({ ids: ids.join(',') });
-    if (opts.template) q.set('template', opts.template);
-    if (opts.crops) q.set('crops', opts.crops);
-    if (opts.layout) q.set('layout', opts.layout);
-    if (opts.ratio) q.set('ratio', opts.ratio);
-    if (opts.outWidth) q.set('outWidth', String(opts.outWidth));
-    if (opts.columns) q.set('columns', String(opts.columns));
-    if (opts.gap != null) q.set('gap', String(opts.gap));
-    if (opts.bg) q.set('bg', opts.bg);
-    if (opts.cell) q.set('cell', String(opts.cell));
-    if (opts.radius != null) q.set('radius', String(opts.radius));
-    if (opts.shadow != null) q.set('shadow', String(opts.shadow));
-    if (opts.border != null) q.set('border', opts.border ? '1' : '0');
-    if (opts.backdrop != null) q.set('backdrop', opts.backdrop ? '1' : '0');
-    if (opts.seamless) q.set('seamless', '1');
-    if (opts.format) q.set('format', opts.format);
-    if (opts.quality) q.set('quality', String(opts.quality));
-    if (opts.title) q.set('title', opts.title);
-    if (opts.subtitle) q.set('subtitle', opts.subtitle);
-    if (opts.billing) q.set('billing', opts.billing);
-    if (opts.font) q.set('font', opts.font);
-    if (opts.titleScale != null && opts.titleScale !== 1) q.set('titleScale', String(opts.titleScale));
-    if (opts.titleColor) q.set('titleColor', opts.titleColor);
-    if (opts.file) q.set('file', opts.file);
-    return `/api/export/stitch?${q.toString()}`;
-  },
-  /* 版面坐标：每格的归一化位置 + 缩放下限。算法版式的格子是服务端算的，
-     前端不能自己猜，否则「拖的那个框」不是「真正被裁的那块」 */
-  stitchPlan: (
-    ids: number[],
-    opts: {
-      template?: string;
-      layout?: string;
-      ratio?: string;
-      outWidth?: number;
-      columns?: number;
-      cell?: number;
-      gap?: number;
-      seamless?: boolean;
-    } = {}
-  ) => {
-    const q = new URLSearchParams({ ids: ids.join(',') });
-    if (opts.seamless) q.set('seamless', '1');
-    if (opts.template) q.set('template', opts.template);
-    if (opts.layout) q.set('layout', opts.layout);
-    if (opts.ratio) q.set('ratio', opts.ratio);
-    if (opts.outWidth) q.set('outWidth', String(opts.outWidth));
-    if (opts.columns) q.set('columns', String(opts.columns));
-    if (opts.cell) q.set('cell', String(opts.cell));
-    if (opts.gap != null) q.set('gap', String(opts.gap));
-    return request<StitchPlan>(`/api/export/stitch/plan?${q.toString()}`);
-  },
-  /* 本机字体（海报文字选字体用）：走水印那套扫描结果，有 60 秒缓存，不带 refresh */
-  stitchFonts: () => request<{ fonts: { key: string; name: string; group: string }[] }>('/api/watermark/fonts'),
-  /* 模板清单：构图数据只在服务端存一份，前端画缩略图和叠加框都用它 */
-  stitchTemplates: () =>
-    request<{ templates: StitchTemplate[]; layouts: { id: string; name: string; hint: string }[] }>(
-      '/api/export/stitch/templates'
-    ),
-  /* 自动构图：显著度检测给出的每格焦点/缩放，返回后可继续手调 */
-  stitchAutoCrops: (ids: number[], template: string) =>
-    request<{ crops: StitchCrop[] }>(
-      `/api/export/stitch/crops?ids=${ids.join(',')}&template=${encodeURIComponent(template)}`
-    ),
-
-  /* ------------------------------ 人脸识别 ------------------------------ */
-  faceStatus: () => request<FaceStatus>('/api/face/status'),
-  faceInstall: () => request<FaceStatus & { ok: boolean; started: boolean }>('/api/face/install', { method: 'POST' }),
-  faceInstallCancel: () => request<{ ok: boolean }>('/api/face/install/cancel', { method: 'POST' }),
-  faceScan: (opts: { limit?: number; force?: boolean; minCos?: number } = {}) =>
-    request<FaceStatus & { ok: boolean }>('/api/face/scan', { method: 'POST', body: JSON.stringify(opts) }),
-  faceScanCancel: () => request<{ ok: boolean }>('/api/face/scan/cancel', { method: 'POST' }),
-  facePersons: (opts: { limit?: number; offset?: number; minCount?: number; q?: string; all?: boolean } = {}) => {
-    const q = new URLSearchParams();
-    if (opts.limit) q.set('limit', String(opts.limit));
-    if (opts.offset) q.set('offset', String(opts.offset));
-    if (opts.minCount) q.set('minCount', String(opts.minCount));
-    if (opts.q) q.set('q', opts.q);
-    if (opts.all) q.set('all', '1');
-    const qs = q.toString();
-    // total = 当前筛选下的人物数（不受 limit 影响），allTotal = 不筛封面质量时的总数
-    return request<{ persons: FacePerson[]; total: number; allTotal: number }>(
-      `/api/face/persons${qs ? `?${qs}` : ''}`
-    );
-  },
-  /** 某个人的图（直接给 DTO，灯箱/网格都能直接用） */
-  facePersonItems: (id: number, opts: { limit?: number; offset?: number } = {}) => {
-    const q = new URLSearchParams();
-    if (opts.limit) q.set('limit', String(opts.limit));
-    if (opts.offset) q.set('offset', String(opts.offset));
-    const qs = q.toString();
-    // total = 这个人的去重图片总数（不受 limit 影响）
-    return request<{ items: ImageItem[]; total: number }>(`/api/face/persons/${id}/items${qs ? `?${qs}` : ''}`);
-  },
-  /** 单个人物（灯箱里点人名跳人物页时用，不必整页拉列表再 find） */
-  facePerson: (id: number) => request<FacePerson>(`/api/face/persons/${id}`),
-  /** 全网以图搜图引擎清单 + 国际网络体检（refresh 强制重新探测，忽略 60s 缓存） */
-  reverseEngines: (refresh = false) =>
-    request<{ ok: boolean; engines: ReverseEngine[]; network: ReverseNetwork }>(
-      `/api/reverse/engines${refresh ? '?refresh=1' : ''}`
-    ),
-  /**
-   * 多引擎并发搜图：给 imageId，或给 personId 让服务端挑「最清晰最完整」的那张。
-   * 注意与上面的 reverseSearch(id, engine) 区分：那个是「素材来源」单渠道检索。
-   */
-  reverseSearchAll: (body: { imageId?: number; personId?: number; engines: string[] }) =>
-    request<ReverseSearchResponse>('/api/reverse/search', { method: 'POST', body: JSON.stringify(body) }),
-  faceRename: (id: number, name: string) =>
-    request<{ ok: boolean; id: number; name: string }>(`/api/face/persons/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ name }),
-    }),
-  /** 手动指定人物封面：传那张照片的 imageId，服务端取该照片里属于这个人的脸 */
-  facePersonCover: (id: number, imageId: number) =>
-    request<{ ok: boolean; id: number; coverFaceId: number; coverImageId: number; coverPx: number }>(
-      `/api/face/persons/${id}/cover`,
-      { method: 'POST', body: JSON.stringify({ imageId }) }
-    ),
-  faceDeletePerson: (id: number) =>
-    request<{ ok: boolean; removedFaces: number }>(`/api/face/persons/${id}`, { method: 'DELETE' }),
-  faceMerge: (fromId: number, toId: number) =>
-    request<{ ok: boolean; moved: number }>('/api/face/persons/merge', {
-      method: 'POST',
-      body: JSON.stringify({ fromId, toId }),
-    }),
-  /** 这张图里有谁（灯箱侧栏用）；hidden=低质量被自动排除，可手动收录 */
-  imageFaces: (imageId: number) =>
-    request<{
-      faces: {
-        id: number;
-        personId: number | null;
-        name: string;
-        box: number[];
-        score: number;
-        quality: number;
-        hidden: boolean;
-        /** 质量偏低：仍显示、计入人物，但不当封面／不建新人物 */
-        soft: boolean;
-      }[];
-    }>(`/api/images/${imageId}/faces`),
-  /** 存量质量重算 + 重选封面（后台任务，进度走 faceStatus 轮询） */
-  faceQualityCleanup: () => request<FaceStatus & { ok: boolean; busy?: boolean }>('/api/face/quality/cleanup', { method: 'POST' }),
-  faceQualityCancel: () => request<{ ok: boolean }>('/api/face/quality/cancel', { method: 'POST' }),
-  /** 用已有特征重建人物分组（清掉「一堆后脑勺凑成一个人」），进度走 faceStatus 轮询 */
-  faceRebuild: () => request<FaceStatus & { ok: boolean }>('/api/face/rebuild', { method: 'POST' }),
-  faceRebuildCancel: () => request<{ ok: boolean }>('/api/face/rebuild/cancel', { method: 'POST' }),
-  /** 手动保留（hidden=false）/ 重新排除（hidden=true）一张低质量脸 */
-  faceSetHidden: (faceId: number, hidden: boolean) =>
-    request<{ ok: boolean; id: number; hidden: boolean }>(`/api/face/faces/${faceId}/hidden`, {
-      method: 'POST',
-      body: JSON.stringify({ hidden }),
-    }),
-  faceDelete: (faceId: number) => request<{ ok: boolean }>(`/api/face/faces/${faceId}`, { method: 'DELETE' }),
-  faceAssign: (faceId: number, personId: number | null) =>
-    request<{ ok: boolean; personId: number }>(`/api/face/faces/${faceId}/person`, {
-      method: 'POST',
-      body: JSON.stringify({ personId }),
-    }),
-  faceReset: () => request<{ ok: boolean }>('/api/face/reset', { method: 'POST' }),
 };

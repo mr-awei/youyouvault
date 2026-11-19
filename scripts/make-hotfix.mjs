@@ -8,7 +8,7 @@
  * electron/**、package.json、原生模块一律不收 —— 那些属于「壳」，只能走安装包。
  *
  * 用法：
- *   node scripts/make-hotfix.mjs --notes "修拼图首帧闪回"
+ *   node scripts/make-hotfix.mjs --notes "修导出首帧闪回"
  *   node scripts/make-hotfix.mjs --notes "..." --since release-build/hotfix/last-manifest.json
  *   node scripts/make-hotfix.mjs --notes "..." --seq 13 --url https://... --dry-run
  */

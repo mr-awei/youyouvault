@@ -7,12 +7,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { DATA_DIR } from '../config.js';
-import { getSettings, saveSettings } from '../db.js';
-import {
-  buildThemePack,
-  parseThemePack,
-  settingsPatchOf,
-} from '../lib/theme-pack.js';
+import { buildThemePack, parseThemePack } from '../lib/theme-pack.js';
 
 const WORKSHOP_DIR = path.join(DATA_DIR, 'workshop');
 const PACK_EXT = '.tuku-pack';
@@ -39,7 +34,6 @@ function brief(pack, file) {
     createdAt: pack.createdAt,
     base: pack.theme?.base,
     varCount: Object.keys(pack.theme?.variables || {}).length,
-    settingKeys: Object.keys(pack.settings || {}),
     assetNames: (pack.assets || []).map((a) => a.name),
     file,
   };
@@ -67,7 +61,7 @@ export function register(app, ctx) {
     })
   );
 
-  /** 导出：主题变量由前端传（服务端拿不到运行时 CSS），壁纸设置从当前设置里挑白名单子集 */
+  /** 导出：主题变量由前端传（服务端拿不到运行时 CSS） */
   app.post(
     '/api/workshop/export',
     asyncRoute(async (req, res) => {
@@ -77,7 +71,6 @@ export function register(app, ctx) {
         name: body.name,
         author: body.author,
         theme: body.theme || { base: 'light', variables: {} },
-        settings: body.includeSettings === false ? {} : getSettings(),
         assets: body.assets || [],
       });
       await ensureDir();
@@ -87,7 +80,7 @@ export function register(app, ctx) {
     })
   );
 
-  /** 导入：校验 → 落到工坊目录 → 图片还原到磁盘 → 壁纸设置写回（只写白名单键） */
+  /** 导入：校验 → 落到工坊目录 → 图片还原到磁盘 */
   app.post(
     '/api/workshop/import',
     asyncRoute(async (req, res) => {
@@ -109,15 +102,12 @@ export function register(app, ctx) {
           assetPaths.push(target);
         }
       }
-      const patch = settingsPatchOf(pack);
-      if (Object.keys(patch).length) saveSettings(patch);
       res.json({
         ok: true,
         pack: brief(pack, path.basename(file)),
         theme: pack.theme,
         file,
         assetPaths,
-        appliedSettings: Object.keys(patch),
         skipped: parsed.skipped,
       });
     })
@@ -132,12 +122,9 @@ export function register(app, ctx) {
       if (!file || !fs.existsSync(file)) return res.status(404).json({ error: '主题包不存在' });
       const parsed = parseThemePack(await fsp.readFile(file, 'utf8'));
       if (parsed.error) return res.status(400).json({ error: parsed.error });
-      const patch = settingsPatchOf(parsed.pack);
-      if (Object.keys(patch).length) saveSettings(patch);
       res.json({
         ok: true,
         theme: parsed.pack.theme,
-        appliedSettings: Object.keys(patch),
         skipped: parsed.skipped,
       });
     })

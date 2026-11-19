@@ -47,10 +47,10 @@ test('起止相同视为全天', () => {
   for (const m of [0, 120, 720, 1439]) assert.equal(inWindow(m, 120, 120), true);
 });
 
-test('parseTasks 只留合法任务，空则两项都跑', () => {
-  assert.deepEqual(parseTasks('semantic,face'), ['semantic', 'face']);
-  assert.deepEqual(parseTasks('face'), ['face']);
-  assert.deepEqual(parseTasks('face,bogus'), ['face']);
-  assert.deepEqual(parseTasks(''), ['semantic', 'face']);
-  assert.deepEqual(parseTasks(null), ['semantic', 'face']);
+test('parseTasks 只留合法任务，空则默认跑语义索引', () => {
+  assert.deepEqual(parseTasks('semantic'), ['semantic']);
+  assert.deepEqual(parseTasks('face'), ['semantic']); // 旧任务名已移除，回落到默认
+  assert.deepEqual(parseTasks('semantic,bogus'), ['semantic']);
+  assert.deepEqual(parseTasks(''), ['semantic']);
+  assert.deepEqual(parseTasks(null), ['semantic']);
 });

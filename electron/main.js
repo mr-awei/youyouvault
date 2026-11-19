@@ -4,7 +4,7 @@
  *
  * 具体能力按职责拆在 electron/main/ 下：
  *   constants.js   常量与 devServerUrl
- *   context.js     跨模块共享状态（主窗口 / 端口 / 托盘 / 壁纸窗口…）
+ *   context.js     跨模块共享状态（主窗口 / 端口 / 托盘…）
  *   crash.js       崩溃转储
  *   windows.js     主窗口 / 多开窗口 / 窗口位置记忆 / 关窗藏托盘
  *   splash.js      启动页
@@ -12,14 +12,9 @@
  *   toast.js       操作结果提示窗
  *   ipc-base.js    IPC 闸门（调用方校验、令牌、本机请求、权限白名单）
  *   ipc-app.js     桌面能力类 IPC
- *   ipc-live.js    动态壁纸配置 IPC
  *   service.js     本地服务子进程（启动 / 自愈 / 重启）
- *   live.js        动态壁纸窗口
- *   screensaver.js 屏保
  *   shortcuts.js   全局快捷键
  *   tray.js        托盘
- *   wallpaper.js   壁纸操作
- *   weibo.js       微博登录窗
  *   updates.js     自动更新
  *   seed.js        首装示例图
  */
@@ -32,15 +27,12 @@ import { ctx } from './main/context.js';
 import { cleanupCrashDumps, initCrashReporting } from './main/crash.js';
 import { registerAppIpc } from './main/ipc-app.js';
 import { t as tMain, switchLocale } from './main/i18n-main.cjs';
-import { registerLiveIpc } from './main/ipc-live.js';
-import { applyLiveWallpaper, destroyLiveWindow } from './main/live.js';
-import { startScreensaverWatch, stopScreensaverWatch } from './main/screensaver.js';
 import { seedSampleImages } from './main/seed.js';
 import { bootService, loadHostModules, stopServerOnce } from './main/service.js';
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './main/shortcuts.js';
 import { showSplash, closeSplash } from './main/splash.js';
 import { closeToast, showToastBanner } from './main/toast.js';
-import { createTray, stopTrayTimer } from './main/tray.js';
+import { createTray } from './main/tray.js';
 import { registerHotfixIpc, startHotfixCheck, stopHotfixCheck } from './main/hotfix-ipc.js';
 import {
   registerUpdateIpc,
@@ -124,8 +116,6 @@ app
     switchLocale(String(app.getLocale() || '').toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN');
 
     cleanupCrashDumps();
-    // 屏保空闲检测常驻；内部会等 serverPort 就绪，并按设置开关自行启停覆盖窗口
-    startScreensaverWatch();
     // 服务就绪前先把启动页亮出来：首建库/大迁移时最长十几秒，不能什么都不显示。
     // 但开机自启（--hidden）不能弹：用户没有主动打开应用，开机后桌面上突然糊一个
     // 「正在启动本地服务」的加载框（服务就绪前会停留十几秒），会被当成电脑出问题了。
@@ -153,7 +143,7 @@ app
         /* 窗口已销毁或正在退出，这类清理失败无需处理 */
       }
       // 根据下载文件的扩展名推断保存对话框的格式过滤器
-      // 这样用户点"保存拼图"时对话框默认列出图片格式，而不是只有 "All Files (*.*)"
+      // 这样用户点"保存导出图"时对话框默认列出图片格式，而不是只有 "All Files (*.*)"
       const lowerName = name.toLowerCase();
       const dotIdx = lowerName.lastIndexOf('.');
       const ext = dotIdx > 0 ? lowerName.slice(dotIdx + 1) : '';
@@ -304,7 +294,6 @@ app
     }
 
     registerAppIpc();
-    registerLiveIpc();
     registerUpdateIpc();
     registerHotfixIpc();
 
@@ -339,9 +328,6 @@ app
       console.warn('[desktop] 托盘不可用，--hidden 启动时强制显示主窗口');
       showMainWindow();
     }
-    // 若上次退出时开着动态壁纸，则自动恢复
-    applyLiveWallpaper().catch((err) => console.warn('[live] 恢复动态壁纸失败：', err?.message || err));
-
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         void createWindow().catch((err) => console.error('[desktop] 激活重建窗口失败：', err?.message || err));
@@ -370,10 +356,7 @@ app.on('will-quit', (e) => {
   ctx.quitting = true;
   e.preventDefault();
   unregisterGlobalShortcuts();
-  stopTrayTimer();
   stopHotfixCheck();
-  destroyLiveWindow();
-  stopScreensaverWatch();
   closeToast();
   // 日志缓冲可能还有最后几行：退出前同步落一次
   try {
@@ -406,7 +389,7 @@ app.on('will-quit', (e) => {
 });
 
 app.on('window-all-closed', () => {
-  // 以前无脑 app.quit()：窗口被销毁（崩溃/关闭）时，托盘、动态壁纸、定时切换
-  // 会跟着一起没。现在只有用户真的要退出才退，否则留在托盘，从托盘可再打开。
+  // 以前无脑 app.quit()：窗口被销毁（崩溃/关闭）时，托盘会跟着一起没。
+  // 现在只有用户真的要退出才退，否则留在托盘，从托盘可再打开。
   if (ctx.forceQuit) app.quit();
 });

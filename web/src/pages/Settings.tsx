@@ -1,7 +1,6 @@
 import React from 'react';
 import { api, isDesktop, openFolder, pickFolder } from '../api';
 import type { Settings as SettingsType } from '../types';
-import CrawlSection from './settings/CrawlSection';
 import {
   IconBrain,
   IconDownload,
@@ -11,28 +10,22 @@ import {
   IconGrid,
   IconImages,
   IconInfo,
+  IconKey,
   IconLayers,
-  IconLink,
   IconRotateCcw,
-  IconSpider,
   IconTrash,
   IconWand,
-  IconWallpaper,
-  IconCode,
   } from '../components/Icons';
 import Card from './settings/Card';
 import Select from '../components/Select';
-import ApiPlaygroundCard from './settings/ApiPlaygroundCard';
 import AliasCard from './settings/AliasCard';
 import ShortcutSection from './settings/ShortcutSection';
 import WatchCard from './settings/WatchCard';
 import EnhanceSection from './settings/EnhanceSection';
-import WallpaperSection from './settings/WallpaperSection';
 import RecycleBinCard from './settings/RecycleBinCard';
 import MaintenanceCard from './settings/MaintenanceCard';
 import DataTransferCard from './settings/DataTransferCard';
 import JobsSection from './settings/JobsSection';
-import ExtensionSection from './settings/ExtensionSection';
 import PluginSection from './settings/PluginSection';
 import LanSection from './settings/LanSection';
 import NetworkSection from './settings/NetworkSection';
@@ -43,8 +36,8 @@ import AiSection from './settings/AiSection';
 import NightBatchCard from './settings/NightBatchCard';
 import { useSettingsForm, type SectionKey } from './settings/useSettingsForm';
 import ImportNameTemplateCard from './settings/ImportNameTemplateCard';
-import PluginMarket from './settings/PluginMarket';
 import AboutSection from './settings/AboutSection';
+import LicenseCard from './settings/LicenseCard';
 import DownloadSection from './settings/DownloadSection';
 import i18n, { changeLocale, currentLocale } from '../i18n';
 
@@ -57,7 +50,7 @@ type SectionMeta = {
 
 /**
  * 侧栏按「使用顺序」分组，不再 14 项平铺：先搞清楚存哪里，再管素材，
- * 然后才是由采集衍生出来的智能、桌面、外部连接，最后是运行状态。
+ * 然后才是智能、桌面、外部连接，最后是运行状态。
  */
 const NAV_GROUPS: { label: string; items: SectionMeta[] }[] = [
   {
@@ -80,12 +73,6 @@ const NAV_GROUPS: { label: string; items: SectionMeta[] }[] = [
   {
     label: i18n.t('k42f4f97b'),
     items: [
-      {
-        key: 'crawl',
-        label: i18n.t('ke8bc2616'),
-        desc: i18n.t('kfb878786'),
-        icon: <IconSpider />,
-      },
       {
         key: 'tags',
         label: i18n.t('ke00706fa'),
@@ -121,12 +108,6 @@ const NAV_GROUPS: { label: string; items: SectionMeta[] }[] = [
     label: i18n.t('k2e4b22db'),
     items: [
       {
-        key: 'wallpaper',
-        label: i18n.t('k8e92193d'),
-        desc: i18n.t('kb145ac01'),
-        icon: <IconWallpaper />,
-      },
-      {
         key: 'shortcut',
         label: i18n.t('kf7d29966'),
         desc: i18n.t('k538fd2e8'),
@@ -144,28 +125,10 @@ const NAV_GROUPS: { label: string; items: SectionMeta[] }[] = [
         icon: <IconGlobe />,
       },
       {
-        key: 'extension',
-        label: i18n.t('k9058622f'),
-        desc: i18n.t('k9d0b1f20'),
-        icon: <IconLink />,
-      },
-      {
-        key: 'api',
-        label: i18n.t('k1bd4a861'),
-        desc: i18n.t('kcda963b7'),
-        icon: <IconCode />,
-      },
-      {
         key: 'plugins',
         label: i18n.t('k236b0cdd'),
         desc: i18n.t('k3df95d8b'),
         icon: <IconWand />,
-      },
-      {
-        key: 'market',
-        label: i18n.t('ka5fdebec'),
-        desc: i18n.t('k253875ff'),
-        icon: <IconLink />,
       },
       {
         key: 'lan',
@@ -189,6 +152,12 @@ const NAV_GROUPS: { label: string; items: SectionMeta[] }[] = [
         label: i18n.t('k937902e1'),
         desc: i18n.t('kf00ebbac'),
         icon: <IconDownload />,
+      },
+      {
+        key: 'license',
+        label: i18n.t('k98a315c0'),
+        desc: i18n.t('kbbef9f85'),
+        icon: <IconKey />,
       },
       {
         key: 'about',
@@ -220,11 +189,8 @@ export default function Settings({
   // 状态、加载与全部写操作都在 useSettingsForm 里；这里只解构渲染真正用到的字段。
   const form = useSettingsForm({ onToast, onLibraryChanged });
   const {
-    section, setSection, settings, dirty, save, patch, setDirty,
-    keywords, newKw, setNewKw, wbLogin, sourceList,
-    wbCookieDraft, setWbCookieDraft, importing,
-    setTourHint, clearWeiboCookie, toggleSource, weiboLogin,
-    addKeyword, toggleKeyword, removeKeyword, runImport, clearAll,
+    section, setSection, settings, dirty, save, patch,
+    importing, setTourHint, runImport, clearAll,
   } = form;
 
   if (!settings) {
@@ -259,7 +225,7 @@ export default function Settings({
           className="btn primary"
           onClick={save}
           title={dirty ? i18n.t('k9ac39816') : i18n.t('k2fb8e178')}
-          style={dirty ? { boxShadow: '0 0 0 2px rgba(255,77,141,.35)' } : undefined}
+          style={dirty ? { boxShadow: '0 0 0 2px rgba(249,115,22,.35)' } : undefined}
         >
           {i18n.t('k4323be72')}
           {dirty ? ' ●' : ''}
@@ -434,31 +400,6 @@ export default function Settings({
             </Card>
           )}
 
-          {/* ------------------------------ 采集 ------------------------------ */}
-          {section === 'crawl' && (
-            <CrawlSection
-              settings={settings}
-              patch={patch}
-              isDesktop={isDesktop}
-              sources={sourceList}
-              toggleSource={toggleSource}
-              wbLogin={wbLogin}
-              weiboLogin={weiboLogin}
-              wbCookieDraft={wbCookieDraft}
-              setWbCookieDraft={(v: string) => {
-                setWbCookieDraft(v);
-                setDirty(true);
-              }}
-              clearWeiboCookie={clearWeiboCookie}
-              keywords={keywords}
-              toggleKeyword={toggleKeyword}
-              removeKeyword={removeKeyword}
-              newKw={newKw}
-              setNewKw={setNewKw}
-              addKeyword={addKeyword}
-            />
-          )}
-
           {/* ---------------------------- AI 接入（已拆分至 settings/AiSection.tsx） ---------------------------- */}
           {section === 'ai' && (
             <>
@@ -522,8 +463,8 @@ export default function Settings({
                     </button>
                   </div>
                   <div className="hint" style={{ marginTop: 6 }}>
-                    覆盖浏览搜索、文件夹标签、堆叠笔记、查重整理、编辑导出、采集、壁纸、AI、数据备份等全部功能；
-                    在教程页顶部输入「堆叠」「水印」「时间点」这类词即可定位。
+                    覆盖浏览搜索、文件夹标签、堆叠笔记、查重整理、编辑导出、AI、数据备份等全部功能；
+                    在教程页顶部输入「堆叠」「时间点」这类词即可定位。
                   </div>
                 </div>
               </Card>
@@ -551,21 +492,14 @@ export default function Settings({
             <AboutSection settings={settings} patch={patch} onToast={onToast} onOpenTutorial={onOpenTutorial} />
           )}
 
-          {/* ------------------------------ 壁纸（已拆分至 settings/WallpaperSection.tsx） ------------------------------ */}
-          {section === 'wallpaper' && <WallpaperSection settings={settings} patch={patch} onToast={onToast} />}
+          {/* ------------------------------ 授权 ------------------------------ */}
+          {section === 'license' && <LicenseCard onToast={onToast} />}
 
           {/* ------------------------------ 网络（已拆分至 settings/NetworkSection.tsx） ------------------------------ */}
           {section === 'network' && <NetworkSection form={form} onToast={onToast} />}
 
-          {/* --------------------------- 浏览器扩展 --------------------------- */}
-          {section === 'extension' && <ExtensionSection onToast={onToast} />}
-
-          {/* --------------------------- API 参考 --------------------------- */}
-          {section === 'api' && <ApiPlaygroundCard onToast={onToast} />}
-
           {/* ------------------------------ 插件 ------------------------------ */}
-          {section === 'plugins' && <PluginSection onToast={onToast} onOpenMarket={() => setSection('market')} />}
-          {section === 'market' && <PluginMarket onToast={onToast} />}
+          {section === 'plugins' && <PluginSection onToast={onToast} />}
           {section === 'lan' && <LanSection onToast={onToast} />}
 
           {/* --------------------------- 数据与维护 --------------------------- */}

@@ -161,111 +161,6 @@ export async function pickFolder() {
 
 export const BASE = (import.meta.env.VITE_API_BASE as string) || '';
 
-/** 水印 / 相框的参数形状（服务端 normalizeParams 会再兜一层） */
-export interface WatermarkParams {
-  style?: string;
-  frame?: string;
-  fields?: string[];
-  logo?: boolean;
-  brand?: string;
-  /** 手选/手写的型号（如 A7 IV）：会拼在品牌名后面，覆盖 EXIF 里的型号 */
-  model?: string;
-  size?: number;
-  opacity?: number;
-  /** 文字颜色：auto（跟随样式）/ light / dark，或 #rrggbb 自选色 */
-  color?: string;
-  /** 字体样式：auto 跟随各样式自带字形；内置键或 sys:<本机字体名> 统一替换 font-family */
-  font?: string;
-  /** 自定义拍摄地点：写了就用它，空着读 EXIF */
-  location?: string;
-  /** 三级选择器的选择结果：只用来还原面板，合成只认 location 字符串 */
-  place?: { province: string; city: string; district: string; detail: string };
-}
-
-/** 拍摄地点的三级选择器：省 → 市 → 区/县（只有名字，没有行政代码） */
-export interface GeoProvince {
-  name: string;
-  cities: { name: string; districts: string[] }[];
-}
-
-export interface WatermarkOptions {
-  fields: { key: string; label: string; hint: string }[];
-  /**
-   * uses：这款样式会排哪些信息（空数组 = 勾了什么都排）；
-   * needs：至少要有其中哪一项，否则什么都画不出来（如日期戳要时间/地点）。
-   */
-  watermarks: { id: string; name: string; desc: string; uses?: string[]; needs?: string[] }[];
-  frames: { id: string; name: string; desc: string }[];
-  /** 品牌清单（只含自己做机身/手机/无人机的品牌）；models 是这个品牌的常见/热门型号 */
-  brands: { key: string; name: string; group?: string; models?: string[] }[];
-  fonts: { key: string; name: string }[];
-  /** 本机已装字体（服务端解析字体文件家族名得到），key 形如 sys:Microsoft YaHei */
-  systemFonts: { key: string; name: string; group: string }[];
-  defaults: WatermarkParams;
-}
-
-/**
- * 二进制响应（预览图）：错误时服务端回 JSON，这里把 error 抛成正常异常。
- * 预览是服务端实时合成的，比普通接口慢，超时给到 60s；没有超时的话
- * 服务卡住时前端会一直转圈，用户只能以为「预览坏了」。
- */
-export async function postBlob(path: string, payload: unknown, timeoutMs = 60000): Promise<Blob> {
-  return (await postBlobWithNote(path, payload, timeoutMs)).blob;
-}
-
-/**
- * 同 postBlob，但把服务端附在响应头上的说明也带回来。
- * 水印预览用：没有可显示的信息时仍然给原图，用 note 解释「为什么画面里没有水印」，
- * 报错和出图不再是二选一。
- */
-export async function postBlobWithNote(
-  path: string,
-  payload: unknown,
-  timeoutMs = 60000
-): Promise<{ blob: Blob; note: string }> {
-  const token = await getApiToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  // 服务端按这个头决定 error / msg 文案的语言（本地服务没有别的语言来源）
-  headers['Accept-Language'] = currentLocale();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const ctrl = new AbortController();
-  const timedOut = { v: false };
-  const timer = setTimeout(() => {
-    timedOut.v = true;
-    ctrl.abort();
-  }, timeoutMs);
-  let res: Response;
-  try {
-    res = await fetch(BASE + path, { method: 'POST', headers, body: JSON.stringify(payload), signal: ctrl.signal });
-  } catch (err) {
-    if (timedOut.v) throw new Error(i18n.t('kd705c2fc', { p0: Math.round(timeoutMs / 1000), p1: path }));
-    throw networkError(err, path);
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok) {
-    if (res.status === 401) throw new Error(i18n.t('kb54b9280'));
-    let message = i18n.t('k6b43688f', { p0: res.status });
-    try {
-      const data = await res.json();
-      if (data?.error) message = data.error;
-    } catch {
-      /* 非 JSON 错误体，保留状态码文案 */
-    }
-    throw new Error(message);
-  }
-  const noteHeader = res.headers.get('X-Watermark-Note') || '';
-  let note = '';
-  if (noteHeader) {
-    try {
-      note = decodeURIComponent(noteHeader);
-    } catch {
-      note = noteHeader;
-    }
-  }
-  return { blob: await res.blob(), note };
-}
-
 /**
  * 静默但可见的错误兜底：替代裸 `.catch(() => {})`。
  * 失败不能只写一行 console —— 那会让「请求挂了」在界面上表现为「没有数据」，
@@ -473,15 +368,13 @@ export function buildQuery(filters: Filters, page: number, pageSize: number) {
   if (filters.kind && filters.kind !== 'all') params.set('kind', filters.kind);
   if (filters.pending) params.set(filters.pending, '1');
   if (filters.colorLabel) params.set('colorLabel', filters.colorLabel);
-  // 地图框选：minLat,minLon,maxLat,maxLon（筛选栏里会显示成「已选地点」可一键清掉）
-  if (filters.bbox) params.set('bbox', filters.bbox);
   params.set('sort', filters.sort || 'newest');
   params.set('page', String(page));
   params.set('pageSize', String(pageSize));
   return params.toString();
 }
 
-/** 人脸识别状态（对应 GET /api/face/status） */
+/** 给直链追加令牌（<img src>、下载链接等无法自定义 header 的场景） */
 export async function withToken(url: string) {
   const token = await getApiToken();
   if (!token) return url;
@@ -515,17 +408,8 @@ export function formatDate(iso: string) {
 }
 
 export const SOURCE_LABELS: Record<string, string> = {
-  bing: i18n.t('k34382541'),
-  baidu: i18n.t('ka3f4a5b0'),
-  sogou: i18n.t('k10d247e0'),
-  image360: i18n.t('k4444fca8'),
-  duitang: i18n.t('k2ebe7e4f'),
-  weibo: i18n.t('kfb050d6c'),
-  wallhaven: 'Wallhaven',
-  commons: 'Wikimedia',
-  douban: i18n.t('k0112b119'),
-  tieba: i18n.t('kf0694566'),
   local: i18n.t('ke2d96131'),
+  lan: i18n.t('k102f36ba'),
 };
 
 export const BUCKET_LABELS: Record<string, string> = {

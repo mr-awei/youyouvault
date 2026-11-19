@@ -6,7 +6,7 @@
  * 一次 sharp 原生崩溃、一次同步大 SQL 都会把窗口消息循环一起卡死/带走。
  * 现在服务端跑在 utilityProcess 子进程里，这里负责：
  *   - 拉起 / 拿回 { port, token, settings }
- *   - 设置变更、动态壁纸等事件回传主进程
+ *   - 设置变更等事件回传主进程
  *   - 崩溃自动重启（带退避与次数上限），端口尽量沿用，避免前端页面失联
  *   - 心跳检测：事件循环被卡死（进程还在但不响应）也要重启
  */
@@ -189,8 +189,6 @@ export class ServerHost extends EventEmitter {
     if (msg.type === 'settings') {
       this.settings = msg.settings || {};
       this.emit('settings', this.settings);
-    } else if (msg.type === 'live') {
-      this.emit('live', msg.cfg || {});
     } else if (msg.type === 'pong') {
       this._clearPing();
     } else if (msg.type === 'fatal') {

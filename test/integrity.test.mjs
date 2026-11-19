@@ -87,7 +87,6 @@ test('规则表覆盖了库里所有含 image_id 的表（新增表时必须补�
     'clip_vec',
     'edit_history',
     'edit_ops',
-    'faces',
     'image_annotations',
     'image_comments',
     'image_folders',
@@ -97,8 +96,6 @@ test('规则表覆盖了库里所有含 image_id 的表（新增表时必须补�
     'item_tags',
     'playlist_items',
     'trash',
-    'wallpaper_fit',
-    'wallpaper_log',
   ];
   const covered = new Set(ORPHAN_RULES.map((r) => r.table));
   for (const t of withImageId) assert.ok(covered.has(t), `${t} 没有孤儿清理规则`);

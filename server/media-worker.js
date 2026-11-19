@@ -78,7 +78,7 @@ async function decodeOnce(source, file) {
 
 parentPort.on('message', async (job) => {
   const { seq, file, buffer, thumbPath } = job;
-  // 输入二选一：磁盘路径（本地导入）或内存 buffer（爬虫/浏览器采集下载到的原始字节）
+  // 输入二选一：磁盘路径（本地导入）或内存 buffer（粘贴 / 投送得到的原始字节）
   const source = buffer || file;
   try {
     // 1) 唯一一次整图解码：直接解出「缩略图尺寸」的原始像素

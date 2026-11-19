@@ -127,17 +127,6 @@ export function useViewActions({
     [setFilters, setFolderId, setView]
   );
 
-  /** 地点视图点了某一块：把 bbox 交给图库筛选（URL 里也带，分享出去打开就是那块地图） */
-  const openPlace = useCallback(
-    (bbox: string, label: string) => {
-      setFolderId(null);
-      setFilters((prev) => ({ ...prev, bbox, tag: '', pending: '' }));
-      setView('gallery');
-      showToast(i18n.t('k7f2191e7', { p0: label }));
-    },
-    [setFilters, setFolderId, setView, showToast]
-  );
-
   /** 侧栏导航：点「图库」时清空文件夹筛选，回到全库视图 */
   const handleNav = useCallback(
     (v: View) => {
@@ -160,7 +149,6 @@ export function useViewActions({
      否则每次 App 渲染都会生成新函数，memo 永远命中不了（勾一张图就重渲染整页）。 */
   const openFromGrid = useCallback((item: ImageItem) => openItem(item, items, true), [openItem, items]);
 
-  const startCrawl = useCallback(() => setView('crawl'), [setView]);
   const undoFromGrid = useCallback(() => void undoEdit(), [undoEdit]);
 
   /** 把当前筛选结果整体标记为已看（整理「未看过」时用） */
@@ -263,11 +251,9 @@ export function useViewActions({
     showUnfiled,
     openPending,
     openTag,
-    openPlace,
     handleNav,
     onFiltersChange,
     openFromGrid,
-    startCrawl,
     undoFromGrid,
     markAllSeen,
     relocateMissing,

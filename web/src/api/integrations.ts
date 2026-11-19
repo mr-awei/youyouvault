@@ -1,10 +1,9 @@
 /**
- * 对外集成：插件 / 局域网 / AI / 知识库 / 壁纸夹
+ * 对外集成：插件 / 局域网 / AI / 知识库
  * 由 api.ts 组合成单一的 `api` 对象对外暴露（调用点不需要改 import）。
  */
 import { request, withToken } from './core';
-import type { CrawlConfig } from './types';
-import type { AiPreset, AiProviderInfo, AiStatus, CrawlStatus, NetworkConfig, FeedbackItem, HardwareReport, ImageItem, KbRule, KbStats, Keyword, Settings, SystemInfo, WallpaperResult, PluginInfo, PluginInstallResult, PluginMarketView, PluginRunResult, LanSelfCheck, LanShare, LanShareInput, LanStatus } from '../types';
+import type { AiPreset, AiProviderInfo, AiStatus, NetworkConfig, FeedbackItem, HardwareReport, ImageItem, KbRule, KbStats, Settings, SystemInfo, PluginInfo, PluginRunResult, LanSelfCheck, LanShare, LanShareInput, LanStatus } from '../types';
 
 export const integrationsAPI = {
   // 插件 / 脚本宿主
@@ -16,17 +15,6 @@ export const integrationsAPI = {
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
     }),
-  pluginMarket: () => request<PluginMarketView>('/api/plugins/market'),
-  refreshPluginMarket: (url: string) =>
-    request<PluginMarketView>('/api/plugins/market/refresh', { method: 'POST', body: JSON.stringify({ url }) }),
-  resetPluginMarket: () => request<PluginMarketView>('/api/plugins/market/reset', { method: 'POST' }),
-  installPlugin: (input: { id?: string; url?: string }) =>
-    request<PluginInstallResult>('/api/plugins/install', { method: 'POST', body: JSON.stringify(input) }),
-  uploadPluginPackage: (body: ArrayBuffer, filename: string) =>
-    request<PluginInstallResult>(
-      `/api/plugins/install/upload?filename=${encodeURIComponent(filename)}`,
-      { method: 'POST', body, headers: { 'Content-Type': 'application/octet-stream' } }
-    ),
   uninstallPlugin: (id: string) =>
     request<{ ok: boolean; id: string; restoredBuiltin: boolean }>(`/api/plugins/${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -59,28 +47,6 @@ export const integrationsAPI = {
   settings: () => request<Settings>('/api/settings'),
   saveSettings: (patch: Partial<Settings>) =>
     request<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(patch) }),
-  keywords: () => request<Keyword[]>('/api/keywords'),
-  addKeyword: (text: string) =>
-    request<{ ok: boolean; keywords: Keyword[] }>('/api/keywords', {
-      method: 'POST',
-      body: JSON.stringify({ text }),
-    }),
-  updateKeyword: (id: number, patch: Partial<Keyword>) =>
-    request<{ ok: boolean; keywords: Keyword[] }>(`/api/keywords/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(patch),
-    }),
-  deleteKeyword: (id: number) =>
-    request<{ ok: boolean; keywords: Keyword[] }>(`/api/keywords/${id}`, { method: 'DELETE' }),
-  crawlStatus: () => request<CrawlStatus>('/api/crawl/status'),
-  /** 采集源与采集参数（唯一事实来源在后端，前端不再硬编码源列表/并发上限） */
-  crawlConfig: () => request<CrawlConfig>('/api/sources'),
-  crawlStart: (payload: { keywords?: string[]; sources?: string[]; pages?: number }) =>
-    request<{ ok: boolean; message?: string }>('/api/crawl/start', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  crawlStop: () => request<{ ok: boolean }>('/api/crawl/stop', { method: 'POST' }),
   network: () => request<NetworkConfig>('/api/network'),
   saveNetwork: (patch: Partial<NetworkConfig>) =>
     request<NetworkConfig>('/api/network', { method: 'PUT', body: JSON.stringify(patch) }),
@@ -127,20 +93,6 @@ export const integrationsAPI = {
   systemInfo: () => request<SystemInfo>('/api/system/info'),
   /** 本机硬件 + 大模型功能的最低配置判定（refresh=true 强制重探，否则服务端 30s 缓存） */
   hardware: (refresh = false) => request<HardwareReport>(`/api/hardware${refresh ? '?refresh=1' : ''}`),
-  /** 浏览器扩展：目录 / 版本 / 固定 ID（装不上时用来核对） */
-  extensionInfo: () =>
-    request<{ ok: boolean; dir: string; version: string; name: string; id: string; exists: boolean }>(
-      '/api/extension/info'
-    ),
-  /** 资源管理器里打开扩展目录（Electron 里才有意义，网页端返回路径） */
-  openExtensionDir: () => request<{ ok: boolean; dir: string }>('/api/extension/open', { method: 'POST' }),
-  wallpaper: (id: number, style?: string) =>
-    request<WallpaperResult>(`/api/images/${id}/wallpaper`, {
-      method: 'POST',
-      body: JSON.stringify({ style }),
-    }),
-  wallpaperPreviewUrl: (id: number, style?: string) =>
-    `/api/images/${id}/wallpaper-preview${style ? `?style=${style}` : ''}`,
 
   // AI
   aiPresets: () => request<Record<string, AiPreset>>('/api/ai/presets'),
@@ -172,8 +124,6 @@ export const integrationsAPI = {
     request<{ ok: boolean; added?: number; before?: number; after?: number; summary: string }>('/api/ai/summarize', {
       method: 'POST',
     }),
-  aiSuggest: () => request<{ ok: boolean; text: string }>('/api/ai/suggest', { method: 'POST' }),
-
   // 知识库
   kbRules: () => request<KbRule[]>('/api/kb/rules'),
   kbRulesPaged: (opts: { limit?: number; offset?: number } = {}) =>
@@ -192,7 +142,7 @@ export const integrationsAPI = {
   kbRescore: () => request<{ ok: boolean; updated: number; low: number }>('/api/kb/rescore', { method: 'POST' }),
   kbStats: () => request<KbStats>('/api/kb/stats'),
 
-  // 壁纸库文件夹管理
+  // 带原因的删除与重命名
   deleteWithReason: (id: number, payload: { reasons: string[]; note: string; aiAnalysis: string }) =>
     request<{ ok: boolean; feedbackId: number }>(`/api/images/${id}/delete-reason`, {
       method: 'POST',

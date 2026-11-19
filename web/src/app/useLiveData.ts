@@ -39,9 +39,6 @@ export function useLiveData({
   load,
   pageRef,
 }: Options) {
-  /** 采集是否正在跑（记录上一次快照，用于在「刚结束」那一刻刷一次列表） */
-  const crawlRunningRef = useRef(false);
-
   useEffect(() => {
     // 弹窗的键盘与无障碍（Esc / 焦点陷阱 / role=dialog）在 document 层统一装一次，
     // 不依赖 25 个弹窗各自记得写 —— 详见 lib/modal-a11y.ts
@@ -52,7 +49,7 @@ export function useLiveData({
     const timer = window.setInterval(() => {
       if (!document.hidden) refreshStats();
     }, 60000);
-    // source: 'ingest' 是服务端目录监听 / 采集协程自己入库（不走 HTTP，前端没有别的时机知道）
+    // source: 'ingest' 是服务端目录监听自己入库（不走 HTTP，前端没有别的时机知道）
     // → 直接重载列表；其余 library 事件只是写操作的附带通知，交给 stats 对账就够
     const off = subscribeEvents('library', (d) => {
       if (d?.source === 'ingest') reloadOnIngest();
@@ -72,17 +69,6 @@ export function useLiveData({
   useEffect(() => {
     // 导入状态改为订阅 job 事件（原 3s 轮询）；导入进行中顺带刷新统计
     const off = subscribeEvents('job', (d) => {
-      // 采集的下载与入库全在后台协程里，前端只在「跑完」这一刻对账一次：
-      // 否则用户盯着采集页看进度，切回列表还以为一张新图都没进
-      const crawl = d?.crawl;
-      if (crawl) {
-        if (crawl.running) crawlRunningRef.current = true;
-        else if (crawlRunningRef.current) {
-          crawlRunningRef.current = false;
-          refreshStats();
-          if (pageRef.current <= 1) load(1, true);
-        }
-      }
       const imp = d?.import;
       if (!imp) return;
       setImporting(!!imp.running);

@@ -118,35 +118,6 @@ test('OPTIONS 预检直接放行', () => {
   assert.equal(called, true);
 });
 
-test('浏览器扩展采集端点只放行白名单里的扩展 ID', () => {
-  const allowed = 'chrome-extension://olckdffcmfpciekkkdekckpgphacfnfl';
-  const s = makeRes();
-  let called = false;
-  apiAuth(
-    req({ path: '/api/extension/ingest', headers: { 'sec-fetch-site': 'cross-site', origin: allowed } }),
-    s.res,
-    () => {
-      called = true;
-    }
-  );
-  assert.equal(called, true);
-
-  // 别的扩展（含同名但 ID 不同）与伪造 origin 都要被拒
-  for (const origin of ['chrome-extension://abcdefghijklmnopabcdefghijklmnop', 'https://evil.com', '']) {
-    const bad = makeRes();
-    let hit = false;
-    apiAuth(
-      req({ path: '/api/extension/ingest', headers: { 'sec-fetch-site': 'cross-site', origin } }),
-      bad.res,
-      () => {
-        hit = true;
-      }
-    );
-    assert.equal(hit, false, `origin=${origin} 不应放行`);
-    assert.equal(bad.out.status, 401);
-  }
-});
-
 test('普通跨站 POST 到 /api 被 401 拦下并带错误信息', () => {
   const s = makeRes();
   apiAuth(

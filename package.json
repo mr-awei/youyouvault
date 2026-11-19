@@ -1,9 +1,9 @@
 {
   "name": "tuku-gallery",
   "productName": "TuKu",
-  "version": "1.2.29",
+  "version": "1.3.0",
   "private": true,
-  "description": "通用图片管理与壁纸工具 — 多源采集 / pHash 去重 / 暗色图片库",
+  "description": "通用本地图片管理工具 — pHash 去重 / 暗色图片库",
   "author": "图库",
   "main": "electron/main.js",
   "type": "module",
@@ -116,13 +116,6 @@
     ],
     "afterPack": "scripts/after-pack.cjs",
     "extraResources": [
-      {
-        "from": "extension",
-        "to": "extension",
-        "filter": [
-          "**/*"
-        ]
-      },
       {
         "from": "assets/samples",
         "to": "samples",

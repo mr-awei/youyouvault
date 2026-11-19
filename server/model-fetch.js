@@ -169,7 +169,7 @@ export async function downloadModelFile({
   for (const base of mirrors) {
     if (aborted()) throw new Error('已取消下载');
     try {
-      // 防御：以前 matting/face 把整条文件 URL 当前缀传入，路径被拼成
+      // 防御：以前曾把整条文件 URL 当前缀传入，路径被拼成
       // xxx.onnxmodels/xxx.onnx（永远 404）。前缀已带 repoPath 时不再重复拼。
       const url = base.endsWith(repoPath) ? base : `${base}${repoPath}`;
       const res = await httpFetch(url, { redirect: 'follow', signal }, { allowPrivate });

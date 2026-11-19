@@ -475,7 +475,7 @@ export async function aiSearch(query, { limit = 60 } = {}) {
             content:
               '你是图库检索助手。用户用自然语言描述想要的图片，请输出严格 JSON：' +
               '{"filters":{"favorite":"yes"|"no"|null,"minRating":0,"orientation":"landscape"|"portrait"|"square"|null,' +
-              '"source":null,"minWidth":0,"minScore":0,"tagsInclude":[]},"keywords":["用于匹配画面内容/场景/人物的词，如 山、演唱会、舞台、微笑、红色"]}。' +
+              '"source":null,"minWidth":0,"minScore":0,"tagsInclude":[]},"keywords":["用于匹配画面内容/场景/主体的词，如 山、演唱会、舞台、红色"]}。' +
               '只输出 JSON，不要解释。',
           },
           { role: 'user', content: q },
@@ -541,7 +541,7 @@ export function runStructuredSearch(filters = {}, keywords = [], limit = 60) {
     params.push(String(t).trim());
   }
 
-  // 关键词：匹配标题 / 标签 / 采集词 / 备注 / AI 看图描述
+  // 关键词：匹配标题 / 标签 / 备注 / AI 看图描述
   const kwList = (keywords || []).map((k) => String(k).trim()).filter(Boolean);
   if (kwList.length) {
     const like = kwList

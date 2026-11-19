@@ -34,7 +34,6 @@ export default function Knowledge({
   const [stats, setStats] = useState<KbStats | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [presets, setPresets] = useState<Record<string, AiPreset>>({});
-  const [suggestion, setSuggestion] = useState('');
   const [busy, setBusy] = useState('');
   /** 「AI 描述词」规则靠 ai_desc 匹配，库里没有 AI 看图数据时永远是死规则，默认折叠 */
   const [showDormant, setShowDormant] = useState(false);
@@ -79,21 +78,9 @@ export default function Knowledge({
           ? i18n.t('k9278f0e7', { p0: res.before, p1: res.after })
           : i18n.t('kc6beb504', { p0: res.added })
       );
-      if (res.summary) setSuggestion(res.summary);
+      if (res.summary) onToast(res.summary, 'info');
       refresh();
       onLibraryChanged();
-    } catch (err) {
-      onToast((err as Error).message, 'error');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const suggest = async () => {
-    setBusy('suggest');
-    try {
-      const res = await api.aiSuggest();
-      setSuggestion(res.text);
     } catch (err) {
       onToast((err as Error).message, 'error');
     } finally {
@@ -258,18 +245,6 @@ export default function Knowledge({
       </div>
 
       <div className="settings-layout" style={{ marginBottom: 14 }}>
-        <div className="card">
-          <h4 className="section-title">{i18n.t('k2d400f13')}</h4>
-          <button className="btn" onClick={suggest} disabled={busy === 'suggest' || !aiStatus?.ready}>
-            {busy === 'suggest' ? i18n.t('k069491f7') : i18n.t('k2909feaf')}
-          </button>
-          {suggestion && (
-            <div className="ai-result" style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>
-              {suggestion}
-            </div>
-          )}
-        </div>
-
         <div className="card">
           <h4 className="section-title">{i18n.t('k20814f63')}</h4>
           {stats?.byReason.length ? (

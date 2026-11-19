@@ -64,7 +64,7 @@ export function linkImageToFolder(imageId, folderId) {
 export function linkImageByPath(imageId, absPath, rootPath = getSettings().storageDir) {
   if (!imageId || !absPath || !rootPath) return null;
   const rel = path.relative(rootPath, path.dirname(absPath));
-  // 不在 root 下（跨盘 / 采集到别处）→ 归入根，不建子夹
+  // 不在 root 下（跨盘 / 导入到别处）→ 归入根，不建子夹
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
   // .library 是外部 Eagle 式资产目录（*.info 里是资产副本与软件预览图），
   // 树里只呈现真实目录——不为它建夹、不挂图（与扫描/监听排除保持一致）

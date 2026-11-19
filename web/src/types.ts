@@ -16,8 +16,8 @@ export interface ImageItem extends ImageDTOShape {
   height: number;
   sizeBytes: number;
   mime: string;
-  /** 素材类型：image / gif / video / audio / font / pdf / office / model / design / raw / bookmark（Eagle 式多格式） */
-  mediaKind: 'image' | 'gif' | 'video' | 'audio' | 'font' | 'pdf' | 'office' | 'model' | 'design' | 'raw' | 'bookmark' | 'other';
+  /** 素材类型：image / gif / video / audio / font / pdf / office / model / design / raw（Eagle 式多格式） */
+  mediaKind: 'image' | 'gif' | 'video' | 'audio' | 'font' | 'pdf' | 'office' | 'model' | 'design' | 'raw' | 'other';
   /** 音视频时长（秒），0 = 尚未探明 */
   duration: number;
   /** 自定义封面帧（秒） */
@@ -44,7 +44,7 @@ export interface ImageItem extends ImageDTOShape {
   viewedAt: string;
   /** 星级 0-5（0 = 未评分） */
   rating: number;
-  /** 采集收件箱：还没整理过的新采集 */
+  /** 收件箱：还没整理过的新素材 */
   inbox?: boolean;
   /** 颜色旗标：red/orange/yellow/green/blue/purple/gray；空串 = 未标记 */
   colorLabel?: string;
@@ -76,7 +76,7 @@ export interface ImageItem extends ImageDTOShape {
   previewUrl?: string;
   url: string;
   downloadUrl: string;
-  /** 本地磁盘绝对路径（桌面端可直接打开/设为壁纸） */
+  /** 本地磁盘绝对路径（桌面端可直接打开） */
   path: string;
   /** AI 知识库打分 0-100 */
   score: number;
@@ -90,14 +90,6 @@ export interface ImageItem extends ImageDTOShape {
   originalWidth?: number;
   originalHeight?: number;
   enhanceScale?: number;
-}
-
-export interface WallpaperResult {
-  ok: boolean;
-  generated: boolean;
-  fit: 'cover' | 'contain';
-  screen: { width: number; height: number };
-  path: string;
 }
 
 export interface AiConfig {
@@ -279,7 +271,6 @@ export interface Stats {
   topTags: { tag: string; count: number }[];
   recent: ImageItem[];
   largest: ImageItem[];
-  crawling: boolean;
 }
 
 export interface Filters {
@@ -306,8 +297,6 @@ export interface Filters {
   pending?: '' | 'inbox' | 'noFolder' | 'noTags' | 'noRating';
   /** 颜色旗标筛选：逗号分隔 red/orange/... */
   colorLabel?: string;
-  /** 地图框选：minLat,minLon,maxLat,maxLon（地点视图点某个地方时写入） */
-  bbox?: string;
 }
 
 /** 标签树节点：Eagle 式「分组 + 颜色 + 父子层级」 */
@@ -453,57 +442,6 @@ export interface SimilarGroups {
   groups: SimilarGroup[];
 }
 
-export interface CrawlStats {
-  searchesTotal: number;
-  searchesDone: number;
-  candidates: number;
-  newCandidates: number;
-  downloaded: number;
-  saved: number;
-  failed: number;
-  skipped: number;
-  /** 向量查重没生效的张数（模型异常时如实上报，不静默降级成「只查了 pHash」） */
-  clipCheckFailed?: number;
-  /** 第一条失败原因，避免用户只看到一个数字 */
-  clipCheckError?: string;
-  dropped: { lowres: number; small: number; format: number; duplicate: number; oversize: number; aiFilter: number };
-}
-
-export interface LogEntry {
-  id: number;
-  t: number;
-  level: 'info' | 'success' | 'warn' | 'error';
-  message: string;
-}
-
-export interface CrawlFailure {
-  id: number;
-  t: number;
-  source: string;
-  keyword: string;
-  url: string;
-  reason: string;
-  message: string;
-}
-
-export interface CrawlStatus {
-  id?: number;
-  running: boolean;
-  phase: 'idle' | 'running' | 'done';
-  startedAt?: string;
-  endedAt?: string;
-  keywords: string[];
-  sources: string[];
-  pages: number;
-  current: { keyword: string; source: string; page: number } | null;
-  search: { total: number; done: number; failed: number };
-  download: { queued: number; done: number; active: number; saved: number; failed: number };
-  stats: CrawlStats | null;
-  failures: CrawlFailure[];
-  failureCount: number;
-  logs: LogEntry[];
-}
-
 export interface Playlist {
   id: number;
   name: string;
@@ -511,136 +449,6 @@ export interface Playlist {
   count: number;
   created_at: string;
   updated_at: string;
-}
-
-export interface AutoWallpaperConfig {
-  enabled: boolean;
-  mode: 'day' | 'week' | 'month' | 'custom';
-  atTime: string;
-  weekday: number;
-  dayOfMonth: number;
-  minutes: number;
-  scope: 'all' | 'favorites' | 'playlist';
-  playlistId: number | null;
-  /** ai = 知识库评分 + 本地启发式适配度（+ 已训练的个人偏好 + 时间偏好）/ smart 只按知识库评分加权随机 / random 等概率 / sequential 按顺序 */
-  order: 'random' | 'sequential' | 'smart' | 'ai';
-  /** 评估「适不适合做壁纸」并参与排序 */
-  useAiFit?: boolean;
-  /** 「不喜欢」自动沉淀为知识库规则 */
-  feedbackToKb?: boolean;
-  /** 按时间挑图：白天偏亮、夜间偏暗 */
-  useTimeAware?: boolean;
-  /** 抽到低于画质标准的图时先自动增强 */
-  autoEnhance?: boolean;
-  /** 低于该评分的图片不参与壁纸轮换（0 = 不限） */
-  minScore: number;
-  /** 点过「不喜欢」的图片 id，不再被抽中 */
-  excluded: number[];
-  /** 多屏模式下每个屏幕放不同的图 */
-  perMonitorDifferent: boolean;
-  lastRunAt: string | null;
-  lastImageId: number | null;
-}
-
-export interface MonitorInfo {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface WallpaperMonitors {
-  monitors: MonitorInfo[];
-  count: number;
-  mode: 'single' | 'span' | 'per-monitor';
-  modes: Record<string, string>;
-}
-
-/** 动态壁纸配置 */
-/** 壁纸实时交互参数（滑块 0~300，100 为基准） */
-export interface LiveWallpaperParams {
-  brightness: number;
-  speed: number;
-  intensity: number;
-  depth: number;
-}
-
-export interface LiveWallpaperConfig {
-  enabled: boolean;
-  /** slideshow 相册轮播 / video / web / shader GLSL / interactive 交互 / audio 音频可视化 */
-  mode: 'slideshow' | 'video' | 'web' | 'shader' | 'interactive' | 'audio';
-  /** 轮播间隔（秒） */
-  intervalSec: number;
-  /** 视频文件路径（mode=video 时） */
-  videoPath: string;
-  /** 网页地址（mode=web 时） */
-  webUrl: string;
-  /** 静音 */
-  mute: boolean;
-  /** 音量 0-100 */
-  volume: number;
-  /** 缓慢缩放（Ken Burns） */
-  kenBurns: boolean;
-  /** 轮播范围：all / favorites / playlist */
-  scope: 'all' | 'favorites' | 'playlist';
-  playlistId: number | null;
-  minScore: number;
-  /** 有全屏应用（游戏）时暂停 */
-  pauseOnFullscreen: boolean;
-  /** 用电池时暂停 */
-  pauseOnBattery: boolean;
-  /** GPU 占用达到阈值时暂停 */
-  pauseOnGpu?: boolean;
-  /** GPU 阈值百分比 1-100（取最忙引擎） */
-  gpuThreshold?: number;
-  /** 这些进程在前台时暂停（basename / 简单通配） */
-  pauseApps?: string[];
-  /** 允许本机 / 内网 http(s) 与可信目录内的 file:// 网页 */
-  allowLocalUrl?: boolean;
-  /** file:// 网页允许的根目录（绝对路径） */
-  trustedDir?: string;
-  /** 网页壁纸点击穿透（false = 网页可接收鼠标，Esc 恢复） */
-  clickThrough?: boolean;
-  /** 实时交互参数：亮度 / 速度 / 强度 / 景深 */
-  params?: LiveWallpaperParams;
-  /** GLSL 预设 id（shaderPreset），内置四款 */
-  shaderPreset?: string;
-  /** 自定义 GLSL 片元着色器源码；非空时优先于预设 */
-  shaderSource?: string;
-  /** 交互壁纸：开启后桌面层接收鼠标事件 */
-  interactive?: boolean;
-  /** 音频可视化：本地音频路径 */
-  audioPath?: string;
-  /** file = 素材音频文件 / mic = 麦克风 / system = 系统音频回环（Windows 桌面音频） */
-  audioSource?: 'file' | 'mic' | 'system';
-}
-
-/** 屏幕保护程序：空闲 N 分钟后用动态壁纸窗口全屏覆盖 */
-export interface ScreensaverConfig {
-  enabled: boolean;
-  idleMinutes: number;
-  /** slideshow / shader / interactive / audio */
-  mode: 'slideshow' | 'shader' | 'interactive' | 'audio';
-  showClock: boolean;
-}
-
-export interface AutoWallpaperStatus {
-  config: AutoWallpaperConfig;
-  nextRunAt: string | null;
-  scopeCount: number;
-  running: boolean;
-  /** 当前排序策略真实参与的评分项（后端 pickPlan 算的，不是按选项名猜的） */
-  pick?: { order: string; engine: string; label: string; parts: string[]; prefTrained?: boolean };
-  lastLog: { imageId: number; title: string; scope: string; appliedAt: string } | null;
-}
-
-export interface WallpaperLogItem {
-  id: number;
-  imageId: number;
-  title: string;
-  scope: string;
-  appliedAt: string;
 }
 
 export interface NetworkConfig {
@@ -652,32 +460,6 @@ export interface NetworkConfig {
   bypass?: string;
   applied?: boolean;
   modes?: { key: string; label: string }[];
-}
-
-/** 水印预设里的参数：与 api.ts 的 WatermarkParams 同形，但不含「这次怎么存」的字段 */
-export interface WatermarkPresetParams {
-  style: string;
-  frame: string;
-  fields: string[];
-  logo: boolean;
-  brand: string;
-  model: string;
-  size: number;
-  opacity: number;
-  color: string;
-  font: string;
-  location: string;
-  /** 三级选择器的选择结果（老预设没有这个字段，套用时按「手填地点」处理） */
-  place?: { province: string; city: string; district: string; detail: string };
-}
-
-/** 一条水印预设（settings.watermarkPresets 的元素） */
-export interface WatermarkPreset {
-  id: string;
-  name: string;
-  params: WatermarkPresetParams;
-  /** 保存/导入的时间戳（ms） */
-  at: number;
 }
 
 /** 局域网投送状态（/api/lan/status） */
@@ -736,43 +518,6 @@ export interface LanShareInput {
   allowDownload?: boolean;
 }
 
-/** 插件市场条目（索引 + 已安装状态） */
-export interface MarketPlugin {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  author: string;
-  tags: string[];
-  permissions: string[];
-  actions: string[];
-  package: string;
-  downloadUrl: string;
-  source: 'builtin' | 'remote';
-  installed: boolean;
-  installedVersion: string;
-  installedBuiltin: boolean;
-}
-
-export interface PluginMarketView {
-  ok: boolean;
-  version: number;
-  updatedAt: string;
-  remote: boolean;
-  plugins: MarketPlugin[];
-  permissions: string[];
-}
-
-export interface PluginInstallResult {
-  ok: boolean;
-  id: string;
-  name: string;
-  version: string;
-  permissions: string[];
-  actions: string[];
-  builtin: boolean;
-}
-
 /** 已安装的插件（/api/plugins 下发；宿主不回传 entry / 绝对路径细节） */
 export interface PluginInfo {
   id: string;
@@ -798,11 +543,37 @@ export interface PluginRunResult {
   denied?: boolean;
 }
 
+/** 需要专业版的一项能力（与 server/lib/license-core.js 的 PRO_FEATURES 对应） */
+export interface LicenseFeature {
+  key: string;
+  label: string;
+}
+
+/** 设置 → 授权的状态（/api/license 下发） */
+export interface LicenseStatus {
+  product: string;
+  /** free = 未激活；pro = 已激活 */
+  edition: string;
+  licensed: boolean;
+  /** 本机机器码（XXXX-XXXX-XXXX-XXXX），购买时发给作者 */
+  machineCode: string;
+  issuedAt?: string;
+  /** 到期日期（YYYY-MM-DD）；null = 永久 */
+  expires?: string | null;
+  daysLeft?: number | null;
+  /** 签发备注（通常是购买邮箱） */
+  note?: string;
+  /** 未授权 / 校验失败原因 */
+  reason?: string;
+  /** 购买页地址（构建时注入，可为空） */
+  buyUrl?: string;
+  features: LicenseFeature[];
+}
+
 export interface Settings {
   minResolution: number;
   minFileSize: number;
   phashThreshold: number;
-  pagesPerKeyword: number;
   /** 导入时目录遍历深度上限（层），默认 4 */
   importMaxDepth: number;
   /** 导入命名模板；空 = 内置默认文件名 */
@@ -811,34 +582,20 @@ export interface Settings {
   importNameTemplateForLocal?: boolean;
   /** 调色台历史记录保留步数（默认 100，1~500） */
   historySteps: number;
-  /** 水印预设（跨库共享）：整套排版参数，随设置一起存 */
-  watermarkPresets?: WatermarkPreset[];
   /** 关窗行为（桌面端）：true = 收到托盘继续后台跑，false = 关窗即退出 */
   closeToTray?: boolean;
   /** 局域网 / 手机扫码投送（跨库共享，默认关闭） */
   lanAccess?: boolean;
-  /** 屏幕保护程序（跨库共享） */
-  screensaver?: ScreensaverConfig;
   maxFileSize: number;
   concurrency: number;
-  sources: Record<string, boolean>;
-  wallhavenApiKey: string;
-  /** 微博登录 Cookie：微博接口已关闭游客访问，填了才能用微博图片源 */
-  weiboCookie: string;
-  /** 服务端已保存微博登录凭据（Cookie 本身永不回传前端，只回报是否已配置） */
-  hasWeiboCookie?: boolean;
-  /** 保存指令：显式清除服务端已保存的微博 Cookie（空字符串会被视为「未修改」） */
-  weiboCookieClear?: boolean;
   /** 服务端已保存 AI API Key（同上不回传明文） */
   hasAiApiKey?: boolean;
   /** 保存指令：显式清除 AI API Key */
   aiApiKeyClear?: boolean;
-  /** 微博登录会话的 User-Agent：微博风控把登录态与 UA 绑定，采集请求需复用同一 UA */
-  weiboUserAgent: string;
   storageDir: string;
   /** 文件夹监控：递归监听素材文件夹，新文件自动入库（默认开） */
   watchEnabled?: boolean;
-  /** 采集收件箱：网页采集 / 上传 / 粘贴 / 手机投送的新素材先标记为待整理（默认开） */
+  /** 收件箱：上传 / 粘贴 / 手机投送的新素材先标记为待整理（默认开） */
   inboxOnCapture?: boolean;
   /** 是否已完成首次引导（首次启动选择图片文件夹） */
   onboarded?: boolean;
@@ -848,13 +605,9 @@ export interface Settings {
   /** 非破坏性编辑：裁切/旋转/调色只记操作链，原图字节不动（默认关） */
   nonDestructiveEdit?: boolean;
   scoreThreshold: number;
-  wallpaperFill: 'blur' | 'solid' | 'black';
-  /** 单屏 / 跨屏合成一张 / 每个屏幕不同图片 */
-  wallpaperMode: 'single' | 'span' | 'per-monitor';
-  /** 全局快捷键（Ctrl+Alt+W 换壁纸 等） */
+  /** 全局快捷键（打开窗口 / 截图） */
   globalShortcuts: boolean;
   ai: AiConfig;
-  autoWallpaper: AutoWallpaperConfig;
   enhance: EnhanceConfig;
   theme: 'dark' | 'light';
   /** 开机自动启动（桌面端） */
@@ -945,7 +698,7 @@ export interface AiUpscaleStatus {
 /** 下载中心：一条模型（后端 model-registry 聚合后的形状） */
 export interface ModelItem {
   id: string;
-  group: 'upscale' | 'matting' | 'face' | 'semantic';
+  group: 'upscale' | 'semantic';
   name: string;
   desc: string;
   /** 已安装时为磁盘实际体积，未装时为 0 */
@@ -1036,13 +789,6 @@ export interface EnhanceJobStatus {
   finishedAt: string | null;
   lastError: string;
   failures: { id: number; ok: boolean; error?: string }[];
-}
-
-export interface Keyword {
-  id: number;
-  text: string;
-  enabled: number;
-  created_at: string;
 }
 
 /** 曲线控制点：[x, y]，取值 0..255（x 升序，首末点固定 0,0 / 255,255） */
@@ -1411,15 +1157,11 @@ export type View =
   | 'timeline'
   | 'canvas'
   | 'favorites'
-  | 'people'
   | 'tidy'
   | 'playlists'
-  | 'crawl'
-  | 'bookmarks'
   | 'knowledge'
   | 'search'
   | 'smart'
-  | 'places'
   | 'enhance'
   | 'tutorial'
   | 'settings';

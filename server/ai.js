@@ -308,11 +308,11 @@ async function toDataUrl(imagePath, maxSize = 768) {
 
 const VISION_SCHEMA = `输出严格 JSON（不要输出其他内容）：
 {
-  "subject": "画面主体（人物/多人/非人物/动物/风景/其他）",
+  "subject": "画面主体（动物/风景/建筑/静物/其他）",
   "scene": "场景简述（演出/写真/活动/街拍/日常/风景/其他）",
   "description": "60 字以内的客观描述",
   "tags": ["3-5 个简短中文标签，客观描述主体/场景/色调，每个不超过 8 个字，不要人名、不要带逗号"],
-  "issues": ["作为壁纸可能让人不满意的点，如：模糊、噪点多、分辨率低、有水印或平台 Logo、构图歪、截取不全、色调暗沉、主体不符预期、重复画面"],
+  "issues": ["作为素材可能让人不满意的点，如：模糊、噪点多、分辨率低、有水印或平台 Logo、构图歪、截取不全、色调暗沉、主体不符预期、重复画面"],
   "quality": 0-100 的整数综合画质分
 }`;
 
@@ -341,25 +341,21 @@ function normalizeAiTags(raw) {
 }
 
 /**
- * 画面主体的身份信息：标签 + 采集关键词（关键词每次采集必有，是最可靠的身份来源）。
- * 放在 JSON 格式之前，让模型先知道「这是谁」，再要求它按此描述。
+ * 画面主体的身份信息：已有标签。
+ * 放在 JSON 格式之前，让模型先知道画面里可能是谁/什么，再要求它按此描述。
  */
 function buildIdentityNote(row) {
   const tags = String(row.tags || '')
     .split(/[,，]/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const kw = String(row.keyword || '').replace(/[·\s]+/g, ' ').trim();
-  if (!tags.length && !kw) return '';
-  const parts = [];
-  if (kw) parts.push(`采集关键词「${kw}」`);
-  if (tags.length) parts.push(`已有标签「${tags.join('、')}」`);
+  if (!tags.length) return '';
   return [
-    `这张图片的${parts.join('和')}。`,
-    '其中的文字（人名、主题）就是画面主体的可信身份，必须遵守：',
-    '1. description 与 subject 必须直接用这个名字称呼主体，例如关键词是「某人 演唱会」时写「某人在演唱会舞台上演唱」。',
+    `这张图片已有标签「${tags.join('、')}」。`,
+    '标签中的文字（人名、主题）就是画面主体的可信身份，必须遵守：',
+    '1. description 与 subject 必须直接用这个名字称呼主体。',
     '2. 严禁无视已知身份，输出「一位女性」「一名歌手」这类模糊称呼。',
-    '3. 除关键词/标签中已给出的人名外，不得编造其他人名；服装、场景等细节仍按画面客观描述。',
+    '3. 除标签中已给出的人名外，不得编造其他人名；服装、场景等细节仍按画面客观描述。',
     '',
     '',
   ].join('\n');
@@ -367,7 +363,7 @@ function buildIdentityNote(row) {
 
 /**
  * 通用视觉问答：给一张图 + 自定义提示（要求返回 JSON），返回解析后的对象。
- * 供壁纸适配度、构图评估等上层能力复用，避免每个功能各写一遍视觉调用。
+ * 供构图评估、自动标签等上层能力复用，避免每个功能各写一遍视觉调用。
  */
 export async function visionJson(imageId, instruction, schemaHint, options = {}) {
   assertReady();

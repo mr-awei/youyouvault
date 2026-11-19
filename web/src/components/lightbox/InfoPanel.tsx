@@ -18,7 +18,6 @@ import {
 } from '../../api';
 import { buildASE, buildPngSheet, downloadBlob } from '../../lib/palette';
 import NotesPanel from './NotesPanel';
-import FaceChips from './FaceChips';
 import i18n from '../../i18n';
 
 interface Props {
@@ -34,14 +33,10 @@ interface Props {
   onPatch?: (item: ImageItem, patch: Partial<ImageItem>) => void;
   onChangeToast?: (msg: string) => void;
   onFindColor?: (hue: string) => void;
-  /** 打开「外部以图找图」面板（SauceNAO / Google Lens / TinEye…） */
-  onOpenSource?: () => void;
   /** 打开堆叠查看器（看同素材的其他版本） */
   onOpenStack?: () => void;
   /** 跳到图库并只看某个文件夹（点归属文件夹的夹名就走这里） */
   onOpenFolder?: (folderId: number) => void;
-  /** 点「人物 #123」：跳到人物页并打开这个人的照片墙 */
-  onGotoPerson?: (personId: number) => void;
   onSaveTags: (item: ImageItem, tags: string[]) => void;
   tagInput: string;
   setTagInput: (v: string) => void;
@@ -76,10 +71,8 @@ export default function InfoPanel({
   onPatch,
   onChangeToast,
   onFindColor,
-  onOpenSource,
   onOpenStack,
   onOpenFolder,
-  onGotoPerson,
   onSaveTags,
   tagInput,
   setTagInput,
@@ -229,17 +222,6 @@ export default function InfoPanel({
               </span>
             </div>
             <div className="lb-kv">
-              <b>采集来源</b>
-              <span>
-                {SOURCE_LABELS[item.source] || item.source}
-                {item.keyword ? ` · ${item.keyword}` : ''}
-              </span>
-            </div>
-            <div className="lb-kv">
-              <b>采集时间</b>
-              <span>{formatDate(item.createdAt)}</span>
-            </div>
-            <div className="lb-kv">
               <b>浏览情况</b>
               <span>{item.viewCount ? i18n.t('k44149c53', { p0: item.viewCount }) : i18n.t('k8e63d8eb')}</span>
             </div>
@@ -266,9 +248,6 @@ export default function InfoPanel({
               </span>
             </div>
           </section>
-
-          {/* 没有检出人脸时整块不渲染，不给空标题占高度 */}
-          <FaceChips imageId={item.id} onToast={(m) => onChangeToast?.(m)} onGotoPerson={onGotoPerson} />
 
           <section className="lb-group">
             <h5>归类整理</h5>
@@ -467,20 +446,6 @@ export default function InfoPanel({
                 </button>
               </span>
             </div>
-            {onOpenSource && (
-              <div className="lb-kv">
-                <b>外部搜图</b>
-                <span>
-                  <button
-                    className="btn sm"
-                    onClick={onOpenSource}
-                    title={i18n.t('k05155801')}
-                  >
-                    <IconSearch size={12} /> 以图找图
-                  </button>
-                </span>
-              </div>
-            )}
             <div className="lb-kv">
               <b>AI 识图</b>
               <div className="lb-kv-row lb-kv-col">

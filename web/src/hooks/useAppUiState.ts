@@ -18,7 +18,6 @@ export function useAppUiState() {
   /** dead 态的失败原因：横幅要写清楚，不能只说「服务不可用」 */
   const [serviceError, setServiceError] = useState('');
   const [showCreateLib, setShowCreateLib] = useState(false);
-  const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   // 正在选封面的文件夹 id（null = 没打开）
   const [coverFolderId, setCoverFolderId] = useState<number | null>(null);
@@ -52,8 +51,6 @@ export function useAppUiState() {
     setServiceError,
     showCreateLib,
     setShowCreateLib,
-    bookmarkOpen,
-    setBookmarkOpen,
     exportOpen,
     setExportOpen,
     coverFolderId,

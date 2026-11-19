@@ -3,7 +3,7 @@ import { PROXY_MODES, applyProxyNet, normalizeNet, proxyRules as rulesOf, regist
 
 /**
  * 网络 / 代理设置：代理规则通过 Chromium(session.setProxy) 生效，
- * 因此采集、AI、缩略图下载全部走同一出口。
+ * 因此 AI、缩略图下载、文件抓取全部走同一出口。
  *
  * 只做「读库 + 转调」：规则纯逻辑与 Electron 会话应用在 ./proxy.js，
  * 主进程在服务端独立进程化后直接复用那一份（不 import 本文件，避免拉进 SQLite）。

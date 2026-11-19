@@ -76,7 +76,7 @@
   color: var(--text);
 }
 .settings-nav button.active {
-  background: rgba(255, 77, 141, 0.16);
+  background: rgba(249, 115, 22, 0.16);
   color: var(--text);
 }
 .settings-nav button.active svg {
@@ -105,7 +105,7 @@
   height: 34px;
   flex: 0 0 34px;
   border-radius: 10px;
-  background: rgba(255, 77, 141, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   color: var(--accent);
 }
 .settings-panel-head-text {
@@ -235,17 +235,6 @@
 }
 .switch-row:last-child {
   border-bottom: none;
-}
-/* 采集源「需配置」标记（如微博需要登录 Cookie） */
-.src-hint {
-  margin-left: 8px;
-  padding: 1px 7px;
-  border-radius: 20px;
-  font-size: 10.5px;
-  color: var(--warn);
-  background: rgba(251, 191, 36, 0.14);
-  border: 1px solid rgba(251, 191, 36, 0.3);
-  white-space: nowrap;
 }
 .section-title {
   font-size: 14px;

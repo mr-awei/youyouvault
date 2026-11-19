@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * 把 verify 的实跑统计回写进 docs/评测与路线图.html。
+ * 把 verify 的实跑统计回写到评测文档（若该文档仍在）。
  *
- * 背景：文档里的「177 文件 / 345 单测 / 106 冒烟 / 15 基准」以前靠手抄，
- * 上一版直接抄成 175 / 322 / 105，与实测差了一轮 —— 台账的信用全靠数字对得上，
- * 所以这里改成：各环节跑完把数字写进 docs/.verify-stats.json，
- * 文档里只留 data-stat 占位符，verify 最后一步统一渲染。
+ * 背景：文档里的「文件数 / 单测 / 冒烟 / 基准」以前靠手抄，上一版直接抄错一轮 ——
+ * 所以这里改成各环节跑完把数字写进 docs/.verify-stats.json，文档里只留 data-stat 占位符。
+ * 评测文档已从仓库移除后，本脚本只负责收集统计，不再回写；统计仍可用于其它文档或 CI 报告。
  *
  * 单独执行：node scripts/doc-stats.mjs
  */
@@ -60,6 +59,9 @@ export function renderStats(stats = readStats()) {
     smoke: `${s.smoke} / ${s.smoke}`,
     bench: `${s.bench} / ${s.bench}`,
   };
+
+  // 评测文档已移除：没有目标文件时只返回统计，不做回写
+  if (!fs.existsSync(DOC_PATH)) return { ...s, summary: texts.summary, changed: 0 };
 
   let html = fs.readFileSync(DOC_PATH, 'utf8');
   let changed = 0;

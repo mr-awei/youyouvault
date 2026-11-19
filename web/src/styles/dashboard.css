@@ -137,7 +137,7 @@
 }
 .recent-grid img:hover {
   transform: translateY(-3px) scale(1.02);
-  border-color: rgba(255, 77, 141, 0.5);
+  border-color: rgba(249, 115, 22, 0.5);
 }
 /* 虚拟滚动版清单网格：格子由 VirtualGrid 定位，单元撑满即可 */
 .recent-grid-v {

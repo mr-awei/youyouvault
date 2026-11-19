@@ -13,21 +13,18 @@ import { hotfix } from './hotfix-runtime.js';
 import { ctx } from './context.js';
 import { failSplash } from './splash.js';
 import { refreshGlobalShortcuts } from './shortcuts.js';
-import { applyLiveWallpaper, destroyLiveWindow } from './live.js';
 
 /**
- * 加载「不碰 SQLite」的服务端模块：config（路径/令牌）、desktop（窗口挂载）、proxy（代理规则 + Chromium 会话）。
+ * 加载「不碰 SQLite」的服务端模块：config（路径/令牌）、proxy（代理规则 + Chromium 会话）。
  * 必须在服务进程启动前完成：目录环境变量已在主进程模块顶层设置。
  */
 export async function loadHostModules() {
-  const [configMod, desktopMod, proxyMod] = await Promise.all([
+  const [configMod, proxyMod] = await Promise.all([
     import('../../server/config.js'),
-    import('../../server/desktop.js'),
     import('../../server/proxy.js'),
   ]);
   ctx.ipcStorageRoot = configMod.STORAGE_DIR || '';
   ctx.apiToken = configMod.API_TOKEN || '';
-  ctx.desktopApi = desktopMod;
   // applyProxyNet 返回「是否成功」布尔，这里只当副作用用，统一成 Promise<void>
   ctx.applyProxy = async () => {
     await proxyMod.applyProxyNet(getSettings().network || {});
@@ -74,7 +71,7 @@ export function reloadAllAppWindows() {
 
 /**
  * 托盘「重启本地服务」。
- * server-host 在崩溃窗口内连续失败达到上限后会进入 dead 态：此时所有接口、壁纸、
+ * server-host 在崩溃窗口内连续失败达到上限后会进入 dead 态：此时所有接口、
  * 快捷键、缩略图全部静默失效，而以前唯一出路是「彻底退出再打开」——
  * 用户看到的就是「应用打开着但什么都点不动」，且不知道该干什么。
  */
@@ -125,7 +122,7 @@ export async function stopServerOnce() {
 /**
  * 拉起本地服务。
  * 开发模式（--dev-url / TUKU_DEV_URL）下 API 由 `npm run dev` 的 node 进程提供，只拉设置快照；
- * 打包/正常启动则起 utilityProcess 子进程，并挂上设置、动态壁纸、崩溃重启三类事件。
+ * 打包/正常启动则起 utilityProcess 子进程，并挂上设置、崩溃重启两类事件。
  * @returns {Promise<boolean>} false = 启动失败且已提示用户（调用方应直接结束启动流程）
  */
 export async function bootService() {
@@ -222,15 +219,6 @@ function attachHostEvents(serverHost) {
       console.error('[desktop] 同步开机自启失败:', err.message);
     }
   });
-  // 动态壁纸配置变了：主进程负责创建/销毁壁纸窗口
-  serverHost.on('live', (cfg) => {
-    try {
-      if (!cfg || cfg.enabled === false) destroyLiveWindow();
-      else applyLiveWallpaper();
-    } catch (err) {
-      console.error('[live] 应用配置失败：', err?.message || err);
-    }
-  });
   // 崩溃重启后端口可能变，重新加载页面（返回同一端口时无感知）
   serverHost.on('restarted', (info) => {
     const changed = info.port !== ctx.serverPort;
@@ -252,7 +240,7 @@ function attachHostEvents(serverHost) {
         title: '图库服务无法启动',
         message: msg,
         detail:
-          '自动重启与换端口兜底都失败了。点「立即重启服务」再试一次；选择「继续用（离线）」仍可打开界面，但换壁纸、收藏、导入等接口暂时不可用。\n日志在应用数据目录的 desktop.log / server.log；若反复出现，请检查防火墙或安全软件是否拦截了本机监听。',
+          '自动重启与换端口兜底都失败了。点「立即重启服务」再试一次；选择「继续用（离线）」仍可打开界面，但收藏、导入等接口暂时不可用。\n日志在应用数据目录的 desktop.log / server.log；若反复出现，请检查防火墙或安全软件是否拦截了本机监听。',
         buttons: ['立即重启服务', '继续用（离线）'],
         defaultId: 0,
         cancelId: 1,

@@ -29,14 +29,14 @@ test('所有合法视图都能往返', () => {
 });
 
 test('筛选字段解析：数组、数值、别名', () => {
-  const r = parseRoute('?v=gallery&q=猫&source=weibo,bing&fav=only&ori=landscape&bucket=color&tag=壁纸&sort=oldest&seen=unseen&minRating=3&hue=red&colorHex=%23ff0000&colorTol=20&kind=video&pending=noTags&folder=7');
+  const r = parseRoute('?v=gallery&q=猫&source=local,lan&fav=only&ori=landscape&bucket=color&tag=风景&sort=oldest&seen=unseen&minRating=3&hue=red&colorHex=%23ff0000&colorTol=20&kind=video&pending=noTags&folder=7');
   assert.equal(r.view, 'gallery');
   assert.equal(r.filters.q, '猫');
-  assert.deepEqual(r.filters.source, ['weibo', 'bing']);
+  assert.deepEqual(r.filters.source, ['local', 'lan']);
   assert.equal(r.filters.favorite, 'only');
   assert.equal(r.filters.orientation, 'landscape');
   assert.deepEqual(r.filters.bucket, ['color']);
-  assert.equal(r.filters.tag, '壁纸');
+  assert.equal(r.filters.tag, '风景');
   assert.equal(r.filters.sort, 'oldest');
   assert.equal(r.filters.seen, 'unseen');
   assert.equal(r.filters.minRating, 3);

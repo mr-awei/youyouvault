@@ -78,7 +78,7 @@ export function cancelPrefetchPreview(id: number) {
 /**
  * 展开到任意「点开就能进灯箱」的缩略图元素上：`<div {...previewHoverProps(item)} />`。
  * 图库/搜索/智能相册走 ImageCard 已经内置，剩下的入口（底部胶片条、堆叠查看器、
- * 首页最近/最大、清单、书签、人物照片墙、列表视图）都用这个，行为保持一致。
+ * 首页最近/最大、清单、列表视图）都用这个，行为保持一致。
  */
 export function previewHoverProps(item: PrefetchTarget) {
   return {

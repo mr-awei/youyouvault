@@ -232,7 +232,7 @@ export async function createWindow() {
 
   registerShortcuts(ctx.mainWindow);
 
-  // 权限白名单（主窗口与 /live 壁纸页共用默认 session）
+  // 权限白名单（主窗口与多开窗口共用默认 session）
   installPermissionGuard(ctx.mainWindow.webContents.session);
 
   // 同窗口跳转白名单：外链交给系统浏览器，绝不让带 preload 桥的窗口离开本地服务
@@ -400,7 +400,7 @@ export async function createWindow() {
     if (ctx.forceQuit) return;
     e.preventDefault();
     // 托盘常驻：之前关窗直接 quit，「托盘图标 + 打开主窗口」形同虚设——
-    // 定时换壁纸、全局快捷键也跟着一起失效。默认关窗只藏起来，真正退出走托盘「退出」。
+    // 全局快捷键也跟着一起失效。默认关窗只藏起来，真正退出走托盘「退出」。
     if (shouldHideToTray()) {
       hideToTray();
       return;
@@ -501,7 +501,7 @@ export function hideToTray() {
     try {
       ctx.tray.displayBalloon({
         title: `${APP_NAME} 仍在后台运行`,
-        content: '窗口已收到托盘：定时换壁纸与全局快捷键继续生效，右键托盘图标可退出。',
+        content: '窗口已收到托盘：全局快捷键继续生效，右键托盘图标可退出。',
         icon: APP_ICON,
       });
     } catch (err) {

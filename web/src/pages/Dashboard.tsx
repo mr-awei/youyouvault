@@ -71,12 +71,11 @@ interface Props {
   error?: string;
   /** pool 传入同一批图片，预览时才可左右切换 / 滚轮翻图 */
   onOpen: (item: ImageItem, pool?: ImageItem[]) => void;
-  onNavigate: (view: string) => void;
 }
 
 const BUCKET_ORDER = ['sd', 'fhd', '2k', '4k'];
 
-export default function Dashboard({ stats, error, onOpen, onNavigate }: Props) {
+export default function Dashboard({ stats, error, onOpen }: Props) {
   if (!stats) {
     return (
       <div className="empty">
@@ -116,9 +115,7 @@ export default function Dashboard({ stats, error, onOpen, onNavigate }: Props) {
           <h1 className="page-title">{i18n.t('k3fa8b34a')}</h1>
           <div className="page-sub">{i18n.t('k3e789ed1')}</div>
         </div>
-        <button className="btn primary" onClick={() => onNavigate('crawl')}>
-          {i18n.t('k4b75b162')}
-        </button>
+
       </div>
 
       <div className="stat-grid">
@@ -144,7 +141,7 @@ export default function Dashboard({ stats, error, onOpen, onNavigate }: Props) {
         <div className="card stat-card">
           <div className="label">{i18n.t('kd9e813ce')}</div>
           <div className="value" style={{ fontSize: 20 }}>
-            {stats.crawling ? i18n.t('k595892a3') : i18n.t('k87bb5bbc')}
+            {i18n.t('k595892a3')}
           </div>
           <div className="hint">
             {stats.trend.length ? i18n.t('k9b676227', { p0: stats.trend[stats.trend.length - 1].date }) : i18n.t('k9cdba42a')}

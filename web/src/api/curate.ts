@@ -2,7 +2,7 @@
  * 整理：相似图 / 缩略图 / 库健康 / 维护
  * 由 api.ts 组合成单一的 `api` 对象对外暴露（调用点不需要改 import）。
  */
-import { BASE, getApiToken, request } from './core';
+import { request } from './core';
 import type { AnnotationItem, DupeGroup, ImageComment, TagNode, Filters, ImageItem, SimilarGroups } from '../types';
 
 export const curateAPI = {
@@ -78,39 +78,6 @@ export const curateAPI = {
       '/api/import/resume',
       { method: 'POST', body: '{}' }
     ),
-
-  /** API 参考：服务端自省出来的完整路由清单（含分组与鉴权口径） */
-  apiDocs: () =>
-    request<{
-      ok: boolean;
-      total: number;
-      groups: { key: string; label: string; note: string; count: number }[];
-      routes: { method: string; path: string; group: string; label: string; auth: string }[];
-    }>('/api/docs'),
-
-  /**
-   * Playground 专用：原样返回状态码与文本，不做 JSON 解析、不抛业务错误。
-   * 调试页要看到「后端真正回了什么」，而不是被 api 层翻译后的结果。
-   */
-  playground: async (method: string, path: string, body?: string) => {
-    const token = await getApiToken();
-    const res = await fetch(`${BASE}${path}`, {
-      method,
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      body: body && method !== 'GET' ? body : undefined,
-    });
-    const text = await res.text();
-    let pretty = text;
-    try {
-      pretty = JSON.stringify(JSON.parse(text), null, 2);
-    } catch {
-      /* 不是 JSON 就原样显示 */
-    }
-    return { status: res.status, text: pretty };
-  },
 
   // 缩略图后台队列：看得见待生成 / 进行中 / 失败原因，并能一键重试
   thumbQueueStatus: () =>
@@ -216,17 +183,6 @@ export const curateAPI = {
       after: { total: number };
       byTable: { table: string; column: string; note: string; count: number }[];
     }>('/api/maintenance/orphans/clean', { method: 'POST', body: JSON.stringify({ dryRun }) }),
-  /** 地图视图：按经纬度聚合出的地点（precision 为小数点后位数，默认 1） */
-  geoPoints: (precision = 1) =>
-    request<{ ok: boolean; precision: number; total: number; points: { lat: number; lon: number; n: number; coverId: number }[] }>(
-      `/api/maintenance/geo-points?precision=${precision}`
-    ),
-  /** 补算历史素材的 GPS（老库导入时没有落经纬度列） */
-  maintenanceGpsBackfill: (limit = 200) =>
-    request<{ ok: boolean; scanned: number; found: number; remain: number }>('/api/maintenance/gps-backfill', {
-      method: 'POST',
-      body: JSON.stringify({ limit }),
-    }),
   /** 从 XMP sidecar 拉回元数据（用 Lightroom / digiKam 改完标签再拷回来时用） */
   maintenanceXmpImport: (limit = 500, beforeId = 0) =>
     request<{ ok: boolean; scanned: number; updated: number; nextBeforeId: number }>('/api/maintenance/xmp-import', {

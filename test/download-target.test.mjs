@@ -14,7 +14,7 @@ async function workDir() {
 test('moveDownloaded 同分区改名：内容不变，原地不留', async () => {
   const dir = await workDir();
   const from = path.join(dir, 'provisional.bin');
-  const to = path.join(dir, '拼接图.jpg');
+  const to = path.join(dir, '导出图.jpg');
   await fs.writeFile(from, 'pixels');
 
   assert.equal(await moveDownloaded(from, to), to);

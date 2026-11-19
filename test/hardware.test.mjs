@@ -106,28 +106,6 @@ const hwOf = (ramMB, cores, extra = {}) => ({
   gpu: { devices: [], vulkan: { capable: null, reason: '' }, ...extra },
 });
 
-test('AI 抠图：内存达标放行，不达标只警告（允许试）', () => {
-  const f = featureOf('matting');
-  const good = evaluateFeature(f, hwOf(16384, 8));
-  assert.equal(good.level, 'ok');
-  assert.equal(good.ok, true);
-
-  const low = evaluateFeature(f, hwOf(2048, 2));
-  assert.equal(low.level, 'warn');
-  assert.equal(low.ok, false);
-  assert.equal(low.canProceedAnyway, true);
-  assert.match(low.reason, /内存/);
-});
-
-test('AI 抠图：可用内存紧张时达标也要给出提醒', () => {
-  const hw = hwOf(16384, 8);
-  hw.ram.freeMB = 400;
-  const f = evaluateFeature(featureOf('matting'), hw);
-  assert.equal(f.level, 'ok');
-  const ram = f.checks.find((c) => c.id === 'ram');
-  assert.match(ram.note, /可用内存偏少/);
-});
-
 test('AI 超分（Vulkan）：没有可用显卡是硬阻断', () => {
   const hw = hwOf(16384, 8, {
     devices: [{ name: 'Microsoft Basic Display Adapter', kind: 'basic', vramMB: null }],
@@ -179,16 +157,6 @@ test('Swin2SR 档：4G 内存不算达标，但仍可继续', () => {
   const f = evaluateFeature(featureOf('upscale-onnx'), hwOf(4096, 2));
   assert.equal(f.level, 'warn');
   assert.equal(f.canProceedAnyway, true);
-});
-
-test('人脸扫描：内存不足只警告（允许试），且不宣称需要显卡', () => {
-  const f = featureOf('face');
-  assert.ok(f, '人脸扫描应进最低配置表');
-  const low = evaluateFeature(f, hwOf(2048, 2));
-  assert.equal(low.level, 'warn');
-  assert.equal(low.canProceedAnyway, true);
-  assert.ok(!low.checks.some((c) => c.id === 'gpu'), '人脸在 CPU 上跑，不该有显卡检查');
-  assert.equal(evaluateFeature(f, hwOf(16384, 8)).level, 'ok');
 });
 
 test('语义检索（CLIP）：4G 以下只警告，权重常驻要说明', () => {

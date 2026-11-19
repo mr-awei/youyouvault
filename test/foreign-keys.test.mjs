@@ -60,20 +60,6 @@ test('指向不存在父行的插入会被拒绝（真约束，不是事后对�
   db.close();
 });
 
-test('删人物把脸退回未归属，而不是连脸一起删', () => {
-  const db = freshDb();
-  db.exec(`
-    INSERT INTO images (id, abs_path, created_at) VALUES (1, 'a.jpg', '2026-01-01');
-    INSERT INTO persons (id, created_at) VALUES (7, '2026-01-01');
-    INSERT INTO faces (image_id, person_id, x1, y1, x2, y2, vec, created_at)
-      VALUES (1, 7, 0, 0, 10, 10, x'00', '2026-01-01');
-  `);
-  db.prepare('DELETE FROM persons WHERE id = 7').run();
-  const face = db.prepare('SELECT person_id FROM faces').get();
-  assert.equal(face?.person_id, null, '人脸应保留，只是失去归属');
-  db.close();
-});
-
 test('删父夹连带子夹（以前靠 path 前缀 LIKE 手工删）', () => {
   const db = freshDb();
   db.exec(`
@@ -140,7 +126,6 @@ test('老库重建：补上约束、清掉孤儿、保住正常行与 id', () =>
 
 test('fkTail 只给登记过的表追加约束', () => {
   assert.match(fkTail('item_tags'), /FOREIGN KEY \(image_id\) REFERENCES images\(id\) ON DELETE CASCADE/);
-  assert.match(fkTail('faces'), /person_id\) REFERENCES persons\(id\) ON DELETE SET NULL/);
   assert.equal(fkTail('images'), '', 'images 是父表，不该被追加');
   assert.equal(fkTail('trash'), '', '回收站记录要留档，刻意不建外键');
 });

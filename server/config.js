@@ -74,18 +74,6 @@ if (!IS_PACKAGED) {
   }
 }
 
-/**
- * 允许免令牌调用 /api/extension/ingest 的浏览器扩展来源。
- * 之前是「任意 chrome-extension:// 都放行」：本机装的任何一个扩展（含被收购后塞私货的）
- * 都能读写图库。改为按扩展 ID 精确匹配——ID 由 manifest 的 key 固定（见 extension/manifest.json），
- * 所以从任何路径加载本扩展都是这个 ID。要换 ID 时同步改 manifest.key 与环境变量。
- */
-export const EXTENSION_ORIGINS = (process.env.TUKU_EXTENSION_ORIGINS || 'olckdffcmfpciekkkdekckpgphacfnfl')
-  .split(',')
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean)
-  .map((id) => (id.startsWith('chrome-extension://') ? id : `chrome-extension://${id}`));
-
 /** 工作区内已有的图片目录（初次启动时导入到图库；打包后不适用，留空） */
 export const LEGACY_DIRS = IS_PACKAGED
   ? []

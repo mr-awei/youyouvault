@@ -309,7 +309,7 @@ export async function designThumbJpeg(absPath, { width = 640, quality = 80 } = {
      * 方向：内嵌预览自带 EXIF orientation 时以它为准（那才是这些像素的显示方向）；
      * 没有时（Canon CR2 的预览段就是裸 JPEG）退回**源文件**的 orientation。
      * 以前只调 .rotate()，等于只认内嵌标签 —— 相机竖拍的照片在库里全部躺倒 90°，
-     * 而且 DB 里存的还是 5472×3648，卡片按横图排版，人物脸也是侧着的。
+     * 而且 DB 里存的还是 5472×3648，卡片按横图排版，方向也是侧着的。
      */
     let ori = Number(meta.orientation) || 1;
     if (ori === 1 && isRawExt(ext)) ori = await sourceOrientation(absPath);

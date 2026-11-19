@@ -1,5 +1,4 @@
 import { adjustImage, cropImage, normalizeAdjust } from './lib/edit.js';
-import { watermarkImage } from './lib/watermark.js';
 import { getImage } from './library.js';
 import { getLibraryGeneration } from './db.js';
 import { createJob, finishJob, jobProgress } from './jobs.js';
@@ -16,7 +15,7 @@ const state = {
   total: 0,
   done: 0,
   failed: 0,
-  op: '', // crop | adjust | watermark
+  op: '', // crop | adjust
   label: '',
   currentId: null,
   currentTitle: '',
@@ -50,18 +49,10 @@ export function editJobStatus() {
 export function startEditJob(ids, op, params = {}) {
   if (state.running) throw new Error('已有批量编辑任务正在进行');
   if (!ids.length) throw new Error('没有选中的图片');
-  if (op !== 'crop' && op !== 'adjust' && op !== 'watermark') throw new Error('未知的编辑类型');
+  if (op !== 'crop' && op !== 'adjust') throw new Error('未知的编辑类型');
   const list = [...new Set(ids.map(Number).filter((n) => Number.isFinite(n) && n > 0))];
   if (!list.length) throw new Error('没有选中的图片');
   // 保存方式：'copy' 时目录可以留空 —— persistEdit 会把副本写到各自原图旁边
-  if (op === 'watermark') {
-    // 批量也要在启动前拦住「什么都没选」：否则会变成 N 条一模一样的失败记录
-    const hasStyle = params.style && params.style !== 'none';
-    const hasFrame = params.frame && params.frame !== 'none';
-    if (!hasStyle && !hasFrame) throw new Error('请先选择一个水印样式或相框样式');
-    const hasFields = Array.isArray(params.fields) && params.fields.length > 0;
-    if (hasStyle && !hasFields && !params.logo) throw new Error('一项信息都没选：请至少勾选一个要显示的拍摄信息，或打开「品牌 logo」');
-  }
   const saveMode = params.saveMode === 'copy' ? 'copy' : 'overwrite';
   // 逐张框选：裁切台允许每张图单独框，rects = { imageId: {x,y,w,h} }（归一化）
   const rects =
@@ -71,9 +62,7 @@ export function startEditJob(ids, op, params = {}) {
   const label =
     (op === 'crop'
       ? `裁切 ${rects ? '逐张框选' : params.ratio && params.ratio !== 'free' ? params.ratio : '自由框'}`
-      : op === 'watermark'
-        ? `${params.frame && params.frame !== 'none' ? '相框' : ''}${params.style && params.style !== 'none' ? '水印' : ''} 合成`
-        : 'Camera Raw 调色') + (saveMode === 'copy' ? '（另存副本）' : '');
+      : 'Camera Raw 调色') + (saveMode === 'copy' ? '（另存副本）' : '');
   Object.assign(state, {
     running: true,
     cancelled: false,
@@ -94,9 +83,7 @@ export function startEditJob(ids, op, params = {}) {
   const normalized =
     op === 'adjust'
       ? { ...normalizeAdjust(params), ...saveOpts }
-      : op === 'watermark'
-        ? { ...params, ...saveOpts }
-        : {
+      : {
           ratio: params.ratio,
           rect: params.rect,
           rects,
@@ -137,8 +124,6 @@ async function run(ids, op, params) {
         // 逐张框选时用该图自己的框；没有则退回统一的 ratio 居中
         const per = params.rects ? params.rects[id] || params.rects[String(id)] || null : null;
         await cropImage(id, per ? { ...params, ratio: 'free', rect: per } : params);
-      } else if (op === 'watermark') {
-        await watermarkImage(id, params);
       } else {
         await adjustImage(id, params);
       }

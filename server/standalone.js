@@ -2,19 +2,17 @@
  * 独立服务进程入口。
  *
  * 桌面端不再把 Express 起在 Electron 主进程里，而是 utilityProcess 拉起
- * 这个文件：SQLite / sharp / 采集 / AI 全在这一侧，主进程只做窗口与系统集成。
+ * 这个文件：SQLite / sharp / 导入 / AI 全在这一侧，主进程只做窗口与系统集成。
  * 好处是「服务端卡住或崩掉」不会再拖死窗口消息循环，主进程也能单独重启它。
  *
  * 与父进程的约定（parentPort 或 child_process IPC）：
  *   → { type: 'ready', port, token, storageDir, settings, pid }
  *   → { type: 'settings', settings }        设置变了（主进程要跟着改代理/目录/自启）
- *   → { type: 'live', cfg }                 动态壁纸配置变了
  *   → { type: 'fatal', error }              启动失败，父进程据此提示/重试
  *   ← { type: 'shutdown' }                  父进程要求优雅退出
  *   ← { type: 'ping' }                      → { type:'pong' }
  */
 import { settingsBus } from './lib/settings-bus.js';
-import { liveBus } from './live-bus.js';
 
 const isDesktop = process.env.TUKU_DESKTOP === '1';
 
@@ -143,13 +141,12 @@ async function main() {
   const { syncLanSetting } = await import('./lib/lan.js');
   await syncLanSetting(snapshot()).catch((err) => console.error('[lan] 恢复投送开关失败', err?.message || err));
 
-  // 主进程需要「设置 / 动态壁纸」这两类本地能力才能跟上服务端状态
+  // 主进程需要「设置」这类本地能力才能跟上服务端状态
   settingsBus.on('changed', (settings) => {
     channel.send({ type: 'settings', settings });
     // toggle 路由也会调一次，syncLanSetting 是幂等的
     syncLanSetting(settings).catch((err) => console.error('[lan] 同步投送开关失败', err?.message || err));
   });
-  liveBus.on('changed', (cfg) => channel.send({ type: 'live', cfg }));
 
   channel.onMessage((msg) => {
     if (msg?.type === 'shutdown') return shutdown('parent-request');

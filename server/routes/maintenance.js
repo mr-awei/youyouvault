@@ -19,7 +19,6 @@ import { pruneGhostFolders } from '../folders.js';
 import { cleanOrphans, scanOrphans } from '../lib/integrity.js';
 import { checkForeignKeys, foreignKeyStatus } from '../db/foreign-keys.js';
 import { readSidecar } from '../lib/xmp.js';
-import { parseExif } from '../lib/exif.js';
 
 function dbFilePath() {
   try {
@@ -326,65 +325,6 @@ export function register(app, ctx) {
   );
 
   /**
-   * 拍摄地点：地图视图的数据源。
-   * precision 是「合并到小数点后几位」——0.1° 约 11km，足够把同一城市的照片归到一个点；
-   * 太细会让地图满是互相重叠的圆点。coverId 给地图弹出的小缩略图用。
-   */
-  app.get('/api/maintenance/geo-points', (req, res) => {
-    const precision = Math.max(0, Math.min(3, Number(req.query.precision) || 1));
-    const rows = db
-      .prepare(
-        `SELECT ROUND(gps_lat, ?) AS lat, ROUND(gps_lon, ?) AS lon, COUNT(*) AS n, MIN(id) AS coverId
-           FROM images
-          WHERE gps_lat IS NOT NULL AND gps_lon IS NOT NULL
-          GROUP BY lat, lon
-          ORDER BY n DESC
-          LIMIT 800`
-      )
-      .all(precision, precision);
-    const total = Number(
-      db.prepare('SELECT COUNT(*) AS n FROM images WHERE gps_lat IS NOT NULL AND gps_lon IS NOT NULL').get()?.n || 0
-    );
-    res.json({ ok: true, precision, total, points: rows });
-  });
-
-  /**
-   * 补算历史素材的 GPS：老库导入时没有落经纬度列，地图上就一片空白。
-   * 按批处理并标记 gps_checked，避免每点一次就把没 GPS 的图重读一遍。
-   */
-  app.post(
-    '/api/maintenance/gps-backfill',
-    asyncRoute(async (req, res) => {
-      const limit = Math.max(1, Math.min(500, Number(req.body?.limit) || 200));
-      const rows = db
-        .prepare(
-          `SELECT id, abs_path FROM images
-            WHERE gps_checked = 0 AND abs_path <> '' ORDER BY id DESC LIMIT ?`
-        )
-        .all(limit);
-      let found = 0;
-      for (const row of rows) {
-        let lat = null;
-        let lon = null;
-        try {
-          const meta = await sharp(row.abs_path, { failOn: 'none' }).metadata();
-          const exif = parseExif(meta.exif);
-          if (Number.isFinite(Number(exif.lat)) && Number.isFinite(Number(exif.lon))) {
-            lat = Number(exif.lat);
-            lon = Number(exif.lon);
-            found++;
-          }
-        } catch {
-          /* 文件缺失/读不出 EXIF：标记已检查，别反复试 */
-        }
-        db.prepare('UPDATE images SET gps_lat = ?, gps_lon = ?, gps_checked = 1 WHERE id = ?').run(lat, lon, row.id);
-      }
-      const remain = Number(db.prepare('SELECT COUNT(*) AS n FROM images WHERE gps_checked = 0').get()?.n || 0);
-      res.json({ ok: true, scanned: rows.length, found, remain });
-    })
-  );
-
-  /**
    * 从 XMP sidecar 导入元数据。
    *
    * 出去的方向（改标签 → 写 sidecar）在 PATCH 里做完了；这里是回来的方向：
@@ -448,7 +388,7 @@ export function register(app, ctx) {
   /**
    * 一致性守卫：孤儿行对账。
    * 外键（server/db/foreign-keys.js）挡住的是「今后」的孤儿；外键上线之前的老库
-   * 以及刻意不建外键的留档表（trash / wallpaper_log / feedback）还会带着历史坏账 ——
+   * 以及刻意不建外键的留档表（trash / feedback）还会带着历史坏账 ——
    * 它们不报错，但会让统计虚高、回收站里出现点开是空白的条目。
    * GET 只扫描（安全）；POST 才真删，传 dryRun:true 可先看会删多少。
    */

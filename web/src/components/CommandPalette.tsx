@@ -78,7 +78,6 @@ export default function CommandPalette({
       ['font', i18n.t('k8456bc40')],
       ['model', i18n.t('kd9b444f7')],
       ['design', i18n.t('kfdb21fa1')],
-      ['bookmark', i18n.t('k46779389')],
     ];
     rows.push(set({ kind: 'all' }, i18n.t('k97809a52')));
     for (const [k, label] of kinds) rows.push(set({ kind: k }, i18n.t('k71388c2a', { p0: label })));

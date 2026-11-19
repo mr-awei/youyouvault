@@ -420,7 +420,7 @@ export default function Tidy({ onToast, onLibraryChanged, filters, folderId, sel
     }
   };
 
-  /** 补算主体哈希（白底抠图归一化 pHash，相似分组更准）：分批循环到算完 */
+  /** 补算主体哈希（白底主体裁切归一化 pHash，相似分组更准）：分批循环到算完 */
   const runSubject = async () => {
     if (!stats?.noObjHash) return onToast(i18n.t('kb5c85d23'));
     setBusy('subject');
@@ -820,7 +820,7 @@ export default function Tidy({ onToast, onLibraryChanged, filters, folderId, sel
         <div className="hint" style={{ marginBottom: 10, lineHeight: 1.9 }}>
           · 库内共 {stats?.total ?? '…'} 张，已评分 {stats?.rated ?? 0} 张
           <br />          · 缺主色：{stats?.noDominant ?? '…'} 张（主色用于「找同色」与颜色筛选）
-          <br />· 缺主体哈希：{stats?.noObjHash ?? '…'} 张（白底抠图后重算指纹，让相似分组不再被白背景干扰）
+          <br />· 缺主体哈希：{stats?.noObjHash ?? '…'} 张（白底去背后重算指纹，让相似分组不再被白背景干扰）
           <br />· 缺 AI 描述：{stats?.noAiDesc ?? '…'} 张（AI 描述会进入搜索索引，可搜「红裙 舞台」这类自然语言）
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

@@ -9,10 +9,10 @@ import InpaintTab from './InpaintTab';
 import i18n from '../i18n';
 
 /**
- * 素材工具箱：把「检查器 / OCR / 来源 / 版本 / 多区域裁切」收在一个浮层里。
+ * 素材工具箱：把「检查器 / OCR / 版本 / 多区域裁切 / 修复」收在一个浮层里。
  * 放大图后按需打开，不占常驻界面；每一项都显示真实结果或明确的不可用原因。
  */
-export type ToolkitTab = 'info' | 'ocr' | 'source' | 'versions' | 'regions' | 'inpaint';
+export type ToolkitTab = 'info' | 'ocr' | 'versions' | 'regions' | 'inpaint';
 
 interface Props {
   item: ImageItem;
@@ -26,7 +26,6 @@ interface Props {
 const TABS: { key: ToolkitTab; label: string; hint: string }[] = [
   { key: 'info', label: i18n.t('k9478f662'), hint: i18n.t('kbb331a9a') },
   { key: 'ocr', label: i18n.t('k08dc029e'), hint: i18n.t('k0da211d8') },
-  { key: 'source', label: i18n.t('k26ca20b1'), hint: i18n.t('k54276f58') },
   { key: 'versions', label: i18n.t('k6fdd8590'), hint: i18n.t('k1254ee27') },
   { key: 'regions', label: i18n.t('k3d38e999'), hint: i18n.t('k2dd70064') },
   { key: 'inpaint', label: i18n.t('kd971fed4'), hint: i18n.t('kac62cace') },
@@ -72,7 +71,6 @@ export default function ImageToolkit({ item, tab = 'info', onClose, onToast, onR
         <div className="modal-body tk-body">
           {active === 'info' && <InfoTab item={item} onToast={onToast} />}
           {active === 'ocr' && <OcrTab item={item} onToast={onToast} />}
-          {active === 'source' && <SourceTab item={item} onToast={onToast} onReplaced={onReplaced} />}
           {active === 'versions' && <VersionsTab item={item} onToast={onToast} onReplaced={onReplaced} />}
           {active === 'regions' && <RegionsTab item={item} onToast={onToast} />}
           {active === 'inpaint' && <InpaintTab item={item} onToast={onToast} onReplaced={onReplaced} />}
@@ -255,156 +253,6 @@ function OcrTab({ item, onToast }: { item: ImageItem; onToast?: (m: string, kind
           {meta.chars ? i18n.t('k1649dbd1', { p0: meta.chars }) : ''}
         </div>
       )}
-    </div>
-  );
-}
-
-/* --------------------------------- 来源 --------------------------------- */
-
-function SourceTab({
-  item,
-  onToast,
-  onReplaced,
-}: {
-  item: ImageItem;
-  onToast?: (m: string, kind?: 'info' | 'error') => void;
-  onReplaced?: (it: ImageItem) => void;
-}) {
-  const [providers, setProviders] = useState<Awaited<ReturnType<typeof api.searchProviders>> | null>(null);
-  const [busy, setBusy] = useState('');
-  const [results, setResults] = useState<
-    { similarity: number; title: string; detail: string; thumb: string; link: string }[]
-  >([]);
-  const [note, setNote] = useState('');
-  const [up, setUp] = useState<Awaited<ReturnType<typeof api.upgradePreview>> | null>(null);
-  const [upErr, setUpErr] = useState('');
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .searchProviders(item.id)
-      .then((r) => alive && setProviders(r))
-      .catch((e) => alive && setNote((e as Error).message));
-    return () => {
-      alive = false;
-    };
-  }, [item.id]);
-
-  const run = async (engine: string) => {
-    setBusy(engine);
-    setResults([]);
-    setNote('');
-    try {
-      const r = await api.reverseSearch(item.id, engine);
-      if (r.url) {
-        window.open(r.url, '_blank', 'noopener');
-        setNote(r.note || i18n.t('k1a50fee7'));
-      } else {
-        setResults(r.results || []);
-        setNote(r.note || '');
-      }
-    } catch (err) {
-      setNote((err as Error).message);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const checkUpgrade = async () => {
-    setUpErr('');
-    setBusy('upgrade');
-    try {
-      setUp(await api.upgradePreview(item.id));
-    } catch (err) {
-      setUpErr((err as Error).message);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const doUpgrade = async () => {
-    if (!up?.found) return;
-    setBusy('replace');
-    try {
-      const r = await api.upgradeSource(item.id);
-      onReplaced?.(r.item);
-      onToast?.(i18n.t('kdf78ff5f', { p0: r.after.width, p1: r.after.height, p2: r.before.width, p3: r.before.height }));
-      setUp(null);
-    } catch (err) {
-      setUpErr((err as Error).message);
-    } finally {
-      setBusy('');
-    }
-  };
-
-  return (
-    <div className="tk-source">
-      <h4 className="section-title">{i18n.t('kc30d6c94')}</h4>
-      <div className="tk-providers">
-        {(providers?.providers || []).map((p) => (
-          <div className={`tk-provider${p.ready ? '' : ' off'}`} key={p.id}>
-            <div>
-              <b>{p.name}</b>
-              <div className="tk-hint">{p.ready ? p.desc : p.reason}</div>
-            </div>
-            <button className="btn sm" disabled={!p.ready || !!busy} onClick={() => run(p.id)}>
-              {busy === p.id ? i18n.t('kcf978c02') : p.kind === 'upload' ? i18n.t('k01fcc2de') : i18n.t('kd7098f50')}
-            </button>
-          </div>
-        ))}
-        {!providers && !note && <div className="tk-hint">{i18n.t('kcebe7f81')}</div>}
-      </div>
-      {note && <div className="tk-hint">{note}</div>}
-      {results.length > 0 && (
-        <div className="tk-results">
-          {results.map((r, i) => (
-            <a
-              key={`${r.link}-${i}`}
-              className="tk-result"
-              href={r.link || undefined}
-              target="_blank"
-              rel="noreferrer noopener"
-              onClick={(e) => {
-                if (!r.link) e.preventDefault();
-              }}
-            >
-              {r.thumb ? <img src={r.thumb} alt="" loading="lazy" /> : <span className="tk-noimg">{i18n.t('k09483fca')}</span>}
-              <div>
-                <b>{r.title}</b>
-                <div className="tk-hint">
-                  相似度 {r.similarity.toFixed(1)}%{r.detail ? ` · ${r.detail}` : ''}
-                </div>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
-
-      <h4 className="section-title" style={{ marginTop: 18 }}>
-        {i18n.t('k88655e7e')}
-      </h4>
-      <div className="tk-hint" style={{ marginBottom: 8 }}>
-        {i18n.t('k3d1287d7')}
-      </div>
-      <div className="tk-row">
-        <button className="btn sm" disabled={!!busy} onClick={checkUpgrade}>
-          <IconRefresh /> {busy === 'upgrade' ? i18n.t('k396c315c') : i18n.t('ka57934f4')}
-        </button>
-        {up?.found && (
-          <button className="btn sm primary" disabled={!!busy} onClick={doUpgrade}>
-            {busy === 'replace' ? i18n.t('k1b5e17ec') : i18n.t('k95b6a7df')}
-          </button>
-        )}
-      </div>
-      {up && (
-        <div className="tk-hint">
-          {up.found
-            ? i18n.t('k2c1c049e', { p0: up.before.width, p1: up.before.height, p2: up.after?.width, p3: up.after?.height })
-            : i18n.t('k4dfb3bed', { p0: up.before.width, p1: up.before.height })}
-          {!up.found && up.tried.length > 0 && i18n.t('ka609d215', { p0: up.tried.length })}
-        </div>
-      )}
-      {upErr && <div className="tk-warn">{upErr}</div>}
     </div>
   );
 }

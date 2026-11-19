@@ -138,8 +138,6 @@ export default function EnhanceSection({ settings, patch, onToast }: Props) {
   const [sr, setSr] = useState<Awaited<ReturnType<typeof api.aiSrStatus>> | null>(null);
   // 本地偏好模型状态
   const [pref, setPref] = useState<Awaited<ReturnType<typeof api.prefStatus>> | null>(null);
-  // AI 去背景模型状态
-  const [matting, setMatting] = useState<Awaited<ReturnType<typeof api.mattingStatus>> | null>(null);
   const [remoteTest, setRemoteTest] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [remoteTesting, setRemoteTesting] = useState<string>('');
   // 本机硬件 + 各模型功能的最低配置判定（服务端 /api/hardware）
@@ -176,7 +174,6 @@ export default function EnhanceSection({ settings, patch, onToast }: Props) {
     api.aiUpscaleStatus().then(setAiUp).catch(quiet);
     api.aiSrStatus().then(setSr).catch(quiet);
     api.prefStatus().then(setPref).catch(quiet);
-    api.mattingStatus().then(setMatting).catch(quiet);
     // 硬件探测要起一次 PowerShell，读不到就留空（界面显示「读取失败」，不影响其它设置）
     loadHardware().then(setHw).catch(quiet);
   }, []);
@@ -186,24 +183,10 @@ export default function EnhanceSection({ settings, patch, onToast }: Props) {
   srLoadingRef.current = !!sr?.loading;
   const aiUpDownloadingRef = useRef(false);
   aiUpDownloadingRef.current = !!aiUp?.downloading;
-  const mattingDownloadingRef = useRef(false);
-  mattingDownloadingRef.current = !!matting?.downloading;
 
   useEffect(() => {
     const off = subscribeEvents('job', (d) => {
       try {
-        // 去背景模型下载进度已并入 job 快照（服务端运行期 5s 心跳推一帧），
-        // 不再每 1s 打一次 mattingStatus 接口
-        if (d?.matting) {
-          const st = d.matting;
-          setMatting(st);
-          // 以前失败只写进状态里不弹提示，用户只看到按钮回到「未下载」，不知道败在哪
-          if (mattingDownloadingRef.current && !st.downloading) {
-            if (st.error) onToast(i18n.t('ka9752541', { p0: st.error }), 'error');
-            else onToast(st.message || i18n.t('k912dde57'));
-          }
-          mattingDownloadingRef.current = !!st.downloading;
-        }
         if (d?.sr) {
           const st = d.sr;
           setSr(st);
@@ -473,101 +456,6 @@ export default function EnhanceSection({ settings, patch, onToast }: Props) {
             : i18n.t('k028a624d')}
           </span>
           </div>
-
-          {/* AI 去背景 */}
-      <div className="settings-subtitle" style={{ marginTop: 14 }}>
-        {i18n.t('k83bcedb8')}
-      </div>
-      <div className="hint" style={{ marginBottom: 8 }}>
-        按质量自动选档：装了旗舰档（BEN2，1024px）就用它，其次精细档（BiRefNet lite），都没有才用轻量档（U-2-Net，320px）。
-        发丝、绒毛、玻璃与半透明边缘，旗舰 / 精细档明显更干净（代价是 CPU 单张几秒）；
-        <strong>{i18n.t('k4136ffa7')}</strong>{i18n.t('k1374cb80')}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {(matting?.profiles || []).map((p) => {
-          const isThis = matting?.downloading && matting?.installing === p.id;
-          return (
-            <div
-              key={p.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                flexWrap: 'wrap',
-                border: '1px solid var(--border, #e6e8eb)',
-                borderRadius: 6,
-                padding: '6px 10px',
-              }}
-            >
-              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{p.label}</span>
-              {p.active && matting?.downloaded && (
-                <span
-                  style={{
-                    fontSize: 10.5,
-                    padding: '1px 6px',
-                    borderRadius: 4,
-                    background: 'rgba(37,99,235,.1)',
-                    color: '#2563eb',
-                  }}
-                >
-                  {i18n.t('kbe4cd65b')}
-                </span>
-              )}
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                {p.installed ? i18n.t('kef33d77f', { p0: Math.round(p.size / 1024 / 1024) }) : i18n.t('kc306a498', { p0: Math.round(p.sizeHint / 1024 / 1024) })}
-              </span>
-              <button
-                className={`btn sm${p.installed ? '' : ' primary'}`}
-                disabled={!!matting?.downloading}
-                style={{ marginLeft: 'auto' }}
-                onClick={async () => {
-                  try {
-                    // 后台下载：接口立刻返回，进度靠 SSE / 轮询（以前这个请求要等整包下完）
-                    await api.mattingInstall(p.id);
-                    setMatting(await api.mattingStatus());
-                    onToast(i18n.t('k4e516b04', { p0: p.label }));
-                  } catch (err) {
-                    onToast((err as Error).message, 'error');
-                  }
-                }}
-              >
-                {isThis ? i18n.t('ke8ffc780', { p0: matting?.progress }) : p.installed ? i18n.t('k754569be') : i18n.t('kf26ef914')}
-              </button>
-              {isThis && (
-                <button
-                  className="btn sm"
-                  onClick={async () => {
-                    try {
-                      await api.mattingCancel();
-                      onToast(i18n.t('k8b228e0b'));
-                      setMatting(await api.mattingStatus());
-                    } catch (err) {
-                      onToast((err as Error).message, 'error');
-                    }
-                  }}
-                >
-                  {i18n.t('k625fb26b')}
-                </button>
-              )}
-            </div>
-          );
-        })}
-        {!matting?.profiles?.length && (
-          <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
-            {i18n.t('kc7e088a2')}
-          </span>
-        )}
-      </div>
-      <div className="hint" style={{ marginTop: 6 }}>
-        {matting?.downloaded
-          ? i18n.t('k3676697f')
-          : i18n.t('ka18ce425')}
-      </div>
-      {!!matting?.error && (
-        <div className="hint" style={{ color: 'var(--err, #e5484d)', marginTop: 6 }}>
-          {matting.error}
-        </div>
-      )}
 
       {/* 本地偏好模型：个性化推荐 */}
       <div className="settings-subtitle" style={{ marginTop: 14 }}>
@@ -974,12 +862,12 @@ export default function EnhanceSection({ settings, patch, onToast }: Props) {
       <br />{i18n.t('kcfd66f7b')}
     </div>
 
-      {/* 硬件门槛：抠图 / 超分要跑本地模型，机器不够时得先让用户看见差距 */}
+      {/* 硬件门槛：超分 / 语义检索要跑本地模型，机器不够时得先让用户看见差距 */}
       <div className="settings-subtitle" style={{ marginTop: 18 }}>
         {i18n.t('ka8145dd5')}
       </div>
       <div className="hint" style={{ marginBottom: 8 }}>
-        抠图、AI 超分、人脸扫描、语义检索都是本地跑模型：内存不够会卡死或中途失败，AI 超分还必须有能跑
+        AI 超分、语义检索都是本地跑模型：内存不够会卡死或中途失败，AI 超分还必须有能跑
         Vulkan 的显卡。达不到最低配置时，点功能会先弹一张对照表；配置偏低但仍能试的，会给你「仍然继续」。
       </div>
       {hw ? (

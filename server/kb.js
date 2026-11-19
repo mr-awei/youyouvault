@@ -4,12 +4,11 @@ import * as ai from './ai.js';
 
 /**
  * 本地知识库：把「用户删除的不满意图片」沉淀为可执行规则，
- * 用于给图库图片打分、排序降权，以及在采集阶段自动过滤同类图片。
+ * 用于给图库图片打分、排序降权，以及在入库阶段提示同类图片。
  */
 
 export const RULE_TYPES = {
   source: '来源',
-  keyword: '关键词',
   resolution: '分辨率',
   aspect: '宽高比',
   tag: '标签',
@@ -21,9 +20,7 @@ const REASON_LABELS = {
   blur: '模糊 / 低清',
   lowres: '分辨率太低',
   watermark: '有水印或平台 Logo',
-  notHer: '不是目标人物',
   duplicate: '重复画面',
-  tinyPerson: '人物画面占比过小',
   faceCovered: '脸被遮挡 / 看不清',
   expression: '表情不好 / 闭眼',
   pose: '动作 / 姿态别扭',
@@ -36,7 +33,6 @@ const REASON_LABELS = {
   overedited: '修图过度 / 不自然',
   outfit: '穿搭 / 造型不喜欢',
   era: '不是我喜欢的时期',
-  notWallpaper: '不适合做壁纸（比例/方向）',
   ad: '广告或宣传图',
   other: '其他',
 };
@@ -132,7 +128,7 @@ export function deleteRule(id) {
 
 /**
  * @param {boolean} [skipStatsRules] 为真时不生成「来源 / 关键词」这类连坐规则。
- *   壁纸「不喜欢」走这里：只按推断出的具体原因（噪点/光线/闭眼/动作…）建规则，
+ *   用户点「不喜欢」走这里：只按推断出的具体原因（噪点/光线/闭眼/动作…）建规则，
  *   不能因为一张图不喜欢就给整个来源或关键词降分。
  */
 export function addFeedback({ imageId, reasons = [], note = '', aiAnalysis = '', skipStatsRules = false }) {
@@ -193,9 +189,6 @@ function deriveRules(row, reasons) {
         upsertRule({ type: 'ai_term', value: '水印', label: '含水印或平台 Logo', weight: 22 });
         upsertRule({ type: 'ai_term', value: 'Logo', label: '含水印或平台 Logo', weight: 18 });
         break;
-      case 'notHer':
-        upsertRule({ type: 'ai_term', value: '非本人', label: '疑似不是目标人物', weight: 30 });
-        break;
       case 'duplicate':
         if (row.phash) {
           upsertRule({ type: 'phash', value: row.phash, label: '与已删除的重复画面相似', weight: 25 });
@@ -203,9 +196,6 @@ function deriveRules(row, reasons) {
         break;
       case 'composition':
         upsertRule({ type: 'ai_term', value: '构图', label: '构图不佳', weight: 12 });
-        break;
-      case 'tinyPerson':
-        upsertRule({ type: 'ai_term', value: '人物过小', label: '人物画面占比过小', weight: 15 });
         break;
       case 'faceCovered':
         upsertRule({ type: 'ai_term', value: '遮挡', label: '脸被遮挡或看不清', weight: 20 });
@@ -246,16 +236,14 @@ function deriveRules(row, reasons) {
   }
 }
 
-/** 同一来源 / 关键词被反复差评时，自动形成更强的规则（越用越准） */
+/** 同一来源被反复差评时，自动形成更强的规则（越用越准） */
 function reinforceByStats() {
   const rows = db.prepare('SELECT snapshot FROM feedback').all();
   const sourceCount = new Map();
-  const keywordCount = new Map();
   for (const r of rows) {
     try {
       const s = JSON.parse(r.snapshot || '{}');
       if (s.source) sourceCount.set(s.source, (sourceCount.get(s.source) || 0) + 1);
-      if (s.keyword) keywordCount.set(s.keyword, (keywordCount.get(s.keyword) || 0) + 1);
     } catch {
       /* ignore */
     }
@@ -266,16 +254,6 @@ function reinforceByStats() {
         type: 'source',
         value: source,
         label: `来源「${source}」被差评 ${count} 次`,
-        weight: Math.min(35, 8 + count * 2),
-      });
-    }
-  }
-  for (const [keyword, count] of keywordCount) {
-    if (count >= 3) {
-      upsertRule({
-        type: 'keyword',
-        value: keyword,
-        label: `关键词「${keyword}」被差评 ${count} 次`,
         weight: Math.min(35, 8 + count * 2),
       });
     }
@@ -310,11 +288,6 @@ export function matchRule(image, rule, aiText = '') {
   switch (rule.type) {
     case 'source':
       return image.source === rule.value;
-    case 'keyword': {
-      const kw = image.keyword || '';
-      const v = rule.value || '';
-      return !!kw && !!v && (kw === v || kw.includes(v) || v.includes(kw));
-    }
     case 'resolution':
       return Math.max(image.width || 0, image.height || 0) < Number(rule.value || 0);
     case 'aspect': {
@@ -436,21 +409,20 @@ const SUMMARIZE_PROMPT = `你是一个图片库的知识库分析师。给你两
 2) 当前知识库里的全部规则。
 
 你的任务是输出一份【整理后的完整规则集】，要求：
-- 合并重复与冗余：同一关键词/来源的多个相近规则（如「人物 演唱会」被差评 25 次和 21 次两条）合并为一条，label 概括总差评次数，weight 取较高值；
+- 合并重复与冗余：同一来源的多个相近规则合并为一条，label 概括总差评次数，weight 取较高值；
 - 删除无效规则：乱码（如 value 为 "????"）、无意义或互相矛盾的条目；
-- 去掉被更通用规则覆盖的条目（如多条细分关键词可归并为少数几条核心关键词）；
+- 去掉被更通用规则覆盖的条目；
 - 再结合反馈归纳确实需要的新规则；
 - 保持精炼：上限 12 条，宁缺毋滥。
 
 输出严格 JSON：
 {"rules":[{"type":"...","value":"...","label":"中文说明","weight":5-30}],"summary":"50 字以内说明做了哪些合并与清理"}
 可选 type：
-- source：某来源整体质量差，value ∈ bing/baidu/sogou/wallhaven/local
-- keyword：某关键词采集质量差，value 为关键词原文
+- source：某来源整体质量差，value ∈ local/lan
 - resolution：分辨率阈值，value 为长边像素数字（低于它容易不满意）
 - aspect：宽高比区间，value 形如 "0.4:0.8"（竖图约 0.4-0.8，横图约 1.2-2.5，方图约 0.9-1.1）
 - tag：含某标签不喜欢，value 为标签
-- ai_term：AI 看图描述中出现该词说明有问题，value 如 水印 / 模糊 / Logo / 非本人 / 构图
+- ai_term：AI 看图描述中出现该词说明有问题，value 如 水印 / 模糊 / Logo / 构图
 enabled 不用输出，系统沿用现有开关状态。不要臆造反馈中未出现的来源或关键词。`;
 
 export async function summarizeWithAI() {
@@ -524,30 +496,6 @@ export async function summarizeWithAI() {
     summary: result?.summary || '',
     stats,
   };
-}
-
-export async function suggestions() {
-  const rules = listRules().filter((r) => r.enabled);
-  const stats = feedbackStats();
-  if (!ai.aiStatus().ready) throw new Error('AI 未配置');
-  const text = await ai.chat(
-    [
-      {
-        role: 'system',
-        content:
-          '你是本图库的采集顾问。根据知识库规则与统计，给出下一步采集建议：推荐关键词、应避开的来源/参数、以及筛选阈值。用中文分条列出，控制在 200 字内。',
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          rules: rules.map((r) => ({ type: r.type, value: r.value, label: r.label, hits: r.hits, weight: r.weight })),
-          stats,
-        }),
-      },
-    ],
-    { timeout: 60000 }
-  );
-  return { ok: true, text: String(text) };
 }
 
 export function feedbackStats() {

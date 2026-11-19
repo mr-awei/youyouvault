@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * 导入命名模板：采集、拖拽 / 粘贴、手机投送、扩展、批量入库共用同一套渲染。
+ * 导入命名模板：拖拽 / 粘贴、手机投送、批量入库共用同一套渲染。
  *
  * 与「批量重命名」(server/routes/organize.js) 的区别：那个是入库后改已有文件，
  * 这里是在落盘前决定文件名，所以必须自己处理扩展名、非法字符与重名。
@@ -15,8 +15,8 @@ const INVALID = /[\\/:*?"<>|\r\n\t]/g;
 /** 可用占位符（设置页据此生成说明） */
 export const NAME_TEMPLATE_TOKENS = [
   { token: '{name}', desc: '原文件名（不含扩展名）' },
-  { token: '{keyword}', desc: '采集关键词 / 导入关键词' },
-  { token: '{source}', desc: '来源（bing、weibo、lan…）' },
+  { token: '{keyword}', desc: '导入关键词' },
+  { token: '{source}', desc: '来源（local、lan…）' },
   { token: '{width}', desc: '宽度' },
   { token: '{height}', desc: '高度' },
   { token: '{date}', desc: '日期 YYYYMMDD' },
@@ -66,7 +66,7 @@ export function renderNameTemplate(tpl, ctx = {}) {
   const pad = Math.min(8, Math.max(1, Number(ctx.pad) || 4));
   const values = {
     name: original || '素材',
-    keyword: safe(ctx.keyword) || '壁纸',
+    keyword: safe(ctx.keyword) || '图库',
     source: safe(ctx.source) || 'local',
     width: String(Number(ctx.width) || 0),
     height: String(Number(ctx.height) || 0),

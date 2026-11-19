@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, desktop, quiet } from '../../api';
+import { api, quiet } from '../../api';
 import { confirmDialog } from '../../components/Dialogs';
-import type { SourceInfo } from '../../api';
 import type {
   AiPreset,
   AiStatus,
-  Keyword,
   NetworkConfig,
   Settings as SettingsType,
 } from '../../types';
@@ -22,21 +20,17 @@ import i18n from '../../i18n';
 export type SectionKey =
   | 'general'
   | 'guide'
-  | 'crawl'
   | 'ai'
-  | 'wallpaper'
   | 'network'
-  | 'extension'
-  | 'api'
   | 'data'
   | 'tags'
   | 'shortcut'
   | 'enhance'
   | 'plugins'
-  | 'market'
   | 'lan'
   | 'tasks'
   | 'models'
+  | 'license'
   | 'about';
 
 export type SettingsForm = ReturnType<typeof useSettingsForm>;
@@ -52,14 +46,7 @@ export function useSettingsForm({
   const [settings, setSettings] = useState<SettingsType | null>(null);
   // 脏标记：改动只在「保存设置」时落盘，离开页面 / 关窗口前必须提醒，否则静默丢掉
   const [dirty, setDirty] = useState(false);
-  const [keywords, setKeywords] = useState<Keyword[]>([]);
-  const [newKw, setNewKw] = useState('');
-  const [wbLogin, setWbLogin] = useState(false);
-  // 采集源列表由后端下发（唯一事实来源）；这里只缓存展示用的名字与提示
-  const [sourceList, setSourceList] = useState<SourceInfo[]>([]);
-  // 微博 Cookie 输入草稿：已保存的凭据不会回显（服务端脱敏），留空保存 = 保持不变
-  const [wbCookieDraft, setWbCookieDraft] = useState('');
-  // AI API Key 同理：password 输入框只当「填写新 Key」用，留空保存 = 保持不变
+  // AI API Key：password 输入框只当「填写新 Key」用，留空保存 = 保持不变
   const [aiKeyDraft, setAiKeyDraft] = useState('');
   const [importing, setImporting] = useState(false);
   const [presets, setPresets] = useState<Record<string, AiPreset>>({});
@@ -85,14 +72,9 @@ export function useSettingsForm({
 
   useEffect(() => {
     api.settings().then(setSettings);
-    api.keywords().then(setKeywords);
     api.aiPresets().then(setPresets).catch(quiet);
     api.aiStatus().then(setAiStatus).catch(quiet);
     api.network().then(setNet).catch(quiet);
-    api
-      .crawlConfig()
-      .then((c) => setSourceList(c.sources.filter((s) => s.kind === 'crawl')))
-      .catch(quiet);
   }, []);
 
   // 任务进度推送（本地导入）→ 订阅 job 事件（原 1.2~1.5s 轮询；sr/aiUp 订阅已迁至 settings/EnhanceSection.tsx）
@@ -206,19 +188,15 @@ export function useSettingsForm({
 
   const save = async () => {
     if (!settings) return;
-    // Cookie / AI Key 都是凭据（服务端已脱敏不回显），只提交输入框里的新草稿；留空 = 保持不变
-    const draft = wbCookieDraft.trim();
+    // AI Key 是凭据（服务端已脱敏不回显），只提交输入框里的新草稿；留空 = 保持不变
     const aiDraft = aiKeyDraft.trim();
-    const payload: SettingsType = draft
-      ? { ...settings, weiboCookie: draft }
-      : ({ ...settings, weiboCookie: '' } as SettingsType);
+    const payload: SettingsType = { ...settings };
     payload.ai = aiDraft ? { ...payload.ai, apiKey: aiDraft } : { ...payload.ai, apiKey: '' };
     const prevDir = settings.storageDir;
     try {
       const saved = await api.saveSettings(payload);
       setSettings(saved);
       setDirty(false);
-      if (draft) setWbCookieDraft('');
       if (aiDraft) setAiKeyDraft('');
       // 换了素材文件夹会触发后台扫描，明确告知用户，避免以为「选了目录却没反应」
       const dirChanged = (saved.storageDir || '') !== (prevDir || '');
@@ -226,18 +204,6 @@ export function useSettingsForm({
       onToast(dirChanged ? i18n.t('k10f282aa') : i18n.t('k669e3a20'));
     } catch (err) {
       onToast(i18n.t('k837dd027', { p0: (err as Error).message }), 'error');
-    }
-  };
-
-  /** 清除服务端已保存的微博 Cookie（显式指令，区别于「留空不改」） */
-  const clearWeiboCookie = async () => {
-    try {
-      const saved = await api.saveSettings({ weiboCookieClear: true });
-      setSettings(saved);
-      setWbCookieDraft('');
-      onToast(i18n.t('k63793f1b'));
-    } catch (err) {
-      onToast((err as Error).message, 'error');
     }
   };
 
@@ -250,64 +216,6 @@ export function useSettingsForm({
       onToast(i18n.t('k9d5a7ff6'));
     } catch (err) {
       onToast((err as Error).message, 'error');
-    }
-  };
-
-  const toggleSource = (key: string) => {
-    setSettings((s) => (s ? { ...s, sources: { ...s.sources, [key]: !s.sources[key] } } : s));
-    setDirty(true);
-  };
-
-  /** 内置浏览器登录微博，自动抓取 Cookie 并保存（桌面端专属） */
-  const weiboLogin = async () => {
-    setWbLogin(true);
-    try {
-      const res = await desktop?.weiboLogin?.();
-      if (res?.ok && res.cookie) {
-        const saved = await api.saveSettings({
-          weiboCookie: res.cookie,
-          weiboUserAgent: res.ua || '',
-        });
-        setSettings(saved);
-        setWbCookieDraft('');
-        onToast(i18n.t('k6ee24734'));
-      } else if (res?.msg) {
-        onToast(res.msg);
-      }
-    } catch (err) {
-      onToast((err as Error).message, 'error');
-    } finally {
-      setWbLogin(false);
-    }
-  };
-
-  const addKeyword = async () => {
-    const text = newKw.trim();
-    if (!text) return;
-    try {
-      const res = await api.addKeyword(text);
-      setKeywords(res.keywords);
-      setNewKw('');
-    } catch (err) {
-      onToast(i18n.t('k5c67c99d', { p0: (err as Error).message }), 'error');
-    }
-  };
-
-  const toggleKeyword = async (k: Keyword) => {
-    try {
-      const res = await api.updateKeyword(k.id, { enabled: k.enabled ? 0 : 1 });
-      setKeywords(res.keywords);
-    } catch (err) {
-      onToast(i18n.t('k6810a0d5', { p0: (err as Error).message }), 'error');
-    }
-  };
-
-  const removeKeyword = async (id: number) => {
-    try {
-      const res = await api.deleteKeyword(id);
-      setKeywords(res.keywords);
-    } catch (err) {
-      onToast(i18n.t('k94229cac', { p0: (err as Error).message }), 'error');
     }
   };
 
@@ -345,8 +253,6 @@ export function useSettingsForm({
 
   return {
     section, setSection, settings, setSettings, dirty, setDirty,
-    keywords, setKeywords, newKw, setNewKw, wbLogin, setWbLogin,
-    sourceList, setSourceList, wbCookieDraft, setWbCookieDraft,
     aiKeyDraft, setAiKeyDraft, importing, setImporting,
     presets, setPresets, models, setModels, aiStatus, setAiStatus,
     testing, setTesting, aiError, setAiError,
@@ -354,7 +260,6 @@ export function useSettingsForm({
     net, setNet, netError, setNetError, testingNet, setTestingNet,
     provider, modelOptions, visionOptions, netModeLabel,
     applyPreset, testAi, fetchModels, patch, setTourHint, save,
-    clearWeiboCookie, clearAiApiKey, toggleSource, weiboLogin,
-    addKeyword, toggleKeyword, removeKeyword, runImport, clearAll,
+    clearAiApiKey, runImport, clearAll,
   };
 }

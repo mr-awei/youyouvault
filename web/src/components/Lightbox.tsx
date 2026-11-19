@@ -4,7 +4,6 @@ import { ADJUST_DEFAULTS, isAdjustDefault } from '../types';
 import { api, BASE, copyImageToClipboard, isDesktop, pickFolder, BUCKET_LABELS, SOURCE_LABELS, formatDate, formatSize, quiet, revealFile } from '../api';
 import { buildASE, buildPngSheet, downloadBlob } from '../lib/palette';
 import ExportDialog from './ExportDialog';
-import WallpaperPreview from './WallpaperPreview';
 import ImageToolkit, { type ToolkitTab } from './ImageToolkit';
 import CompareView from './CompareView';
 import i18n from '../i18n';
@@ -25,7 +24,6 @@ import ColorRoom from './ColorRoom';
 import MediaViewer from './MediaViewer';
 import AnnotationLayer from './AnnotationLayer';
 import CommentsPanel from './CommentsPanel';
-import WatermarkStudio from './WatermarkStudio';
 import ToolbarCustomizer from './ToolbarCustomizer';
 import Select from './Select';
 import { usePinnedActions } from '../lib/pinned';
@@ -35,7 +33,6 @@ const LB_PINNED_DEFAULT = ['anno', 'ocr', 'download'];
 import InfoPanel from './lightbox/InfoPanel';
 import EditOpsPanel from './lightbox/EditOpsPanel';
 import { confirmDialog } from './Dialogs';
-import { ensureHardware } from '../lib/hardware';
 import type { WbSample } from './AdjustPanel';
 import {
   IconClock,
@@ -50,10 +47,8 @@ import {
   IconFilm,
   IconFolder,
   IconGear,
-  IconGlobe,
   IconHeart,
   IconInfo,
-  IconMonitor,
   IconMore,
   IconMusic,
   IconPause,
@@ -62,15 +57,12 @@ import {
   IconRotateCcw,
   IconSquare,
   IconRotateCw,
-  IconScissors,
-  IconSearch,
   IconSliders,
   IconStrip,
   IconSun,
   IconTool,
   IconTrash,
   IconType,
-  IconWallpaper,
   IconWand,
 } from './Icons';
 
@@ -111,8 +103,6 @@ interface Props {
   onToggleFavorite: (item: ImageItem) => void;
   onSaveTags: (item: ImageItem, tags: string[]) => void;
   onDelete: (item: ImageItem) => void;
-  /** style 省略时用设置里的默认铺底方式 */
-  onSetWallpaper: (item: ImageItem, style?: string) => void;
   onReplaceItem: (item: ImageItem) => void;
   /** 标注数量变化，父级更新图库卡片的角标 */
   onAnnotCount?: (id: number, n: number) => void;
@@ -135,8 +125,6 @@ interface Props {
   onOpenStack?: (stackId: number) => void;
   /** 跳到图库并只看某个文件夹（详情面板里点归属夹名） */
   onOpenFolder?: (folderId: number) => void;
-  /** 详情面板里点「人物 #123」：跳到人物页并打开这个人的照片墙 */
-  onGotoPerson?: (personId: number) => void;
 }
 
 const ZOOM_MIN = 1;
@@ -174,7 +162,6 @@ export default function Lightbox({
   onToggleFavorite,
   onSaveTags,
   onDelete,
-  onSetWallpaper,
   onReplaceItem,
   onAnnotCount,
   onEnhance,
@@ -188,7 +175,6 @@ export default function Lightbox({
   library,
   onOpenStack,
   onOpenFolder,
-  onGotoPerson,
 }: Props) {
   const item = items[index];
   const [tagInput, setTagInput] = useState('');
@@ -204,7 +190,6 @@ export default function Lightbox({
   const [chrome, setChrome] = useState(true); // 幻灯片播放时自动隐藏界面
   const [aiDesc, setAiDesc] = useState<{ description?: string; issues?: string[]; quality?: number } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
-  const [matting, setMatting] = useState(false); // 去背景进行中
   const [imgLoaded, setImgLoaded] = useState(false); // 主图解码完成前用缩略图垫底
   const [previewFailed, setPreviewFailed] = useState(false); // 预览图不可用 → 回退原图
   /** 垫底图：优先用上一张成功加载的预览图（比 640 缩略图清楚得多），首次进来才是缩略图 */
@@ -241,7 +226,6 @@ export default function Lightbox({
   // 哪些「更多」里的功能被用户挪到了顶栏（顺序即显示顺序）
   const [pinnedActs, setPinnedActs] = usePinnedActions('lightbox', LB_PINNED_DEFAULT);
   const [tczOpen, setTczOpen] = useState(false); // 自定义工具栏面板
-  const [wmOpen, setWmOpen] = useState(false); // 水印 / 相框工作台
   const [rotOpen, setRotOpen] = useState(false); // 旋转方向菜单（左转 / 右转）
   // 底部详情：默认只留一行摘要，要看完整字段再展开；选择记在本地，下次还按上次的样子
   const [infoOpen, setInfoOpen] = useState(() => localStorage.getItem('tuku:lb-info') === '1');
@@ -253,7 +237,6 @@ export default function Lightbox({
   const [ndOn, setNdOn] = useState(false);
   const [opsOpen, setOpsOpen] = useState(false); // 操作链面板
   const [exportOpen, setExportOpen] = useState(false);
-  const [wpPreviewOpen, setWpPreviewOpen] = useState(false); // 「导出为图片」对话框
   // 默认「另存副本」：第一下保存不该把原图改掉。
   // 开了非破坏编辑则改默认「覆盖原图」——这条路径此时只记操作链，不会真的覆盖
   const [saveMode, setSaveMode] = useState<'overwrite' | 'copy'>('copy');
@@ -741,51 +724,6 @@ export default function Lightbox({
     t.replace(/\.[a-z0-9]{2,5}$/i, '').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 60) || 'palette';
 
   /* ---------------------- 编辑：打开 / 关闭 / 保存 ---------------------- */
-  /**
-   * 抠图：mode='ai' 走 U-2-Net 人像分割（要模型），mode='flat' 走纯底图抠图（零模型）。
-   * AI 模型没装时后端回 409，这里顺手把下载挂上，免得用户还要自己去设置页找。
-   */
-  const runCut = async (mode: 'ai' | 'flat') => {
-    // AI 抠图要吃内存（1024² 输入 + 常驻权重）：不够时先把话说清楚，别让用户等一次 OOM
-    if (mode === 'ai' && !(await ensureHardware('matting'))) return;
-    setMatting(true);
-    try {
-      // 先问一句模型在不在：没下载就直接开始下载并引导，不做一次注定失败的请求
-      if (mode === 'ai') {
-        const st = await api.mattingStatus();
-        if (!st.downloaded) {
-          if (!st.downloading) void api.mattingInstall().catch(() => undefined);
-          onChangeToast?.(
-            st.downloading
-              ? i18n.t('k22bd90cd')
-              : i18n.t('k739d4b9e')
-          );
-          return;
-        }
-      }
-      const r = await api.removeBackground(item.id, mode);
-      if (!r.ok) {
-        onChangeToast?.(i18n.t('kaa4e8014', { p0: r.reason || i18n.t('kf91d273b') }));
-        return;
-      }
-      // 后端发现前景占比异常时会给 warning：别把废图说成「成功」
-      if (r.warning) onChangeToast?.(i18n.t('kbf0222c1', { p0: r.warning }));
-      else if (mode === 'flat') onChangeToast?.(i18n.t('kcd301d2a', { p0: Math.round((r.coverage || 0) * 100) }));
-      else onChangeToast?.(i18n.t('k65c6538b'));
-    } catch (err) {
-      const msg = (err as Error).message || '';
-      if (mode === 'ai' && /模型|下载/.test(msg)) {
-        // 缺模型：顺手开始后台下载，并告诉用户下完再来
-        void api.mattingInstall().catch(() => undefined);
-        onChangeToast?.(i18n.t('k739d4b9e'));
-      } else {
-        onChangeToast?.(i18n.t('kaa4e8014', { p0: msg }));
-      }
-    } finally {
-      setMatting(false);
-    }
-  };
-
   const openEditor = (mode: 'crop' | 'color') => {
     setCrop(defaultCropControls('free'));
     setCropRect({ x: 0, y: 0, w: 1, h: 1 });
@@ -978,7 +916,7 @@ export default function Lightbox({
     title: string;
     run: () => void;
     disabled?: boolean;
-    group: 'edit' | 'wall' | 'tool' | 'io' | 'view';
+    group: 'edit' | 'tool' | 'io' | 'view';
     show?: boolean;
   }[] = [
     {
@@ -1000,15 +938,6 @@ export default function Lightbox({
       run: () => setOpsOpen(true),
     },
     {
-      key: 'watermark',
-      label: i18n.t('ka450c5a3'),
-      icon: <IconType />,
-      title: i18n.t('kd13b8a67'),
-      disabled: !isImage,
-      group: 'edit',
-      run: () => setWmOpen(true),
-    },
-    {
       key: 'anno',
       label: i18n.t('kd4b7ab9b', { p0: annoCount > 0 ? `（${annoCount}）` : '' }),
       icon: <IconPencil />,
@@ -1019,40 +948,6 @@ export default function Lightbox({
         setAnnoMode((v) => !v);
         resetZoom();
       },
-    },
-    {
-      key: 'matte-ai',
-      label: matting ? i18n.t('kaea5345b') : i18n.t('kb3faecb7'),
-      icon: <IconScissors />,
-      title: i18n.t('k6c15e0c5'),
-      disabled: !isImage || matting,
-      group: 'edit',
-      run: () => void runCut('ai'),
-    },
-    {
-      key: 'matte-flat',
-      label: i18n.t('k898dea8a'),
-      icon: <IconScissors />,
-      title: i18n.t('k30fdfd54'),
-      disabled: !isImage || matting,
-      group: 'edit',
-      run: () => void runCut('flat'),
-    },
-    {
-      key: 'wallpaper',
-      label: i18n.t('k25843df6'),
-      icon: <IconWallpaper />,
-      title: i18n.t('k1f478968'),
-      group: 'wall',
-      run: () => onSetWallpaper(item),
-    },
-    {
-      key: 'wallpaper-preview',
-      label: i18n.t('k18d5b5e2'),
-      icon: <IconMonitor />,
-      title: i18n.t('kf3a181ca'),
-      group: 'wall',
-      run: () => setWpPreviewOpen(true),
     },
     {
       key: 'toolbox',
@@ -1070,33 +965,6 @@ export default function Lightbox({
       title: i18n.t('ke2cb0e24'),
       group: 'tool',
       run: () => setToolkit('ocr'),
-    },
-    {
-      key: 'source',
-      label: i18n.t('k87edf025'),
-      short: i18n.t('k98e1611e'),
-      icon: <IconGlobe />,
-      title: i18n.t('k819bb213'),
-      group: 'tool',
-      show: isImage,
-      run: () => setToolkit('source'),
-    },
-    {
-      key: 'reverse',
-      label: i18n.t('k375e3ed7'),
-      short: i18n.t('k84ea34ec'),
-      icon: <IconSearch />,
-      title: i18n.t('ke7ab2ed0'),
-      group: 'tool',
-      show: isImage,
-      run: () => {
-        // 搜图面板统一挂在 App 上，这里只派发事件，避免每个页面各存一份弹窗
-        window.dispatchEvent(
-          new CustomEvent('tuku:reverse-search', {
-            detail: { imageId: item.id, title: item.title, previewUrl: `${BASE}${item.thumbUrl}` },
-          })
-        );
-      },
     },
     {
       key: 'versions',
@@ -1198,9 +1066,8 @@ export default function Lightbox({
   ];
   const visible = acts.filter((a) => a.show !== false);
   const pinned = visible.filter((a) => pinnedActs.includes(a.key));
-  const groupOrder: { key: 'edit' | 'wall' | 'tool' | 'io' | 'view'; name: string }[] = [
+  const groupOrder: { key: 'edit' | 'tool' | 'io' | 'view'; name: string }[] = [
     { key: 'edit', name: i18n.t('k95b351c8') },
-    { key: 'wall', name: i18n.t('k8e92193d') },
     { key: 'tool', name: i18n.t('k20dce2c6') },
     { key: 'io', name: i18n.t('k98b13cbd') },
     { key: 'view', name: i18n.t('k9c5c5cdb') },
@@ -1691,13 +1558,12 @@ export default function Lightbox({
               ) : (
                 <IconFile size={18} />
               );
-            // RAW / 设计稿 / 书签都有真实缩略图；视频取过封面帧（coverTs）同样有画面
+            // RAW / 设计稿都有真实缩略图；视频取过封面帧（coverTs）同样有画面
             const hasBitmap =
               kind === 'image' ||
               kind === 'gif' ||
               kind === 'raw' ||
               kind === 'design' ||
-              kind === 'bookmark' ||
               it.coverTs > 0;
             return (
               <button
@@ -1831,10 +1697,8 @@ export default function Lightbox({
         onPatch={onPatch}
         onChangeToast={onChangeToast}
         onFindColor={onFindColor}
-        onOpenSource={() => setToolkit('source')}
         onOpenStack={onOpenStack ? () => onOpenStack(item.stackId || item.id) : undefined}
         onOpenFolder={onOpenFolder}
-        onGotoPerson={onGotoPerson}
         onSaveTags={onSaveTags}
         tagInput={tagInput}
         setTagInput={setTagInput}
@@ -1881,26 +1745,6 @@ export default function Lightbox({
           onClose={() => setCmpIds(null)}
         />
       )}
-
-      {wpPreviewOpen && (
-        <WallpaperPreview
-          itemId={item.id}
-          title={item.title}
-          onClose={() => setWpPreviewOpen(false)}
-          onApply={(style) => {
-            setWpPreviewOpen(false);
-            onSetWallpaper(item, style);
-          }}
-        />
-      )}
-
-      <WatermarkStudio
-        open={wmOpen}
-        ids={[item.id]}
-        onClose={() => setWmOpen(false)}
-        onToast={onChangeToast}
-        onDone={(next) => next && onReplaceItem(next)}
-      />
 
       <ToolbarCustomizer
         open={tczOpen}

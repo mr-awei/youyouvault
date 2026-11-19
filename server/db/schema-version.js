@@ -5,4 +5,4 @@
  * 但绝不能因此把 node:sqlite、迁移、reconcile 整条依赖链拉进主进程。
  * migrate.js 里有一致性断言，两边不同步会立刻炸在启动阶段，不会被悄悄放过。
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;

@@ -14,8 +14,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as upscaler from '../ai-upscale.js';
-import * as matting from '../matting.js';
-import * as face from '../face.js';
 import * as srDeep from '../sr-deep.js';
 import * as clip from '../clip.js';
 import { MODEL_CATALOG, MODEL_GROUPS, catalogItem, mergeCatalog, summarizeCatalog } from './model-catalog.js';
@@ -114,37 +112,6 @@ export function collectProbes() {
     };
   }
 
-  // ── 抠图：三档 ────────────────────────────────────────
-  const mt = matting.mattingStatus();
-  for (const p of mt.profiles || []) {
-    const files = matting.mattingFiles(p.id);
-    probes[`matting:${p.id}`] = {
-      installed: p.installed,
-      size: p.size,
-      verified: p.verified,
-      path: files?.dir || '',
-      ...(mt.downloading && mt.installing === p.id
-        ? { state: 'downloading', progress: clampProgress(mt.progress), message: mt.message || '', error: mt.error || '' }
-        : // 下载结束后 downloading 归 false，若只在下载中透出 error，失败会退化成
-          // 「未下载」且没有原因。失败档位要把原因一直挂着，直到用户重试或删除。
-          mt.failed === p.id && mt.error
-          ? { error: mt.error }
-          : {}),
-    };
-  }
-
-  // ── 人脸 ──────────────────────────────────────────────
-  const fc = face.faceStatus();
-  probes['face:buffalo-l'] = {
-    installed: fc.downloaded,
-    size: fc.size,
-    verified: fc.verified,
-    path: face.FACE_DIR,
-    ...(fc.downloading
-      ? { state: 'downloading', progress: clampProgress(fc.progress), message: fc.message || '', error: fc.error || '' }
-      : {}),
-  };
-
   // ── 语义检索 ──────────────────────────────────────────
   const dl = clip.downloadState;
   probes['semantic:clip-vit-b32'] = {
@@ -183,24 +150,6 @@ export function modelsSnapshot() {
       items.push({ id, state: 'downloading', progress: clampProgress(sr.progress), message: sr.message || '' });
     }
   }
-  const mt = matting.mattingStatus();
-  if (mt.downloading) {
-    items.push({
-      id: `matting:${mt.installing || mt.profile}`,
-      state: 'downloading',
-      progress: clampProgress(mt.progress),
-      message: mt.message || '',
-    });
-  }
-  const fc = face.faceStatus();
-  if (fc.downloading) {
-    items.push({
-      id: 'face:buffalo-l',
-      state: 'downloading',
-      progress: clampProgress(fc.progress),
-      message: fc.message || '',
-    });
-  }
   if (clip.downloadState.downloading) {
     items.push({
       id: 'semantic:clip-vit-b32',
@@ -236,13 +185,6 @@ export async function installModel(id) {
   if (id.startsWith('onnx:')) {
     return await srDeep.startSrLoad(id);
   }
-  if (id.startsWith('matting:')) {
-    return await matting.startMattingInstall(id.slice('matting:'.length));
-  }
-  if (id === 'face:buffalo-l') {
-    if (face.faceStatus().downloaded) return { ok: false, error: '已经安装' };
-    return await face.startFaceInstall();
-  }
   if (id === 'semantic:clip-vit-b32') {
     return await clip.startClipInstall();
   }
@@ -256,14 +198,6 @@ export function cancelModel(id) {
   }
   if (id.startsWith('onnx:')) {
     return { ok: false, error: 'transformers 的下载不支持中止，请等它结束' };
-  }
-  if (id.startsWith('matting:')) {
-    matting.cancelMattingInstall();
-    return { ok: true };
-  }
-  if (id === 'face:buffalo-l') {
-    face.cancelFaceInstall();
-    return { ok: true };
   }
   if (id === 'semantic:clip-vit-b32') {
     return { ok: false, error: 'transformers 的下载不支持中止，请等它结束' };
@@ -283,8 +217,6 @@ export async function removeModel(id) {
   else if (id === 'upscale:realcugan') await upscaler.removeUpscaleRuntime('realcugan');
   else if (id.startsWith('esrgan:')) await upscaler.removeCommunityModel(id);
   else if (id.startsWith('onnx:')) await srDeep.removeSrModel(id);
-  else if (id.startsWith('matting:')) await matting.removeMatting(id.slice('matting:'.length));
-  else if (id === 'face:buffalo-l') await face.removeFaceModels();
   else if (id === 'semantic:clip-vit-b32') await clip.removeClipModel();
   else return { ok: false, error: '这一项没有删除入口' };
 

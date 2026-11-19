@@ -153,7 +153,7 @@
   top: calc(100% + 6px);
   z-index: 60;
   min-width: 190px;
-  /* 菜单条目多了（编辑 + 壁纸 + 导出 + 浏览四组），矮窗口要能滚，别被切掉；
+  /* 菜单条目多了（编辑 + 导出 + 浏览三组），矮窗口要能滚，别被切掉；
      菜单是从顶栏下方展开的，扣掉顶栏 + 间距，不然底部「自定义工具栏」点不到 */
   max-height: min(560px, calc(100vh - 104px));
   overflow-y: auto;
@@ -432,28 +432,6 @@
   font-size: 11.5px;
   line-height: 1.7;
 }
-/* 人物区：头像与「↗」都能跳到人物页，头像给悬停描边提示可点 */
-.lb-face-avatar {
-  display: flex;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  border-radius: 8px;
-  cursor: default;
-}
-.lb-face-avatar.is-clickable {
-  cursor: pointer;
-}
-.lb-face-avatar.is-clickable:hover img {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.lb-face-goto {
-  min-width: 24px;
-  padding: 0 4px;
-  font-size: 12px;
-}
 /* 夹名是按钮：点它跳去该文件夹，样式上要像链接而不是按钮 */
 .lb-folder-open {
   border: none;
@@ -554,7 +532,7 @@
 .lb-thumb.on {
   opacity: 1;
   border-color: var(--accent);
-  box-shadow: 0 4px 14px rgba(255, 77, 141, 0.35);
+  box-shadow: 0 4px 14px rgba(249, 115, 22, 0.35);
 }
 .lb-thumb-more {
   flex: none;
@@ -1075,8 +1053,8 @@
 }
 .ov-sheet-tab.on {
   color: #fff;
-  border-color: rgba(255, 77, 141, 0.6);
-  background: rgba(255, 77, 141, 0.16);
+  border-color: rgba(249, 115, 22, 0.6);
+  background: rgba(249, 115, 22, 0.16);
 }
 .ov-sheet {
   width: min(calc(1180px * var(--ui-scale, 1)), 96%);
@@ -1178,88 +1156,6 @@
   inset: 0;
   margin: auto;
 }
-/* 壁纸效果预览：窗口按屏幕分辨率放大（--ui-scale 见 base.css），舞台宽高比 = 合成图 */
-.modal-card.wp-card {
-  width: min(calc(1080px * var(--ui-scale, 1)), 100%);
-}
-.wp-body {
-  align-items: flex-start;
-  gap: 16px;
-}
-.wp-stage {
-  flex: 1 1 620px;
-  min-width: 280px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #0b0b10;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  /* 宽高比由 JS 按合成图像素设置；max-width 由 JS 按可用高度算，避免高窗口时溢出 */
-}
-/* 必须压过 modal.css 给缩略图写的 .modal-body img{width:150px}，
-   否则按屏幕分辨率合成的整屏预览会被缩成一张小图 */
-.wp-body .wp-stage .wp-frame {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  /* 舞台比例 === 图比例，fill 既不留黑边也不变形 */
-  object-fit: fill;
-  display: block;
-  border: 0;
-  border-radius: 0;
-}
-.wp-body .wp-stage .wp-frame.cur {
-  opacity: 0;
-  transition: opacity 0.18s ease;
-}
-.wp-body .wp-stage .wp-frame.cur.on {
-  opacity: 1;
-}
-.wp-loading,
-.wp-error {
-  color: var(--muted);
-  font-size: 12.5px;
-  padding: 18px;
-  text-align: center;
-}
-.wp-error {
-  color: #ff8a9e;
-}
-.wp-side {
-  width: 220px;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.wp-style {
-  text-align: left;
-  padding: 9px 11px;
-  border-radius: 9px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.wp-style b {
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.wp-style span {
-  font-size: 11.5px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-.wp-style.on {
-  border-color: var(--accent);
-  background: rgba(255, 77, 141, 0.12);
-}
 /* 导出为图片对话框 */
 .exp-card {
   width: min(calc(640px * var(--ui-scale, 1)), 100%);
@@ -1273,7 +1169,7 @@
   height: 132px;
   flex: 0 0 auto;
   border-radius: 10px;
-  background: linear-gradient(135deg, rgba(255, 77, 141, 0.18), rgba(255, 255, 255, 0.06));
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.18), rgba(255, 255, 255, 0.06));
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api, quiet } from '../api';
 import type { ImageItem, Playlist } from '../types';
-import { IconClose, IconFolder, IconTrash, IconWallpaper } from '../components/Icons';
+import { IconClose, IconFolder, IconTrash } from '../components/Icons';
 import { IconImages } from '../components/Icons';
 import { confirmDialog, promptDialog } from '../components/Dialogs';
 import VirtualGrid from '../components/VirtualGrid';
@@ -12,11 +12,9 @@ import { previewHoverProps } from '../lib/preview-prefetch';
 export default function Playlists({
   onToast,
   onOpen,
-  onSetWallpaper,
 }: {
   onToast: (msg: string, kind?: 'info' | 'error') => void;
   onOpen: (item: ImageItem, pool: ImageItem[]) => void;
-  onSetWallpaper: (item: ImageItem) => void;
 }) {
   const [lists, setLists] = useState<Playlist[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -134,15 +132,6 @@ export default function Playlists({
     }
   };
 
-  const useForAuto = async (p: Playlist) => {
-    try {
-      await api.saveAutoWallpaper({ scope: 'playlist', playlistId: p.id });
-      onToast(i18n.t('k5f466f4e', { p0: p.name }));
-    } catch (err) {
-      onToast(i18n.t('k94a44610', { p0: (err as Error).message }), 'error');
-    }
-  };
-
   return (
     <div>
       <div className="page-head">
@@ -152,7 +141,7 @@ export default function Playlists({
         </div>
       </div>
 
-      <div className="crawl-layout" style={{ gridTemplateColumns: '300px 1fr' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16 }}>
         <div className="card">
           <h4 className="section-title">我的清单（{lists.length}）</h4>
           <div className="kw-list" style={{ maxHeight: 320 }}>
@@ -162,8 +151,8 @@ export default function Playlists({
                 key={p.id}
                 style={{
                   cursor: 'pointer',
-                  background: activeId === p.id ? 'rgba(255,77,141,0.14)' : undefined,
-                  borderColor: activeId === p.id ? 'rgba(255,77,141,0.45)' : undefined,
+                  background: activeId === p.id ? 'rgba(249,115,22,0.14)' : undefined,
+                  borderColor: activeId === p.id ? 'rgba(249,115,22,0.45)' : undefined,
                 }}
                 onClick={() => setActiveId(p.id)}
               >
@@ -258,9 +247,6 @@ export default function Playlists({
 
           {activeId && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <button className="btn sm" onClick={() => lists.find((p) => p.id === activeId) && useForAuto(lists.find((p) => p.id === activeId)!)}>
-                <IconWallpaper /> {i18n.t('k17c2e0a0')}
-              </button>
               <button
                 className="btn sm"
                 onClick={() => {
@@ -330,15 +316,6 @@ export default function Playlists({
                     onClick={() => removeItem(item.id)}
                   >
                     <IconClose size={13} />
-                  </button>
-                  <button
-                    className="icon-btn"
-                    style={{ position: 'absolute', bottom: 6, right: 6, width: 26, height: 26 }}
-                    title={i18n.t('k25843df6')}
-                    aria-label={i18n.t('k25843df6')}
-                    onClick={() => onSetWallpaper(item)}
-                  >
-                    <IconWallpaper />
                   </button>
                 </div>
               )}

@@ -297,7 +297,7 @@ function sanitizeDoc(raw: Partial<CanvasDoc> | null | undefined): CanvasDoc {
             y1: Number(a.y1) || 0,
             x2: Number(a.x2) || 0,
             y2: Number(a.y2) || 0,
-            color: String(a.color || '#ff4d8d').slice(0, 40),
+            color: String(a.color || '#f97316').slice(0, 40),
             width: clamp(Number(a.width) || 2, 1, 10),
           } satisfies CanvasArrow;
         })

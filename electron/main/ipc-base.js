@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * IPC 基础设施：调用方校验、令牌注入、本机请求、权限白名单、退出确认。
- * 这里只有「闸门」，不含任何具体业务通道（见 ipc-app.js / ipc-live.js）。
+ * 这里只有「闸门」，不含任何具体业务通道（见 ipc-app.js）。
  */
 import { dialog, ipcMain } from 'electron';
 import { isLocalApiUrl as isLocalApiUrlFor, originAllowed } from '../lib/pure.js';
@@ -30,7 +30,7 @@ export function isLocalApiUrl(raw, port = ctx.serverPort) {
   return isLocalApiUrlFor(raw, port);
 }
 
-/** 允许页面停留/跳转的 origin：本地服务（窗口本体、/live 壁纸页）+ 开发服务器 */
+/** 允许页面停留/跳转的 origin：本地服务（窗口本体）+ 开发服务器 */
 export function trustedOrigins() {
   const set = new Set();
   if (ctx.serverPort) {
@@ -55,7 +55,7 @@ export function isTrustedOrigin(target) {
 /**
  * IPC 调用方校验：只接受本应用主窗口（且同为本机页面）发起的调用。
  * 以前 18 个 handle 谁调都答——一旦主窗口被导航到外部页面、或被其它窗口
- * 拿到渲染进程上下文，就能直接调 open-folder / weibo-login / download-file。
+ * 拿到渲染进程上下文，就能直接调 open-folder / download-file。
  * @param {import('electron').IpcMainInvokeEvent | import('electron').IpcMainEvent | null | undefined} e
  */
 export function trustedSender(e) {
@@ -86,18 +86,17 @@ export function handleIpc(channel, listener) {
 }
 
 /** 敏感权限白名单：只给自家页面，且只给真正需要的几项。
- * 补 'media'：动态壁纸音频可视化（麦克风 / 系统音频回环）需要 getUserMedia，
- * 但只放行自家 localhost 源（isTrustedOrigin 已把关），不波及远程 web 壁纸页。 */
-const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen', 'notifications', 'media']);
+ * 只放行自家 localhost 源（isTrustedOrigin 已把关），不波及远程页面。 */
+const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen', 'notifications']);
 
-/** 已装守卫的 session：微博登录窗/壁纸窗用的是各自 partition，全局布尔只护得住第一个窗口 */
+/** 已装守卫的 session：多窗口各自用 session 时，全局布尔只护得住第一个窗口 */
 const guardedSessions = new WeakSet();
 
 /** @param {import('electron').Session} ses */
 export function installPermissionGuard(ses) {
   if (!ses || guardedSessions.has(ses)) return;
   guardedSessions.add(ses);
-  // 原来完全没有处理器：默认全部放行，任意页面（含动态壁纸加载的远程站点）
+  // 原来完全没有处理器：默认全部放行，任意页面（含加载的远程站点）
   // 打开一次就能拿到摄像头/麦克风/地理定位/通知权限。
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     const from = details?.requestingUrl || wc?.getURL?.() || '';
@@ -109,20 +108,6 @@ export function installPermissionGuard(ses) {
   ses.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
     return isTrustedOrigin(requestingOrigin) && ALLOWED_PERMISSIONS.has(permission);
   });
-}
-
-/** 微博登录窗允许停留的站点：登录流程会跨 passport / login.sina / 静态资源几跳 */
-const WEIBO_HOST_RE = /(^|\.)(weibo\.(cn|com)|sina\.(com\.cn|cn)|sinaimg\.cn)$/i;
-
-/** @param {string} target */
-export function isWeiboOrigin(target) {
-  try {
-    const u = new URL(target);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
-    return WEIBO_HOST_RE.test(u.hostname);
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -139,12 +124,12 @@ export async function fetchJson(url, init = {}, timeoutMs = 2500) {
   return res.json();
 }
 
-/** 正在进行的后台任务名（图片采集 / 本地导入 / 画质增强） */
+/** 正在进行的后台任务名（本地导入 / 画质增强） */
 export async function busyTasks() {
   /** @type {string[]} */
   const tasks = [];
   if (!ctx.serverPort) return tasks;
-  // 三个探测都是「服务刚起来可能还没就绪」的场景：失败等于「没在跑」，
+  // 探测都是「服务刚起来可能还没就绪」的场景：失败等于「没在跑」，
   // 但不能全静默——服务反复挂掉时托盘永远显示空闲，排障时没有任何线索
   const probe = async (url, label) => {
     try {
@@ -154,7 +139,6 @@ export async function busyTasks() {
       console.info(`[busy] ${label} 状态读取失败:`, e?.message || e);
     }
   };
-  await probe('/api/crawl/status', '图片采集');
   await probe('/api/import/status', '本地素材导入');
   await probe('/api/enhance/job', '画质增强');
   return tasks;

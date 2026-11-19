@@ -2,7 +2,7 @@
 // 系统字体清单：直接解析 TTF/OTF/TTC 的 name 表拿「家族名」。
 //
 // 为什么不用注册表/命令行：`reg query` 在中文 Windows 上输出是 OEM 编码，
-// Node 拿到的字符串是乱码，家族名一旦错一个字 fontconfig 就匹配不上，水印会静默
+// Node 拿到的字符串是乱码，家族名一旦错一个字 fontconfig 就匹配不上，渲染会静默
 // 掉回默认字体。name 表里的字符串是 UTF-16BE，自己解析既准又快（几百个文件几十毫秒）。
 import fs from 'node:fs';
 import os from 'node:os';

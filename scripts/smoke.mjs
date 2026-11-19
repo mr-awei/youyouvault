@@ -6,18 +6,24 @@
  * 用法：npm run smoke（先 build web 亦可，dist 不存在时跳过首页 CSP 校验）
  */
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { writeStat } from './doc-stats.mjs';
+import { signLicenseKey } from '../server/lib/license-core.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 38790 + Math.floor(Math.random() * 500);
 const BASE = `http://127.0.0.1:${PORT}`;
 const tmpUser = fs.mkdtempSync(path.join(os.tmpdir(), 'tuku-smoke-'));
+
+// 授权：冒烟用一次性密钥对注入公钥，既验证免费版被挡，也验证激活后受控能力放行
+const licenseKeys = generateKeyPairSync('ed25519');
+const LICENSE_PUB = licenseKeys.publicKey.export({ type: 'spki', format: 'pem' });
+const LICENSE_PRIV = licenseKeys.privateKey.export({ type: 'pkcs8', format: 'pem' });
 
 const results = [];
 const check = (name, ok, detail = '') => {
@@ -65,6 +71,8 @@ const server = spawn(process.execPath, ['server/index.js'], {
     TUKU_CLIP: 'off',
     // 开放 API 的只读令牌：冒烟要真的验证「有 scope 但写不了」的 403，而不是只测接口能通
     TUKU_API_SCOPE_TOKENS: JSON.stringify({ 'smoke-readonly-token-1234': ['read'] }),
+    // 授权公钥由冒烟临时生成：私钥只在本次进程里，用来签一张绑定本机的授权
+    TUKU_LICENSE_PUBLIC_KEY: LICENSE_PUB,
     NO_COLOR: '1',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -90,27 +98,6 @@ async function waitReady(deadlineMs = 30000) {
 }
 
 try {
-  // 采集结果校验纯函数回归：曾经误写成自递归导致必应/搜狗等源全部
-  // "Maximum call stack size exceeded"（v1.0.0 线上 bug），此处守护不再复发
-  const { sanitizeResults } = await import('../server/sanitize.js');
-  check('sanitize 空输入立即返回', Array.isArray(sanitizeResults([])) && sanitizeResults([]).length === 0);
-  check(
-    'sanitize 去重/过滤/封顶',
-    (() => {
-      const dup = { url: 'https://a.com/x.jpg', source: 't' };
-      const input = [
-        dup,
-        { ...dup },
-        { url: 'ftp://bad/x', source: 't' },
-        { url: 'https://b.com/'.padEnd(2100, 'a'), source: 't' },
-        { url: 'https://c.com/y.jpg', source: 't' },
-        ...Array.from({ length: 300 }, (_, i) => ({ url: `https://d.com/${i}`, source: 't' })),
-      ];
-      const out = sanitizeResults(input);
-      return out.length === 240 && out[0].url === 'https://a.com/x.jpg' && out[1].url === 'https://c.com/y.jpg';
-    })()
-  );
-
   check('服务启动', await waitReady());
 
   // 读自动生成的 API token（wx 独占创建）
@@ -143,45 +130,57 @@ try {
     `${rebuildMissing.status} ${JSON.stringify(rebuildMissingBody)}`
   );
 
-  // settings 脱敏：weiboCookie 永不回传
+  // settings：教程开关默认关闭
   const settings = await (await fetch(`${BASE}/api/settings`, { headers: { Authorization: `Bearer ${token}` } })).json();
-  check('settings 脱敏（无 weiboCookie 明文）', !settings.weiboCookie && 'hasWeiboCookie' in settings);
   check('教程开关默认为 false', settings.tourDone === false);
-  check('水印预设默认为空数组', Array.isArray(settings.watermarkPresets) && settings.watermarkPresets.length === 0);
 
-  // 数组型设置必须整体替换：以前按对象合并，存进去会变成 {"0":…,"1":…} 的怪东西，
-  // 水印预设（settings.watermarkPresets）就是靠这一条才能存下来
+  // 授权：免费版也能拿到机器码；非法激活码必须被拒；受控能力返回 402 而不是 500
   {
-    const auth = { Authorization: `Bearer ${token}` };
-    const one = {
-      id: 'preset-smoke',
-      name: '冒烟预设',
-      params: { style: 'corner-br', frame: 'none', fields: ['camera'], logo: true, brand: 'canon', model: 'EOS R5' },
-      at: 1,
-    };
-    const put = await fetch(`${BASE}/api/settings`, {
-      method: 'PUT',
-      headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ watermarkPresets: [one] }),
-    });
-    const after = await (await fetch(`${BASE}/api/settings`, { headers: auth })).json();
+    const lic = await (
+      await fetch(`${BASE}/api/license`, { headers: { Authorization: `Bearer ${token}` } })
+    ).json();
     check(
-      '水印预设：数组写入后原样读回',
-      put.ok && Array.isArray(after.watermarkPresets) && after.watermarkPresets[0]?.id === 'preset-smoke',
-      `${put.status} ${JSON.stringify(after.watermarkPresets).slice(0, 80)}`
+      '授权状态可读且给出机器码',
+      lic.edition === 'free' &&
+        lic.licensed === false &&
+        /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(lic.machineCode || ''),
+      JSON.stringify({ edition: lic.edition, machineCode: lic.machineCode, reason: lic.reason })
     );
-    // 脏数据也要能存（前端 sanitize，这里只保证不炸）
-    const put2 = await fetch(`${BASE}/api/settings`, {
-      method: 'PUT',
-      headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ watermarkPresets: [] }),
+    const bad = await fetch(`${BASE}/api/license/activate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'TUKU1.bad.bad' }),
     });
-    check('水印预设：可以清空', put2.ok);
+    check('非法激活码被拒绝 (400)', bad.status === 400);
+    const lan = await fetch(`${BASE}/api/lan/status`, { headers: { Authorization: `Bearer ${token}` } });
+    const lanBody = await lan.json().catch(() => ({}));
+    check(
+      '免费版局域网能力返回 402',
+      lan.status === 402 && lanBody.code === 'license_required',
+      `${lan.status} ${JSON.stringify(lanBody)}`
+    );
+
+    // 用测试私钥签一张绑定本机的授权，后续受控能力的冒烟都在专业版下跑
+    const key = signLicenseKey(
+      { machine: lic.machineCode, expires: null, issuedAt: '2026-11-20', note: 'smoke' },
+      LICENSE_PRIV
+    );
+    const act = await fetch(`${BASE}/api/license/activate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    const actBody = await act.json().catch(() => ({}));
+    check(
+      '有效激活码可激活本机并切换为专业版',
+      act.ok && actBody.licensed === true && actBody.edition === 'pro',
+      `${act.status} ${JSON.stringify({ licensed: actBody.licensed, edition: actBody.edition, reason: actBody.error })}`
+    );
+    const lanAfter = await fetch(`${BASE}/api/lan/status`, { headers: { Authorization: `Bearer ${token}` } });
+    check('激活后局域网能力放行', lanAfter.status === 200, String(lanAfter.status));
   }
 
-  // 插件采集：格式广度与质量门槛的边界
-  // 用户拖来的是一张 GIF/AVIF/TIFF 或者 512px 的 AI 预览图时，以前一律判「格式不支持 / 分辨率太低」，
-  // 而 Eagle 拖什么存什么 —— 门槛只该拦爬虫，不该拦用户自己挑的图。
+  // 上传入库：png/avif/gif/tiff 都该能进（门槛只拦明显不合格的文件）
   {
     const sharp = (await import('sharp')).default;
     // 结构化噪点：尺寸/低频形状都不同，既压不小（能过最小体积门槛）又不会撞 pHash 被当成重复
@@ -190,31 +189,27 @@ try {
     const avif = await noise(900, 900, 1).avif({ quality: 60 }).toBuffer();
     const gif = await noise(900, 900, 2).gif().toBuffer();
     const tif = await noise(900, 900, 3).tiff().toBuffer();
-    const tiny = await noise(320, 320, 4).png().toBuffer();
-    const asUrl = (b, mime) => `data:${mime};base64,${b.toString('base64')}`;
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-    const post = (dataUrls, extra = {}) =>
-      fetch(`${BASE}/api/extension/ingest`, {
+    const uploadHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' };
+    const upload = async (buf, filename) => {
+      const res = await fetch(`${BASE}/api/import/upload?filename=${encodeURIComponent(filename)}`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ dataUrls, pageUrl: 'https://example.com/', keyword: '格式冒烟', ...extra }),
-      }).then((r) => r.json());
+        headers: uploadHeaders,
+        body: buf,
+      });
+      return { ok: res.ok, status: res.status, body: await res.json().catch(() => ({})) };
+    };
 
-    const wide = await post(
-      [asUrl(pngA, 'image/png'), asUrl(avif, 'image/avif'), asUrl(gif, 'image/gif'), asUrl(tif, 'image/tiff'), asUrl(tiny, 'image/png')],
-      { skipQuality: true }
-    );
+    const ups = [
+      await upload(pngA, 'smoke-a.png'),
+      await upload(avif, 'smoke-b.avif'),
+      await upload(gif, 'smoke-c.gif'),
+      await upload(tif, 'smoke-d.tif'),
+    ];
     check(
-      '插件采集支持 png/avif/gif/tiff 与小尺寸预览图',
-      wide.saved === 5,
-      `saved=${wide.saved}/${wide.total} ${JSON.stringify((wide.results || []).map((r) => r.reason || 'ok'))}`
-    );
-
-    const strict = await post([asUrl(tiny, 'image/png')]);
-    check(
-      '爬虫的质量门槛仍然生效（低于 800px 被拦）',
-      strict.saved === 0 && strict.results?.[0]?.reason === 'lowres',
-      JSON.stringify(strict.results?.[0] || {})
+      '上传入库支持 png/avif/gif/tiff',
+      ups.every((u) => u.ok) && ups.every((u) => Number(u.body?.image?.id) > 0),
+      ups.map((u) => `${u.status}:${u.body?.image?.id || u.body?.error || '-'}`).join(' ')
     );
 
     // ---- 缩略图张冠李戴回归 ----
@@ -244,15 +239,10 @@ try {
         fs.utimesSync(p, old, old);
       }
     }
-    // 新图：横构图浅底 + 红块，和那张深蓝竖图完全不像
-    const freshPng = await sharp({ create: { width: 900, height: 600, channels: 3, background: '#f5e6c8' } })
-      .composite([
-        { input: { create: { width: 320, height: 220, channels: 3, background: '#c0392b' } }, left: 40, top: 40 },
-      ])
-      .png()
-      .toBuffer();
-    const ingested = await post([asUrl(freshPng, 'image/png')], { skipQuality: true });
-    const newId = Number(ingested.results?.[0]?.id) || Math.max(0, ...(await listIds()));
+    // 新图：横构图噪点底（体积能过最小门槛），和那张深蓝竖图完全不像
+    const freshPng = await noise(900, 600, 42).png().toBuffer();
+    const ingested = await upload(freshPng, 'smoke-fresh.png');
+    const newId = Number(ingested.body?.image?.id) || Math.max(0, ...(await listIds()));
     const thumbSig = async (input) =>
       sharp(input, { failOn: 'none' }).resize(16, 16, { fit: 'fill' }).removeAlpha().raw().toBuffer();
     const sa = await thumbSig(freshPng);
@@ -266,8 +256,8 @@ try {
     }
     check(
       '新入库的图不会继承旧 id 的缩略图',
-      ingested.saved === 1 && diff >= 0 && diff < 12,
-      `id=${newId} 16x16 平均像素差=${diff.toFixed(1)} saved=${ingested.saved}（0 附近才算同一张，深蓝竖图会 >100）`
+      ingested.ok && diff >= 0 && diff < 12,
+      `id=${newId} 16x16 平均像素差=${diff.toFixed(1)} ok=${ingested.ok}（0 附近才算同一张，深蓝竖图会 >100）`
     );
     check('新入库时同 id 的旧平铺缩略图被清掉', !fs.existsSync(legacyOf(newId)), legacyOf(newId));
     // 磁盘上有文件 ≠ 接口拿得到：缩略图目录在点目录（.tuku / .data）下时，
@@ -277,48 +267,6 @@ try {
       '点目录下的缩略图能通过接口取到（不是隐藏文件 404）',
       thumbRes.ok && (thumbRes.headers.get('content-type') || '').startsWith('image/'),
       `id=${newId} status=${thumbRes.status} type=${thumbRes.headers.get('content-type')}`
-    );
-
-    // ---- 拼图模板 ----
-    // 模板清单要被前端拿去画缩略图，自动构图要被拿去当可编辑初值，
-    // 两者任何一环断掉，界面就只剩「算法版式」，等于特性没上线。
-    const stitchIds = (wide.results || []).map((r) => Number(r.id)).filter(Boolean);
-    const tplRes = await fetch(`${BASE}/api/export/stitch/templates`, { headers });
-    const tplJson = await tplRes.json();
-    const usable = (tplJson.templates || []).filter(
-      (t) => stitchIds.length >= t.min && stitchIds.length <= t.max
-    );
-    check(
-      '拼图模板清单可用，且能按张数筛出候选',
-      tplRes.ok && usable.length > 0,
-      `模板 ${tplJson.templates?.length} 个，${stitchIds.length} 张可用 ${usable.length} 个`
-    );
-
-    const autoRes = await fetch(
-      `${BASE}/api/export/stitch/crops?ids=${stitchIds.join(',')}&template=${usable[0].id}`,
-      { headers }
-    );
-    const autoJson = await autoRes.json();
-    const autoOk =
-      autoRes.ok &&
-      autoJson.crops?.length === stitchIds.length &&
-      autoJson.crops.every((c) => c.fx >= 0 && c.fx <= 1 && c.fy >= 0 && c.fy <= 1 && c.z >= 1 && c.z <= 4);
-    check('自动构图返回每格可编辑的焦点/缩放', autoOk, JSON.stringify(autoJson.crops || autoJson));
-
-    const cropQ = (autoJson.crops || [])
-      .map((c) => `${c.fx.toFixed(3)},${c.fy.toFixed(3)},${c.z.toFixed(2)}`)
-      .join(';');
-    const renderRes = await fetch(
-      `${BASE}/api/export/stitch?ids=${stitchIds.join(',')}&template=${encodeURIComponent(usable[0].id)}` +
-        `&crops=${encodeURIComponent(cropQ)}&outWidth=900&title=${encodeURIComponent('冒烟片名')}`,
-      { headers }
-    );
-    const renderBuf = Buffer.from(await renderRes.arrayBuffer());
-    const renderMeta = renderRes.ok ? await sharp(renderBuf).metadata() : {};
-    check(
-      '按模板 + 逐格构图渲染出海报',
-      renderRes.ok && renderMeta.width === 900 && renderBuf.length > 20000,
-      `status=${renderRes.status} ${renderMeta.width}x${renderMeta.height} ${renderBuf.length}B`
     );
   }
 
@@ -345,7 +293,7 @@ try {
     `${badJson.status} ${badJsonText.slice(0, 40)}`
   );
 
-  // 硬件门槛：抠图 / 超分这类本地模型功能开跑前要判「这台机器顶不顶得住」。
+  // 硬件门槛：超分这类本地模型功能开跑前要判「这台机器顶不顶得住」。
   // 探测是要起 PowerShell 的，读不到显卡时必须回「未知」而不是「没有显卡」——否则
   // 一次探测超时就会把能用的机器全判成跑不了。
   {
@@ -355,9 +303,8 @@ try {
       hw.ok === true &&
         typeof hw.hardware?.ram?.totalMB === 'number' &&
         Array.isArray(hw.features) &&
-        hw.features.some((f) => f.id === 'matting' && f.checks?.length > 0) &&
-        // 抠图 / 超分 / 人脸 / 语义 都要在表里（都是本地模型，缺一条就等于漏检）
-        ['matting', 'upscale-vulkan', 'upscale-onnx', 'face', 'semantic', 'inpaint'].every((id) =>
+        // 超分 / 语义 都要在表里（都是本地模型，缺一条就等于漏检）
+        ['upscale-vulkan', 'upscale-onnx', 'semantic', 'inpaint'].every((id) =>
           hw.features.some((f) => f.id === id)
         ) &&
         // 消除是纯像素算法：必须在表里，但一条硬件要求都不该有
@@ -412,44 +359,6 @@ try {
   const retryMissing = await fetch(`${BASE}/api/jobs/999999/retry`, { method: 'POST', ...auth });
   check('重试不存在的任务返回 404', retryMissing.status === 404);
 
-  // 人脸：路由注册漏了会让整个服务起不来，模型未下载时又必须给出可读的原因而不是 500
-  const faceSt = await fetch(`${BASE}/api/face/status`, auth);
-  const faceStj = faceSt.ok ? await faceSt.json() : null;
-  check(
-    '人脸状态接口可用（含下载/扫描/计数）',
-    faceSt.status === 200 && faceStj && typeof faceStj.downloaded === 'boolean' && Number.isFinite(faceStj.pending),
-    `${faceSt.status} ${JSON.stringify(faceStj)?.slice(0, 120)}`
-  );
-  const facePpl = await fetch(`${BASE}/api/face/persons`, auth);
-  const facePplj = facePpl.ok ? await facePpl.json() : null;
-  // total 是「显示不全」的防线：没有它，前端被 limit 截断时无法提示用户
-  check(
-    '人物列表可用（空库返回空数组 + total）',
-    facePpl.status === 200 && Array.isArray(facePplj?.persons) && Number.isFinite(facePplj?.total)
-  );
-  const faceItems = await fetch(`${BASE}/api/face/persons/1/items`, auth);
-  const faceItemsj = faceItems.ok ? await faceItems.json() : null;
-  check(
-    '单人图片接口返回 total（超出 limit 才能提示「只显示了一部分」）',
-    faceItems.status === 200 && Array.isArray(faceItemsj?.items) && Number.isFinite(faceItemsj?.total)
-  );
-  // 只在没下载模型时断言拒绝：真下过模型的话这一下会启动全库扫描，冒烟不该干这种事
-  if (!faceStj?.downloaded) {
-    const faceScan = await fetch(`${BASE}/api/face/scan`, {
-      method: 'POST',
-      headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    const faceScanj = faceScan.ok ? null : await faceScan.json().catch(() => null);
-    check('未下载模型时扫描明确拒绝（400 且有原因）', faceScan.status === 400 && !!faceScanj?.error);
-  }
-  const faceMerge = await fetch(`${BASE}/api/face/persons/merge`, {
-    method: 'POST',
-    headers: { ...auth.headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
-  });
-  check('人物合并缺参数返回 400', faceMerge.status === 400);
-
   // 库健康：路径唯一索引是否真的建起来、删图有没有留孤儿 —— 以前这两件事用户完全看不见
   const health = await fetch(`${BASE}/api/maintenance/health`, auth);
   const healthj = health.ok ? await health.json() : null;
@@ -492,26 +401,6 @@ try {
       orphanj.after.total === 0 &&
       orphanj.after.total <= (healthj?.orphans?.total ?? 0),
     JSON.stringify({ removed: orphanj?.removed, after: orphanj?.after?.total })
-  );
-
-  // 地点视图：地图数据源 + 历史素材补算 GPS
-  const geo = await fetch(`${BASE}/api/maintenance/geo-points`, auth);
-  const geoj = geo.ok ? await geo.json() : null;
-  check(
-    '地点视图：坐标聚合接口可用（total + 点集）',
-    geo.status === 200 && geoj?.ok === true && typeof geoj.total === 'number' && Array.isArray(geoj.points),
-    `${geo.status}`
-  );
-  const gps = await fetch(`${BASE}/api/maintenance/gps-backfill`, {
-    method: 'POST',
-    headers: { ...auth.headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ limit: 3 }),
-  });
-  const gpsj = gps.ok ? await gps.json() : null;
-  check(
-    '补算 GPS 接口可用（会标记已检查，remain 是数字）',
-    gps.status === 200 && gpsj?.ok === true && typeof gpsj.scanned === 'number' && typeof gpsj.remain === 'number',
-    `${gps.status}`
   );
 
   // XMP sidecar 导入（出去的方向在 PATCH 里，回来的是这条）
@@ -990,135 +879,6 @@ try {
     }
   }
 
-  // 水印 / 相框：预览和写回共用 renderComposite，所以「一项信息都没选」必须在 HTTP 层就被拦住，
-  // 不能等到生成一张空白水印；相框要真的扩画布，尺寸得比原图大。
-  {
-    const optRes = await fetch(`${BASE}/api/watermark/options`, { headers: auth.headers });
-    const optJson = optRes.ok ? await optRes.json() : {};
-    check(
-      '水印：23 款水印 + 20 款相框',
-      optRes.status === 200 && optJson.watermarks?.length === 23 && optJson.frames?.length === 20,
-      `${optRes.status} ${optJson.watermarks?.length}/${optJson.frames?.length}`
-    );
-
-    const px = testPixels(900, 600, 10);
-    const png = await sharp(px, { raw: { width: 900, height: 600, channels: 3 } }).png().toBuffer();
-    const up = await fetch(`${BASE}/api/import/upload?filename=smoke-wm.png`, {
-      method: 'POST',
-      headers: { ...auth.headers, 'Content-Type': 'application/octet-stream' },
-      body: png,
-    });
-    const upText = await up.text();
-    const wmId = up.ok ? JSON.parse(upText)?.image?.id : null;
-
-    const post = (suffix, body) =>
-      fetch(`${BASE}/api/images/${wmId}/${suffix}`, {
-        method: 'POST',
-        headers: { ...auth.headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-    // 品牌与字体是下拉框的数据源：这两条曾经是空数组，界面上表现为「点开什么都没有」
-    check(
-      '水印：品牌下拉收录数十种（相机+手机+无人机，不含纯镜头厂）',
-      Array.isArray(optJson.brands) && optJson.brands.length >= 40,
-      `brands=${optJson.brands?.length}`
-    );
-    // 品牌清单只收「自己能拍」的：既不能剩纯镜头厂，也不能有只能手打型号的空品牌
-    const loneLens = (optJson.brands || []).filter((b) => ['zeiss', 'tamron', 'voigtlander', 'samyang'].includes(b.key));
-    const noModel = (optJson.brands || []).filter((b) => !(b.models || []).length);
-    check(
-      '水印：品牌都能拍且都有型号（无纯镜头厂、无空型号品牌）',
-      loneLens.length === 0 && noModel.length === 0,
-      `镜头厂=${loneLens.map((b) => b.key).join(',') || '无'} 空型号=${noModel.map((b) => b.key).join(',') || '无'}`
-    );
-    check(
-      '水印：字体样式下拉可用（含跟随样式 + 至少 5 种）',
-      Array.isArray(optJson.fonts) && optJson.fonts.length >= 6 && optJson.fonts[0].key === 'auto',
-      `fonts=${optJson.fonts?.length}`
-    );
-    // 型号清单跟着品牌一起下发：以前只有品牌，用户得自己在别处查「佳能全画幅叫 EOS R5」
-    const canonModels = optJson.brands?.find((b) => b.key === 'canon')?.models || [];
-    const sonyModels = optJson.brands?.find((b) => b.key === 'sony')?.models || [];
-    check(
-      '水印：品牌下拉带上常见型号',
-      canonModels.length >= 10 && sonyModels.length >= 10,
-      `canon=${canonModels.length} sony=${sonyModels.length}`
-    );
-
-    // 拍摄地点的三级选择器：省 → 市 → 区/县，数据缺了前端就只剩一个手填框
-    const geo = await (await fetch(`${BASE}/api/geo/regions`, { headers: { Authorization: `Bearer ${token}` } })).json();
-    const zj = geo.provinces?.find((p) => p.name === '浙江省');
-    const hz = zj?.cities?.find((c) => c.name === '杭州市');
-    const bj = geo.provinces?.find((p) => p.name === '北京市');
-    check(
-      '拍摄地点：省/市/区三级数据可用',
-      geo.provinces?.length >= 34 && (hz?.districts || []).includes('西湖区') && (bj?.cities?.[0]?.districts || []).includes('东城区'),
-      `provinces=${geo.provinces?.length} 杭州区县=${hz?.districts?.length}`
-    );
-
-    // 第三级必须真的比上一级细：港澳台原来一个区县都没有，只能选到「香港岛/九龙/新界」；
-    // 东莞/中山这种直筒子市原来第三级只有自己。缺了就等于逼用户手写。
-    const hkIsland = geo.provinces?.find((p) => p.name === '香港特别行政区')?.cities?.find((c) => c.name === '香港岛');
-    const kowloon = geo.provinces?.find((p) => p.name === '香港特别行政区')?.cities?.find((c) => c.name === '九龙');
-    const tw = geo.provinces?.find((p) => p.name === '台湾省');
-    const tpe = tw?.cities?.find((c) => c.name === '台北市');
-    const dg = geo.provinces?.find((p) => p.name === '广东省')?.cities?.find((c) => c.name === '东莞市');
-    const emptyDistricts = (geo.provinces || [])
-      .flatMap((p) => (p.cities || []).map((c) => ({ k: `${p.name}/${c.name}`, n: (c.districts || []).length })))
-      .filter((x) => x.n === 0);
-    check(
-      '拍摄地点：港澳台与直筒子市都有更细的下一级',
-      (hkIsland?.districts || []).includes('中西区') &&
-        (kowloon?.districts || []).includes('油尖旺区') &&
-        (tw?.cities || []).length >= 22 &&
-        (tpe?.districts || []).includes('中正区') &&
-        (dg?.districts || []).includes('虎门镇') &&
-        emptyDistricts.length === 0,
-      `香港岛=${hkIsland?.districts?.length} 九龙=${kowloon?.districts?.length} 台湾城市=${tw?.cities?.length} 东莞=${dg?.districts?.length} 空区县城市=${emptyDistricts.length}`
-    );
-
-    // 预览不再因为「没有可显示的信息」而失败：给原图 + 响应头说明原因。
-    // 立刻返回 400 时用户看到的是一个黑框，连图都看不到，等于没法调参。
-    const bare = await post('watermark/preview', { style: 'corner-br', fields: [], logo: false });
-    const bareNote = decodeURIComponent(bare.headers.get('x-watermark-note') || '');
-    check(
-      '水印：预览无可显示信息时仍出原图并给说明',
-      bare.status === 200 && (bare.headers.get('content-type') || '').includes('image/jpeg') && /一项信息都没选/.test(bareNote),
-      `${bare.status} ${bareNote.slice(0, 40)}`
-    );
-
-    // 写回仍然必须拒绝：不能把一张没有水印的图当成「已加完」覆盖原图
-    const bad = await post('watermark', { style: 'corner-br', fields: [], logo: false, saveMode: 'overwrite' });
-    const badText = await bad.text();
-    check('水印：写回时一项信息都不选直接报错', bad.status === 400 && /一项信息都没选/.test(badText), `${bad.status} ${badText.slice(0, 48)}`);
-
-    // 这张是随机噪声图，没有 EXIF：只能靠手动指定品牌出 logo
-    // 顺便指定字体样式，覆盖「替换 20 款样式里写死的 font-family」这条路
-    const prev = await post('watermark/preview', { style: 'corner-br', fields: [], logo: true, brand: 'canon', font: 'kai' });
-    check(
-      '水印：预览返回 JPEG（带字体覆盖）',
-      prev.status === 200 && (prev.headers.get('content-type') || '').includes('image/jpeg'),
-      `${prev.status} ${prev.headers.get('content-type')}`
-    );
-
-    const applied = await post('watermark', {
-      style: 'corner-br',
-      frame: 'white-even',
-      fields: [],
-      logo: true,
-      brand: 'canon',
-      saveMode: 'overwrite',
-    });
-    const appliedText = await applied.text();
-    const aj = applied.ok ? JSON.parse(appliedText) : {};
-    check(
-      '水印：写回后尺寸含相框扩边',
-      applied.status === 200 && aj.width > 900 && aj.height > 600,
-      `${applied.status} ${aj.width}x${aj.height}`
-    );
-  }
-
   // 焦点检测走真实 HTTP 链路：题材无关（这张是白底 + 蓝色主体，没有任何人脸/肤色），
   // 框必须往主体那边偏，而不是被中心先验按在正中
   {
@@ -1144,40 +904,6 @@ try {
       fok = r.ok && !!j.rect && j.rect.x >= 0.2 && j.rect.x + j.rect.w > 0.98;
     }
     check('焦点检测：无人脸图也框住主体', fok, detail);
-  }
-
-  // 纯底图抠图：白底/灰底棚拍图不依赖 AI 模型，走纯像素漫水
-  // 画布给到 3000×2250 是为了过导入的 30KB 体积门槛（小尺寸纯色图 PNG 只有十几 KB）
-  {
-    const svg = `<svg width="3000" height="2250"><rect width="3000" height="2250" fill="#ffffff"/><rect x="1125" y="844" width="750" height="562" fill="#2f6fd0"/></svg>`;
-    const png = await sharp(Buffer.from(svg)).png().toBuffer();
-    const up = await fetch(`${BASE}/api/import/upload?filename=smoke-flat.png`, {
-      method: 'POST',
-      headers: { ...auth.headers, 'Content-Type': 'application/octet-stream' },
-      body: png,
-    });
-    const upText = await up.text();
-    const flatId = up.ok ? JSON.parse(upText)?.image?.id : null;
-    let okCut = false;
-    let detail = `upload=${up.status} ${upText.slice(0, 100)}`;
-    if (flatId) {
-      const r = await fetch(`${BASE}/api/images/${flatId}/remove-bg`, {
-        method: 'POST',
-        headers: { ...auth.headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'flat' }),
-      });
-      const j = await r.json().catch(() => ({}));
-      detail = `${r.status} ${JSON.stringify(j).slice(0, 120)}`;
-      // 750×562 / (3000×2250) ≈ 6.2%：抠出主体、且明确是 flat 模式
-      okCut = r.ok && j.mode === 'flat' && j.coverage > 0.04 && j.coverage < 0.09;
-      if (okCut && j.id) {
-        const fileRes = await fetch(`${BASE}/api/images/${j.id}/file`, auth);
-        const meta = await sharp(Buffer.from(await fileRes.arrayBuffer())).metadata();
-        okCut = !!meta.hasAlpha;
-        detail = `${detail} alpha=${meta.hasAlpha}`;
-      }
-    }
-    check('纯底图抠图：白底图抠出透明 PNG', okCut, detail);
   }
 
   // 灯箱预览图：长边 2560 的 webp。图库里原图平均 8MB+，灯箱直接加载要等一两秒，
@@ -1427,14 +1153,6 @@ try {
     check('文件夹封面：手动指定 + 恢复自动兜底', okCover, `${setCover?.status} / ${clearRes?.status}`);
   }
 
-  // 浏览器扩展：目录必须能被找到（以前打包不带 extension/，界面也没入口）
-  {
-    const r = await fetch(`${BASE}/api/extension/info`, auth);
-    const j = await r.json().catch(() => ({}));
-    const okE = r.ok && j.exists === true && /extension$/i.test(String(j.dir || '')) && String(j.id || '').length === 32;
-    check('浏览器扩展：目录可定位且 ID 固定', okE, `${r.status} ${j.dir || '-'} id=${(j.id || '').slice(0, 8)}…`);
-  }
-
   // 新增能力的最小契约：接口存在且形状正确。
   // 这些路由是「能编译不能跑」的高危区（register 漏导出、依赖未安装、参数解析崩），
   // 单测覆盖不到 HTTP 层，所以在这里各打一枪。
@@ -1592,32 +1310,16 @@ try {
       `${pr.status} ${JSON.stringify(prj).slice(0, 130)}`
     );
 
-    const market = await fetch(`${BASE}/api/plugins/market`, auth);
-    const marketJson = await json(market);
+    const pluginList = await fetch(`${BASE}/api/plugins`, auth);
+    const pluginListJson = await json(pluginList);
     check(
-      '插件市场：索引可读且回显权限白名单',
-      market.status === 200 && marketJson.plugins?.length >= 2 &&
-        marketJson.permissions?.includes('image:write'),
-      `${market.status}`
+      '插件：清单可读且回显权限白名单',
+      pluginList.status === 200 && pluginListJson.plugins?.length >= 2 &&
+        pluginListJson.permissions?.includes('image:write'),
+      `${pluginList.status}`
     );
-    const badInstall = await fetch(`${BASE}/api/plugins/install`, {
-      method: 'POST',
-      headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 'not-in-market' }),
-    });
-    check('插件市场：未收录的 id 明确 400', badInstall.status === 400, `${badInstall.status}`);
-    const evilPackage = await fetch(`${BASE}/api/plugins/install/upload?filename=evil.tuku-plugin`, {
-      method: 'POST',
-      headers: { ...auth.headers, 'Content-Type': 'application/octet-stream' },
-      body: JSON.stringify({
-        format: 'tuku-plugin/1',
-        manifest: { id: 'evil', name: 'evil', entry: 'index.js', permissions: ['image:read'] },
-        files: { '../escape.js': 'x' },
-      }),
-    });
-    check('插件市场：路径穿越的插件包被拒绝', evilPackage.status === 400, `${evilPackage.status}`);
     const builtinDelete = await fetch(`${BASE}/api/plugins/note-date`, { method: 'DELETE', headers: auth.headers });
-    check('插件市场：内置插件不允许卸载', builtinDelete.status === 400, `${builtinDelete.status}`);
+    check('插件：内置插件不允许卸载', builtinDelete.status === 400, `${builtinDelete.status}`);
 
     // 局域网投送：默认关闭，主服务不暴露端口（真正的开关启停由单测覆盖）
     const lan = await fetch(`${BASE}/api/lan/status`, auth);
@@ -1660,37 +1362,6 @@ try {
       `${namePreview.status} ${JSON.stringify(namePreviewJson).slice(0, 130)}`
     );
 
-    // 动态壁纸：新字段、实时参数、GLSL 预设、渲染页、音频源
-    const livej = await json(await fetch(`${BASE}/api/wallpaper/live`, auth));
-    check(
-      '动态壁纸：默认参数与新字段齐备',
-      livej.params?.brightness === 100 && 'shaderPreset' in livej && 'audioSource' in livej,
-      JSON.stringify(livej.params)
-    );
-    const putLive = await fetch(`${BASE}/api/wallpaper/live`, {
-      method: 'PUT',
-      headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ params: { brightness: 130, speed: 60, intensity: 60, depth: 40 } }),
-    });
-    const liveAfter = await json(await fetch(`${BASE}/api/wallpaper/live`, auth));
-    check('实时参数滑块：PUT 后立即读回', putLive.ok && liveAfter.params?.brightness === 130, `${putLive.status}`);
-    const shaders = await json(await fetch(`${BASE}/api/wallpaper/live/shaders`, auth));
-    check(
-      'GLSL 预设：4 款且源码只依赖白名单 uniform',
-      shaders.presets?.length === 4 && shaders.presets.every((p) => p.source?.includes('u_resolution')),
-      `${shaders.presets?.length} 款`
-    );
-    const livePage = await fetch(`${BASE}/live?token=${encodeURIComponent(token)}`, auth);
-    const liveHtml = await livePage.text();
-    check(
-      '动态壁纸渲染页：shader/交互/音频/实时 setParams/屏保都在',
-      livePage.status === 200 &&
-        ['startShader', 'startInteractive', 'startAudio', 'setParams', 'SCREENSAVER'].every((k) => liveHtml.includes(k)),
-      `${livePage.status} ${liveHtml.length}B`
-    );
-    const audio = await fetch(`${BASE}/api/wallpaper/live/audio`, auth);
-    check('音频壁纸：未选文件时明确 404', audio.status === 404, `${audio.status}`);
-
     // 视频首尾裁剪：区间可落库并进入 DTO（GIF / WebM 编码在单测里验证）
     const one = await json(await fetch(`${BASE}/api/v1/images?limit=1`, { headers: bearer }));
     const firstId = one.items?.[0]?.id;
@@ -1731,54 +1402,20 @@ try {
       `${ingest.status} ${JSON.stringify(ingj).slice(0, 120)}`
     );
 
-    // 跨库共享设置（屏保 / 投送开关）能落库并读回
+    // 跨库共享设置（投送开关）能落库并读回
     const putSaver = await fetch(`${BASE}/api/settings`, {
       method: 'PUT',
       headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        screensaver: { enabled: true, idleMinutes: 3, mode: 'shader', showClock: false },
-        lanAccess: false,
-      }),
+      body: JSON.stringify({ lanAccess: false }),
     });
     const saver = await json(await fetch(`${BASE}/api/settings`, auth));
     check(
-      '屏保 / 投送开关：设置可保存并读回',
-      putSaver.ok && saver.screensaver?.idleMinutes === 3 && saver.screensaver?.mode === 'shader' &&
-        saver.screensaver?.showClock === false && saver.lanAccess === false,
-      `${putSaver.status} ${JSON.stringify(saver.screensaver)}`
+      '投送开关：设置可保存并读回',
+      putSaver.ok && saver.lanAccess === false,
+      `${putSaver.status}`
     );
 
-    /* ------------- 第四轮：采集源 / 暂停策略 / 擦除 / 工坊 / 同步 / 跨平台 ------------- */
-    const caps = await json(await fetch(`${BASE}/api/platform`, auth));
-    check(
-      '跨平台：能力矩阵如实标注桌面层与静态壁纸能力',
-      caps.ok === true && typeof caps.liveWallpaper === 'boolean' &&
-        caps.staticWallpaper === true && caps.library === true && caps.screensaver === true,
-      `${caps.family} live=${caps.liveWallpaper}`
-    );
-    const sources = await json(await fetch(`${BASE}/api/sources`, auth));
-    const sourceKeys = (sources.sources || sources.items || []).map((s) => s.key || s.id || s);
-    check(
-      '采集源：豆瓣 / 贴吧 / Wikimedia 已注册',
-      ['commons', 'douban', 'tieba'].every((k) => sourceKeys.includes(k)),
-      sourceKeys.join(',')
-    );
-    const livePut = await fetch(`${BASE}/api/wallpaper/live`, {
-      method: 'PUT',
-      headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        pauseOnGpu: true, gpuThreshold: 72,
-        pauseApps: ['photoshop.exe', 'msedge*'],
-        allowLocalUrl: true, trustedDir: tmpUser, clickThrough: false,
-      }),
-    });
-    const liveNext = await json(await fetch(`${BASE}/api/wallpaper/live`, auth));
-    check(
-      '暂停策略 / 网页交互：新配置项可保存读回',
-      livePut.ok && liveNext.pauseOnGpu === true && liveNext.gpuThreshold === 72 &&
-        liveNext.pauseApps?.length === 2 && liveNext.allowLocalUrl === true && liveNext.clickThrough === false,
-      `${livePut.status} ${JSON.stringify(liveNext.pauseApps)}`
-    );
+    /* ------------- 第四轮：擦除 / 工坊 / 同步 ------------- */
 
     // AI 夜间批处理：时段 / 任务勾选要能存能读，待办数量要如实报
     const nb0Res = await fetch(`${BASE}/api/night-batch`, { headers: auth.headers });
@@ -1830,7 +1467,7 @@ try {
       check('擦除修复：真实图片 + 蒙版能另存副本并回报覆盖率', false, '库里没有素材');
     }
 
-    // 创意工坊：导出 → 导入往返，配色 / 壁纸设置 / 图片都要还原，注入的 CSS 要被剔掉
+    // 创意工坊：导出 → 导入往返，配色与图片都要还原，注入的 CSS 要被剔掉
     const cover = await sharp({ create: { width: 16, height: 16, channels: 3, background: { r: 12, g: 34, b: 56 } } })
       .png().toBuffer();
     const exp = await fetch(`${BASE}/api/workshop/export`, {
@@ -1856,10 +1493,9 @@ try {
     });
     const impj = await json(imp);
     check(
-      '创意工坊：导入还原配色 / 壁纸设置 / 图片',
-      imp.ok && impj.theme?.variables?.['--accent'] === '#aabbcc' &&
-        impj.assetPaths?.length === 1 && impj.appliedSettings?.includes('liveWallpaper'),
-      `${imp.status} applied=${JSON.stringify(impj.appliedSettings)}`
+      '创意工坊：导入还原配色 / 图片',
+      imp.ok && impj.theme?.variables?.['--accent'] === '#aabbcc' && impj.assetPaths?.length === 1,
+      `${imp.status}`
     );
 
     // 多端同步：发布 → 第二次发布增量跳过 → 已是最新时不重复拉取
@@ -1972,7 +1608,7 @@ try {
   // 特意用当前激活库的真实素材目录，而不是新建一个临时库：用户就是这么用的，
   // 而「新建库 → 首次挂 watcher」还夹着切库时序，测出来的失败说不清是谁的锅。
   // 两个曾经的真 bug：
-  //  ① 监听/采集入库不走 HTTP，没人让 /api/stats 的 120s 快照过期 → 前端永远看到旧张数，
+  //  ① 监听/导入入库不走 HTTP，没人让 /api/stats 的 120s 快照过期 → 前端永远看到旧张数，
   //     用户以为「没实现自动更新，得手动点一下刷新」；
   //  ② fs.watch 回调把库代数抓在闭包里 → 同库重新 activate（代数 +1、目录没变、
   //     不重建 watcher）之后事件全被当过期丢掉，监听静默失效、只能重启软件。

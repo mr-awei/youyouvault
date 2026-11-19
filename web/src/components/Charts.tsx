@@ -1,7 +1,7 @@
 import React from 'react';
 import i18n from '../i18n';
 
-const COLORS = ['#ff4d8d', '#a855f7', '#38bdf8', '#4ade80', '#fbbf24', '#f472b6', '#818cf8'];
+const COLORS = ['#f97316', '#ea580c', '#38bdf8', '#4ade80', '#fbbf24', '#f472b6', '#818cf8'];
 
 export function Donut({ data, total }: { data: { name: string; count: number }[]; total: number }) {
   const r = 52;
@@ -98,19 +98,19 @@ export function TrendLine({ data }: { data: { date: string; count: number }[] })
       <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none">
         <defs>
           <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255,77,141,0.42)" />
-            <stop offset="100%" stopColor="rgba(168,85,247,0.02)" />
+            <stop offset="0%" stopColor="rgba(249,115,22,0.42)" />
+            <stop offset="100%" stopColor="rgba(234,88,12,0.02)" />
           </linearGradient>
           <linearGradient id="lineStroke" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#ff4d8d" />
-            <stop offset="100%" stopColor="#a855f7" />
+            <stop offset="0%" stopColor="#f97316" />
+            <stop offset="100%" stopColor="#ea580c" />
           </linearGradient>
         </defs>
         <polygon points={area} fill="url(#areaFill)" />
         <polyline points={line} fill="none" stroke="url(#lineStroke)" strokeWidth="2.2" strokeLinejoin="round" />
         {points.map((p, i) => (
           /* key 用日期桶标签：用下标时，数据窗口一平移（换时间范围）就会复用错节点 */
-          <circle key={data[i]?.date || `p${i}`} cx={p.x} cy={p.y} r={2.6} fill="#ff4d8d" />
+          <circle key={data[i]?.date || `p${i}`} cx={p.x} cy={p.y} r={2.6} fill="#f97316" />
         ))}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted)', fontSize: 11 }}>

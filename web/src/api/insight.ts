@@ -1,5 +1,5 @@
 /**
- * 适配度 / 偏好 / 去背景 / 检索 / 标签
+ * 偏好 / 检索 / 标签
  * 由 api.ts 组合成单一的 `api` 对象对外暴露（调用点不需要改 import）。
  */
 import { request } from './core';
@@ -7,18 +7,6 @@ import type { JobItem, OpLogItem } from './types';
 import type { ImageItem, TrashItem } from '../types';
 
 export const insightAPI = {
-  // AI 壁纸闭环：适配度查询 / 补算 / 反馈
-  wallpaperFit: (id: number, ai = false) =>
-    request<{ ok: boolean; fit: { score: number; safe_area: string; reason: string; source: string } | null }>(
-      `/api/wallpaper/fit/${id}?ai=${ai ? 1 : 0}`
-    ),
-  scanWallpaperFit: (limit = 120, ai = false) =>
-    request<{ ok: boolean; done: number; remain: number }>('/api/wallpaper/scan-fit', {
-      method: 'POST',
-      body: JSON.stringify({ limit, ai }),
-    }),
-  wallpaperFeedback: (imageId: number, like: boolean) =>
-    request<{ ok: boolean }>('/api/wallpaper/feedback', { method: 'POST', body: JSON.stringify({ imageId, like }) }),
   // 本地偏好模型（个性化推荐）
   prefStatus: () =>
     request<{
@@ -30,30 +18,6 @@ export const insightAPI = {
       featureCount: number;
       top: { feature: string; w: number }[];
     }>('/api/pref/status'),
-  // AI 去背景
-  mattingStatus: () =>
-    request<{
-      downloaded: boolean;
-      downloading: boolean;
-      progress: number;
-      message: string;
-      error: string;
-      cancelled?: boolean;
-      size: number;
-      /** 当前实际生效的档位 */
-      profile?: string;
-      /** 正在下载的档位 */
-      installing?: string;
-      profiles?: { id: string; label: string; desc: string; size: number; sizeHint: number; installed: boolean; verified: boolean; active: boolean }[];
-    }>('/api/ai/matting/status'),
-  /** 后台下载：立刻返回，进度看 mattingStatus / 任务中心。profile: u2net | birefnet-lite */
-  mattingInstall: (profile?: string) =>
-    request<{ ok: boolean; started?: boolean; downloaded?: boolean }>('/api/ai/matting/install', {
-      method: 'POST',
-      body: JSON.stringify({ profile }),
-    }),
-  mattingCancel: () => request<{ ok: boolean }>('/api/ai/matting/cancel', { method: 'POST' }),
-
   /* ---------------- 任务中心 / 操作撤销 ---------------- */
   jobs: (kind = '', limit = 20) =>
     request<JobItem[]>(`/api/jobs?kind=${encodeURIComponent(kind)}&limit=${limit}`),
@@ -108,12 +72,6 @@ export const insightAPI = {
     request<{ hex: string; tolerance: number; total: number; items: ImageItem[] }>(
       `/api/search/color?hex=${encodeURIComponent(hex)}&tol=${tol}&limit=${limit}`
     ),
-  /** 保存网页书签：抓标题/描述/封面，并存一份离线 HTML 快照 */
-  saveBookmark: (payload: { url: string; tags?: string[]; note?: string }) =>
-    request<{ ok: boolean; item: ImageItem }>('/api/bookmarks', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
   // 自然语言搜图：engine=clip 才是真语义召回；降级时会带回 reason 和 keywords
   semanticSearch: (query: string, limit = 60) =>
     request<{

@@ -1,31 +1,19 @@
-import os from 'node:os';
+﻿import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { Worker } from 'node:worker_threads';
-import sharp from 'sharp';
 import { db, getSettings, getThumbDir, getLibraryGeneration, withTransaction } from './db.js';
 import { listRules, scoreImage } from './kb.js';
-import {
-  indexPhash,
-  buildFileName,
-  resolveStorageDir,
-  findDuplicateByPhash,
-  toDTO,
-  getImage,
-  ensureThumb,
-  KEEP_REASONS,
-  ALLOWED_FORMATS,
-} from './library.js';
-import { ensureFolderByRelDir, linkImageByPath } from './folders.js';
+import { indexPhash, resolveStorageDir, ensureThumb } from './library.js';
+import { ensureFolderByRelDir } from './folders.js';
 import { ingestMedia, isMediaPath, MEDIA_EXTS } from './lib/media.js';
 import { SCAN_IMAGE_EXTS, mimeOfPath } from './lib/media-kind.js';
 import { shouldSkipDir, isSyncConflict } from './lib/skip-dirs.js';
 import { md5File } from './lib/hash.js';
 import { thumbPathFor } from './thumbs.js';
 import { mapLimit } from './lib/utils.js';
-import { renderNameTemplate, uniqueInSet, uniqueTargetName } from './lib/name-template.js';
-import * as clip from './clip.js';
+import { renderNameTemplate, uniqueInSet } from './lib/name-template.js';
 
 /**
  * 大规模本地导入流水线（面向十万 / 百万级图库）。
@@ -339,7 +327,7 @@ async function materializeLocalChunk(files, settings, keyword, seq, onError) {
       }
       const ext = path.extname(file).replace(/^\./, '').toLowerCase() || 'jpg';
       const name = renderNameTemplate(tpl, {
-        keyword: keyword || '壁纸库',
+        keyword: keyword || '图库',
         source: 'local',
         originalName: path.basename(file),
         ext,
@@ -531,7 +519,7 @@ export async function bulkImportLocal({
           if (fid) linkStmt.run(row.id, fid);
           result.unchanged++;
         } else {
-          const r = await ingestMedia({ absPath: f, keyword: keyword || '壁纸库' });
+          const r = await ingestMedia({ absPath: f, keyword: keyword || '图库' });
           if (r.ok) {
             const fid = folderOf(f);
             if (fid && r.id) linkStmt.run(r.id, fid);
@@ -645,7 +633,7 @@ export async function bulkImportLocal({
           if (m.update) continue;
           // OR IGNORE：并发下同一路径已被别的流程登记，唯一索引会拦下这条
           const info = insStmt.run(
-            path.basename(m.file), m.file, 'local', keyword || '壁纸库', m.size, now, m.mtime
+            path.basename(m.file), m.file, 'local', keyword || '图库', m.size, now, m.mtime
           );
           if (info.changes) {
             m.id = Number(info.lastInsertRowid);
@@ -686,7 +674,7 @@ export async function bulkImportLocal({
             const { score, reasons } = scoreImage(
               {
                 source: 'local',
-                keyword: keyword || '壁纸库',
+                keyword: keyword || '图库',
                 width,
                 height,
                 tags: '',
@@ -735,313 +723,3 @@ export async function bulkImportLocal({
   if (onProgress) onProgress(100, '', result);
   return result;
 }
-
-/* ------------------- 采集批量入库（爬虫 / 浏览器插件） ------------------- */
-
-/**
- * 采集场景的批量入库：输入是「网络下载到的 buffer + 元数据」，与 bulkImportLocal
- * 共享同一套 worker 池与批量写库模式。旧路径（crawler 逐条调 library.ingest）的瓶颈：
- *  - 每张图在 HTTP 主线程解码 3 次（metadata / ensureThumb / computePHash）
- *  - 每张图一个独立事务、一次评分规则查询
- *  - 主线程 decode 峰值把 API 拖到 p95 150ms+
- * 现在的流程（每批）：
- *  1. 廉价预检：字节数上下限 + sharp 读文件头（格式 / 宽高 / 分辨率下限）→ 拒绝的不落盘
- *  2. 原图落盘（采集语义：素材进 storage 目录，文件名可读）
- *  3. 批量 INSERT 拿 id（整批一个事务）
- *  4. worker 池派生（每张图只解码一次：缩略图 + pHash + 主色）
- *  5. 回填（整批一个事务）：pHash 查重 / CLIP 查重 / 评分过滤，命中的删行删文件；
- *     存活的回填派生字段 + 建 pHash 索引 + 归夹
- * CLIP 建模不逐张点火（与 bulkImportLocal 一致），交给已有的补算任务后台覆盖；
- * 但 CLIP 查重保留（第二道防线，挡 pHash 挡不住的裁剪/旋转/滤镜重复）。
- *
- * @param {Array<{buffer: Buffer, source?: string, keyword?: string, sourceUrl?: string, title?: string, tags?: string}>} items
- * @param {{ onEach?: (index: number, result: object) => void, libGeneration?: number|null, inbox?: boolean }} opts
- * @returns {Promise<{total: number, saved: number, duplicate: number, dropped: number, failed: number}>}
- */
-export async function bulkIngestBuffers(items, { onEach = null, libGeneration = null, inbox = false } = {}) {
-  const settings = getSettings();
-  const generation = libGeneration ?? getLibraryGeneration();
-  const rules = listRules();
-  const minBytes = Number(settings.minFileSize) * 1024;
-  const maxBytes = Number(settings.maxFileSize) * 1024 * 1024;
-  const minLong = Number(settings.minResolution);
-  const phashThreshold = Number(settings.phashThreshold);
-
-  const result = {
-    total: items.length,
-    saved: 0,
-    duplicate: 0,
-    dropped: 0,
-    failed: 0,
-    /** 向量查重没跑成的张数 + 首个原因：模型异常时不能假装「查过了」 */
-    clipCheckFailed: 0,
-    clipCheckError: '',
-  };
-  const report = (i, r) => onEach && onEach(i, r);
-
-  /* 1) 预检（只读文件头，失败/不合格的直接拒绝，不占 worker） */
-  const accepted = [];
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i];
-    const buffer = it.buffer;
-    if (!buffer || !buffer.length) {
-      result.failed++;
-      report(i, { ok: false, reason: KEEP_REASONS.failed });
-      continue;
-    }
-    if (buffer.length < minBytes) {
-      result.dropped++;
-      report(i, { ok: false, reason: KEEP_REASONS.tooLight });
-      continue;
-    }
-    if (buffer.length > maxBytes) {
-      result.dropped++;
-      report(i, { ok: false, reason: KEEP_REASONS.tooLarge });
-      continue;
-    }
-    let meta;
-    try {
-      meta = await sharp(buffer, { failOn: 'none' }).metadata();
-    } catch {
-      result.dropped++;
-      report(i, { ok: false, reason: KEEP_REASONS.badFormat });
-      continue;
-    }
-    const format = (meta.format || '').toLowerCase();
-    const width = meta.width || 0;
-    const height = meta.height || 0;
-    if (!ALLOWED_FORMATS.has(format) || !width || !height) {
-      result.dropped++;
-      report(i, { ok: false, reason: KEEP_REASONS.badFormat });
-      continue;
-    }
-    if (Math.max(width, height) < minLong) {
-      result.dropped++;
-      report(i, { ok: false, reason: KEEP_REASONS.tooSmall });
-      continue;
-    }
-    accepted.push({ i, it, buffer, format, width, height });
-  }
-
-  if (!accepted.length || generation !== getLibraryGeneration()) {
-    // 切库保护：预检通过的也不能入库，按取消处理
-    for (const a of accepted) {
-      result.failed++;
-      report(a.i, { ok: false, reason: KEEP_REASONS.cancelled });
-    }
-    return result;
-  }
-
-  /* 2) 原图落盘（可读文件名，重名加随机后缀） */
-  const storageDir = resolveStorageDir(settings);
-  await fsp.mkdir(storageDir, { recursive: true });
-  for (const a of accepted) {
-    const name = buildFileName({
-      keyword: a.it.keyword,
-      source: a.it.source,
-      width: a.width,
-      height: a.height,
-      format: a.format,
-      template: settings.importNameTemplate,
-      index: a.i + 1,
-      originalName: a.it.title,
-    });
-    const finalPath = path.join(storageDir, uniqueTargetName(storageDir, name));
-    try {
-      await fsp.writeFile(finalPath, a.buffer);
-      a.finalPath = finalPath;
-      a.size = a.buffer.length;
-    } catch (err) {
-      result.failed++;
-      report(a.i, { ok: false, reason: KEEP_REASONS.failed, error: err?.message });
-    }
-  }
-  const writable = accepted.filter((a) => a.finalPath);
-  if (!writable.length) return result;
-
-  /* 3) 批量 INSERT 拿 id（整批一个事务） */
-  const insStmt = db.prepare(
-    `INSERT OR IGNORE INTO images (title, abs_path, thumb, source, keyword, source_url, width, height,
-      size_bytes, mime, phash, favorite, tags, created_at, fs_mtime, inbox)
-     VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, '', 0, ?, ?, 0, ?)`
-  );
-  try {
-    withTransaction(() => {
-      for (const a of writable) {
-        const info = insStmt.run(
-          a.it.title || path.basename(a.finalPath),
-          a.finalPath,
-          a.it.source || 'local',
-          a.it.keyword || '',
-          a.it.sourceUrl || '',
-          a.width,
-          a.height,
-          a.size,
-          `image/${a.format === 'jpg' ? 'jpeg' : a.format}`,
-          a.it.tags || '',
-          new Date().toISOString(),
-          inbox ? 1 : 0
-        );
-        if (info.changes) a.id = Number(info.lastInsertRowid);
-        // 唯一索引拦下的（并发重复登记）：原图不能删，交给下面的重复计数
-      }
-    });
-    for (let i = writable.length - 1; i >= 0; i--) {
-      if (!writable[i].id) {
-        const a = writable[i];
-        writable.splice(i, 1);
-        // 键名是 duplicate（初始化在 result 里）：以前写成 duplicates 会凭空造一个
-        // 新字段，汇总与任务日志里的「重复」永远是 0
-        result.duplicate++;
-        // 被 splice 掉的行以前不上报，crawler 的统计与失败清单里直接漏掉这几张
-        report(a.i, { ok: false, reason: KEEP_REASONS.duplicate });
-      }
-    }
-  } catch (err) {
-    console.error('[bulk] 采集批量登记失败', err?.message || err);
-    // 登记失败：原图已落盘的清掉，避免孤儿文件
-    for (const a of writable) {
-      result.failed++;
-      if (a.finalPath) fsp.rm(a.finalPath, { force: true }).catch(() => {});
-      report(a.i, { ok: false, reason: KEEP_REASONS.failed, error: err?.message });
-    }
-    return result;
-  }
-
-  /* 4) worker 池派生（每张图唯一一次整图解码） */
-  const pool = new MediaPool(mediaPoolSize());
-  await Promise.all(
-    writable.map((a) =>
-      pool
-        .run({ file: a.finalPath, thumbPath: thumbPathFor(a.id) })
-        .then((res) => {
-          if (!res.ok) {
-            result.failed++;
-            a.deriveError = res.error;
-            return;
-          }
-          a.derived = res;
-        })
-        .catch((err) => {
-          result.failed++;
-          a.deriveError = String(err?.message || err);
-        })
-    )
-  );
-  await pool.terminate();
-
-  /* 5) 回填：查重 / 评分 / 删行 / 更新（整批一个事务 + 事务外的查重决策） */
-  const updStmt = db.prepare(
-    `UPDATE images SET width = ?, height = ?, mime = ?, thumb = ?, phash = ?,
-      dominant = ?, hue = ?, palette = ?, score = ?, score_reason = ? WHERE id = ?`
-  );
-  const delStmt = db.prepare('DELETE FROM images WHERE id = ?');
-
-  const kills = []; // 查重/评分命中的：删行删文件
-  const keeps = []; // 存活的：回填派生字段
-  for (const a of writable) {
-    if (a.deriveError) {
-      kills.push(a);
-      continue;
-    }
-    const res = a.derived;
-    // pHash 查重（采集语义：命中撤销入库）
-    if (res.phash) {
-      const dupId = findDuplicateByPhash(res.phash, phashThreshold);
-      if (dupId) {
-        a.dupId = dupId;
-        kills.push(a);
-        continue;
-      }
-    }
-    // CLIP 查重（第二道防线；模型未就绪时跳过，补算任务会补上向量）
-    if (clip.clipReady()) {
-      try {
-        const vec = await clip.embedImage(a.finalPath);
-        const dup = await clip.topSimilar(vec, { k: 1, minCos: 0.965, excludeId: a.id });
-        if (dup.length) {
-          a.dupId = dup[0].id;
-          a.clipCos = dup[0].cos;
-          kills.push(a);
-          continue;
-        }
-      } catch (err) {
-        // 不中断导入，但必须计数上报：以前只打日志，用户以为这批做过向量查重
-        result.clipCheckFailed++;
-        if (!result.clipCheckError) result.clipCheckError = String(err?.message || err).slice(0, 160);
-        console.warn('[clip] 采集批量查重失败', a.finalPath, err?.message || err);
-      }
-    }
-    const { score, reasons } = scoreImage(
-      { source: a.it.source, keyword: a.it.keyword, width: res.width, height: res.height, tags: a.it.tags || '', phash: res.phash },
-      rules,
-      ''
-    );
-    a.score = score;
-    a.reasons = reasons;
-    if (settings.aiFilterEnabled !== false && score < Number(settings.scoreThreshold)) {
-      kills.push(a);
-      continue;
-    }
-    keeps.push(a);
-    // 存活即入内存索引：同一批内后续条目才能被 pHash 查重拦下（批内互查）。
-    // 极端情况（回填事务失败回滚）索引会留下幽灵 hash，只会误杀后续相似图，可接受
-    if (res.phash) indexPhash(a.id, res.phash);
-  }
-
-  // 删除与回填分别整批一个事务
-  try {
-    withTransaction(() => {
-      for (const a of kills) delStmt.run(a.id);
-      for (const a of keeps) {
-        const res = a.derived;
-        updStmt.run(
-          res.width,
-          res.height,
-          `image/${(res.format || a.format).toLowerCase() === 'jpg' ? 'jpeg' : (res.format || a.format).toLowerCase()}`,
-          res.thumb,
-          res.phash || '',
-          res.dominant?.dominant || '',
-          res.dominant?.hue || '',
-          JSON.stringify(res.dominant?.palette || []),
-          a.score || 0,
-          (a.reasons || []).join('；'),
-          a.id
-        );
-      }
-    });
-  } catch (err) {
-    console.error('[bulk] 采集批量回填失败', err?.message || err);
-    // 回滚后 keeps 的行没有派生字段、缩略图却已落盘 —— 清理孤儿缩略图
-    for (const a of keeps) fsp.rm(a.derived?.thumb, { force: true }).catch(() => {});
-    result.failed += kills.length + keeps.length;
-    for (const a of [...kills, ...keeps]) {
-      report(a.i, { ok: false, reason: KEEP_REASONS.failed, error: err?.message });
-    }
-    return result;
-  }
-
-  // 事务外的收尾：文件清理 / 内存索引 / 归夹 / 结果回报
-  for (const a of kills) {
-    if (a.derived?.thumb) fsp.rm(a.derived.thumb, { force: true }).catch(() => {});
-    fsp.rm(a.finalPath, { force: true }).catch(() => {});
-    if (a.dupId) {
-      result.duplicate++;
-      report(a.i, { ok: false, reason: KEEP_REASONS.duplicate, duplicateOf: a.dupId, clipCos: a.clipCos });
-    } else {
-      result.dropped++;
-      report(a.i, { ok: false, reason: a.score != null ? KEEP_REASONS.aiFilter : KEEP_REASONS.failed, score: a.score, reasons: a.reasons });
-    }
-  }
-  for (const a of keeps) {
-    try {
-      linkImageByPath(a.id, a.finalPath, settings.storageDir);
-    } catch {
-      /* 建树失败不影响入库 */
-    }
-    result.saved++;
-    report(a.i, { ok: true, id: a.id, image: toDTO(getImage(a.id)) });
-  }
-  return result;
-}
-

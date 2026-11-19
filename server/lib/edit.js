@@ -833,7 +833,7 @@ export async function persistEdit(id, row, data, info, opts, tag) {
   await pushEditBackup(row, tag);
   await writeFileAtomic(absPath, data);
   const newHash = await computePHash(data).catch(() => '');
-  // 内容已变：主体哈希重算（失败记 SKIP，等同「不可抠图」，分组自动退回全图哈希）
+  // 内容已变：主体哈希重算（失败记 SKIP，等同「不可提主体」，分组自动退回全图哈希）
   let objHash;
   try {
     objHash = (await computeSubjectPHash(absPath)) || 'SKIP';

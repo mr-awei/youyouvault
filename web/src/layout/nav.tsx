@@ -15,12 +15,8 @@ import {
   IconHeart,
   IconImages,
   IconLayers,
-  IconLink,
-  IconPin,
   IconSearch,
-  IconSpider,
   IconSquare,
-  IconUsers,
   IconWand,
 } from '../components/Icons';
 import i18n from '../i18n';
@@ -50,10 +46,7 @@ export const PRIMARY_NAV: NavItem[] = [
 /** 低频入口：收进可折叠的「更多导航」分区，默认收起 */
 export const MORE_NAV: NavItem[] = [
   { key: 'favorites', label: i18n.t('kae336cd0'), icon: <IconHeart /> },
-  { key: 'people', label: i18n.t('keec124ab'), icon: <IconUsers /> },
   { key: 'playlists', label: i18n.t('k8d9a495b'), icon: <IconFolder /> },
-  { key: 'crawl', label: i18n.t('ke8bc2616'), icon: <IconSpider /> },
-  { key: 'bookmarks', label: i18n.t('k46779389'), icon: <IconLink /> },
 ];
 
 /** 顶栏工具菜单：低频功能收进右上角下拉，侧栏不再常驻 */
@@ -61,7 +54,6 @@ export const TOOLS: NavItem[] = [
   { key: 'tidy', label: i18n.t('k1b6c7716'), icon: <IconLayers /> },
   { key: 'search', label: i18n.t('k2c42fc30'), icon: <IconSearch /> },
   { key: 'smart', label: i18n.t('kad540183'), icon: <IconGrid /> },
-  { key: 'places', label: i18n.t('kfc1a7d3c'), icon: <IconPin /> },
   { key: 'enhance', label: i18n.t('kfd5e4c21'), icon: <IconWand /> },
   { key: 'knowledge', label: i18n.t('kcbf9f467'), icon: <IconBrain /> },
 ];

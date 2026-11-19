@@ -2,20 +2,20 @@
  * 本地偏好模型（个性化推荐）——完全离线，不上传任何数据。
  *
  * 思路：把你过去的行为当标签学一个「你会不会喜欢这类图」的线性模型（逻辑回归 + SGD）。
- * - 正样本：收藏、壁纸点「喜欢」、反复查看、4 星以上
- * - 负样本：壁纸点「不喜欢」、删除时选了原因、1 星
+ * - 正样本：收藏、反复查看、4 星以上
+ * - 负样本：删除时选了原因、1 星
  * 标签只用用户行为。**不要**把规则分（score）当标签：那是模型的输入特征之一，
  * 拿来当标签只会让模型复现规则公式，学不到个人偏好。
  * 特征只用**画面属性**（来源、分辨率档、方向、色系、亮度、清晰度、AI 描述里的问题词），
  * 不用「是谁」这类身份特征——避免变成「只推某一个人」的信息茧房。
  *
- * 训练结果写回 images.pref（0-100），供「推荐排序」与壁纸挑选使用。
+ * 训练结果写回 images.pref（0-100），供「推荐排序」使用。
  */
 import { db, getSettings, saveSettings, withTransaction } from './db.js';
 
 /** AI 描述里的问题词 → 特征（与 kb 的原因体系一致） */
 const TERMS = ['模糊', '噪点', '闭眼', '表情', '动作', '扭曲', '水印', 'Logo', '过曝', '光线', '构图', '背景', '修图', '低清'];
-/** 亮度分档（来自 wallpaper_fit.brightness） */
+/** 亮度分档 */
 const BRIGHT_BUCKETS = [60, 110, 160, 210];
 /** 清晰度分档（来自 image_quality.sharpness） */
 const SHARP_BUCKETS = [80, 250, 700];
@@ -99,18 +99,16 @@ const MAX_SAMPLES = 20000;
 function batchRows(cursor, { signalOnly = false } = {}) {
   const where = signalOnly
     ? `AND (i.favorite = 1 OR i.rating >= 4 OR i.rating = 1 OR i.view_count >= 3
-         OR COALESCE(f.likes, 0) > 0 OR COALESCE(f.dislikes, 0) > 0
          OR EXISTS (SELECT 1 FROM feedback fb WHERE fb.image_id = i.id))`
     : '';
   return db
     .prepare(
       `SELECT i.id, i.source, i.keyword, i.width, i.height, i.hue, i.pref,
               i.favorite, i.rating, i.view_count,
-              f.brightness, f.likes, f.dislikes, q.sharpness,
+              NULL AS brightness, q.sharpness,
               COALESCE(d.description, '') || ' ' || COALESCE(d.issues, '') AS desc_text,
               EXISTS (SELECT 1 FROM feedback fb WHERE fb.image_id = i.id) AS has_feedback
          FROM images i
-         LEFT JOIN wallpaper_fit f ON f.image_id = i.id
          LEFT JOIN image_quality q ON q.image_id = i.id
          LEFT JOIN ai_desc d ON d.image_id = i.id
         WHERE i.id < ? ${where}
@@ -129,13 +127,13 @@ function collectSamples(feats) {
     cursor = rows[rows.length - 1].id;
     for (const row of rows) {
       const rating = Number(row.rating) || 0;
-      // 标签只取**用户行为**：收藏 / 壁纸点喜欢 / 反复查看 / 高星；负样本是点不喜欢、写过删除原因、低星。
+      // 标签只取**用户行为**：收藏 / 反复查看 / 高星；负样本是点不喜欢、写过删除原因、低星。
       // 以前把「知识库规则分 < 60」也算负样本——那等于让模型去拟合规则分的形状，
       // 训练出来的「偏好」和用户实际偏好没关系，只是把打分公式学了一遍。
       const y =
-        row.favorite === 1 || (Number(row.likes) || 0) > 0 || (row.view_count || 0) >= 3 || rating >= 4
+        row.favorite === 1 || (row.view_count || 0) >= 3 || rating >= 4
           ? 1
-          : (Number(row.dislikes) || 0) > 0 || row.has_feedback || rating === 1
+          : row.has_feedback || rating === 1
             ? -1
             : 0;
       if (y === 0) continue; // 没有明确行为信号的图不参与训练

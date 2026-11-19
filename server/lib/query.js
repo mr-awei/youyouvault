@@ -322,7 +322,7 @@ export function buildImageFilter(query = {}, { colorTable = '' } = {}) {
   if (String(query.noFolder || '') === '1') where.push('id NOT IN (SELECT image_id FROM image_folders)');
   if (String(query.noTags || '') === '1') where.push("tags = ''");
   if (String(query.noRating || '') === '1') where.push('rating = 0');
-  // 收件箱：只影响采集来源的新素材，不改变文件夹扫描的既有流程
+  // 收件箱：只影响新入库素材，不改变文件夹扫描的既有流程
   if (String(query.inbox || '') === '1') where.push('inbox = 1');
   else if (String(query.inbox || '') === '0') where.push('inbox = 0');
 
@@ -417,25 +417,6 @@ export function buildImageFilter(query = {}, { colorTable = '' } = {}) {
     params.push(stackId, stackId);
   } else if (!query.includeStacked) {
     where.push('(stack_id = 0 OR stack_id = id)');
-  }
-
-  // 地图框选：bbox=minLat,minLon,maxLat,maxLon（地图上拖出的矩形 / 点某个地点圆点）
-  if (query.bbox) {
-    const parts = String(query.bbox)
-      .split(',')
-      .map((v) => Number(v));
-    if (parts.length === 4 && parts.every((v) => Number.isFinite(v))) {
-      const [minLat, minLon, maxLat, maxLon] = parts;
-      // 跨 180° 的框（maxLon < minLon）要分两段，否则东半球和西半球永远框不到一起
-      const latClause = 'gps_lat BETWEEN ? AND ?';
-      if (maxLon < minLon) {
-        where.push(`${latClause} AND (gps_lon >= ? OR gps_lon <= ?)`);
-        params.push(minLat, maxLat, minLon, maxLon);
-      } else {
-        where.push(`${latClause} AND gps_lon BETWEEN ? AND ?`);
-        params.push(minLat, maxLat, minLon, maxLon);
-      }
-    }
   }
 
   // 隐私空间：密码锁住且本次会话未解锁的文件夹，其素材从所有列表/搜索里消失（服务端事实，不是前端遮罩）

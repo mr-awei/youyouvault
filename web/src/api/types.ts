@@ -18,7 +18,6 @@ import type {
   AiStatus,
   AiUpscaleStatus,
   ModelsPayload,
-  AutoWallpaperConfig,
   EnhanceAiModel,
   EnhanceCandidates,
   EnhanceConfig,
@@ -26,11 +25,8 @@ import type {
   EnhanceModel,
   EnhanceRemoteService,
   EnhanceStandard,
-  AutoWallpaperStatus,
-  CrawlStatus,
   NetworkConfig,
   Playlist,
-  WallpaperLogItem,
   FeedbackItem,
   Filters,
   HardwareReport,
@@ -40,7 +36,6 @@ import type {
   SavedFilter,
   KbRule,
   KbStats,
-  Keyword,
   Library,
   Settings,
   SimilarGroups,
@@ -49,12 +44,7 @@ import type {
   TimelineDay,
   TimelineSummary,
   TrashItem,
-  WallpaperMonitors,
-  WallpaperResult,
-  LiveWallpaperConfig,
   PluginInfo,
-  PluginInstallResult,
-  PluginMarketView,
   PluginRunResult,
   LanSelfCheck,
   LanShare,
@@ -71,7 +61,6 @@ export interface ThemePackBrief {
   createdAt: string;
   base: 'dark' | 'light';
   varCount: number;
-  settingKeys: string[];
   assetNames: string[];
   file: string;
 }
@@ -84,7 +73,6 @@ export interface ThemePackFile {
   author: string;
   createdAt: string;
   theme: ThemePackTheme;
-  settings: Record<string, unknown>;
   assets: { name: string; dataUrl: string }[];
 }
 
@@ -148,14 +136,9 @@ export interface DesktopAPI {
   /** 原生拖拽导出（桌面端把卡片拖到资源管理器/微信即落成文件） */
   dragOut?: (absPath: string) => void;
   appInfo?: () => Promise<AppInfo>;
-  controlLiveWallpaper?: (patch: Partial<LiveWallpaperConfig>) => Promise<{ ok: boolean }>;
   /** 视频片段导出：data URL 交给主进程弹「另存为」写盘 */
   saveExport?: (p: { dataUrl: string; filename: string }) => Promise<{ ok: boolean; path?: string; error?: string }>;
-  /** 壁纸参数实时预览（拖动滑块即时生效，不重开窗口） */
-  setLiveParams?: (params: Record<string, number>) => Promise<{ ok: boolean }>;
   pickFile?: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
-  /** 打开内置微博登录窗，登录成功自动回传整段 Cookie 与登录 UA（浏览器模式下为 undefined） */
-  weiboLogin?: () => Promise<{ ok: boolean; cookie?: string; ua?: string; msg?: string }>;
   /** 同步原生控件（下拉弹层等）主题，浏览器模式下为 undefined */
   setTheme?: (theme: 'dark' | 'light' | 'system') => Promise<string>;
   /** 同步界面语言给主进程（托盘 / 原生对话框），浏览器模式下为 undefined */
@@ -201,34 +184,10 @@ export interface DesktopAPI {
   quit?: () => Promise<{ ok: boolean }>;
 }
 
-/** 采集源（/api/sources 下发，前端不再维护第二份硬编码列表） */
-export interface SourceInfo {
-  key: string;
-  label: string;
-  hint?: string;
-  needsCookie?: boolean;
-  /** crawl = 真正去网上搜的采集源；import = 本地导入（只用于筛选/统计） */
-  kind: 'crawl' | 'import';
-  enabled: boolean;
-}
-
-/** 采集参数与上限 */
-export interface CrawlConfig {
-  sources: SourceInfo[];
-  limits: { maxPages: number; maxConcurrency: number };
-  crawl: {
-    pagesPerKeyword: number;
-    concurrency: number;
-    minResolution: number;
-    minFileSize: number;
-    maxFileSize: number;
-  };
-}
-
-/** 后台任务（采集 / 批量编辑 / 增强 / 模型下载）的历史记录 */
+/** 后台任务（批量编辑 / 增强 / 模型下载）的历史记录 */
 export interface JobItem {
   id: number;
-  kind: 'crawl' | 'edit' | 'enhance' | 'model-install' | string;
+  kind: 'edit' | 'enhance' | 'model-install' | string;
   title: string;
   status: 'queued' | 'running' | 'done' | 'failed' | 'canceled' | 'interrupted';
   progress: number;

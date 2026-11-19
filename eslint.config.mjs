@@ -49,26 +49,6 @@ const nodeGlobals = {
   crypto: 'readonly',
 };
 
-// 浏览器扩展的 service worker / popup 环境
-const extensionGlobals = {
-  chrome: 'readonly',
-  browser: 'readonly',
-  document: 'readonly',
-  window: 'readonly',
-  location: 'readonly',
-  getComputedStyle: 'readonly',
-  fetch: 'readonly',
-  console: 'readonly',
-  setTimeout: 'readonly',
-  clearTimeout: 'readonly',
-  setInterval: 'readonly',
-  clearInterval: 'readonly',
-  // MV3 Service Worker 里拼长图用的离屏画布与 base64 编码
-  OffscreenCanvas: 'readonly',
-  createImageBitmap: 'readonly',
-  btoa: 'readonly',
-};
-
 export default [
   {
     ignores: [
@@ -134,10 +114,5 @@ export default [
       'no-console': 'off',
       'no-unused-vars': 'off',
     },
-  },
-  {
-    // 浏览器扩展跑在 chrome.* 环境里，不是 Node
-    files: ['extension/**/*.js'],
-    languageOptions: { globals: extensionGlobals },
   },
 ];

@@ -1,10 +1,10 @@
 /**
- * 画质增强 / 清单 / 定时与动态壁纸
+ * 画质增强 / 清单 / 非破坏编辑
  * 由 api.ts 组合成单一的 `api` 对象对外暴露（调用点不需要改 import）。
  */
-import { WatermarkParams, GeoProvince, WatermarkOptions, postBlobWithNote, request } from './core';
+import { request } from './core';
 import type { ThemePackBrief, ThemePackFile } from './types';
-import type { AdjustParams, EditJobStatus, EditOpsInfo, EditResult, EditSaveOptions, AiUpscaleStatus, AutoWallpaperConfig, EnhanceAiModel, EnhanceCandidates, EnhanceConfig, EnhanceJobStatus, EnhanceModel, EnhanceRemoteService, EnhanceStandard, AutoWallpaperStatus, Playlist, WallpaperLogItem, ImageItem, WallpaperMonitors, LiveWallpaperConfig } from '../types';
+import type { AdjustParams, EditJobStatus, EditOpsInfo, EditResult, EditSaveOptions, AiUpscaleStatus, EnhanceAiModel, EnhanceCandidates, EnhanceConfig, EnhanceJobStatus, EnhanceModel, EnhanceRemoteService, EnhanceStandard, Playlist, ImageItem } from '../types';
 import type { ThemePackTheme } from '../lib/theme-pack-vars';
 
 export const enhanceAPI = {
@@ -127,27 +127,8 @@ export const enhanceAPI = {
       method: 'POST',
       body: JSON.stringify(opts),
     }),
-  /* ------------------------ 水印 / 相框 ------------------------ */
-  /** 23 款水印 + 20 款相框 + 可选信息项 + 品牌清单 + 本机字体（服务端是唯一来源） */
-  watermarkOptions: () => request<WatermarkOptions>('/api/watermark/options'),
-  /** 重新扫描本机字体（用户刚装完字体时点「刷新字体」） */
-  watermarkFonts: () =>
-    request<{ fonts: { key: string; name: string; group: string }[] }>('/api/watermark/fonts?refresh=1'),
-  /** 拍摄地点三级选择器数据（省/市/区），55KB，前端取一次就够 */
-  geoRegions: () => request<{ provinces: GeoProvince[] }>('/api/geo/regions'),
-  /** 预览：返回 JPEG 二进制，长边压到 1400，调参时高频刷新也不重。
-      同时带回服务端说明：没有可显示信息时仍出原图，用 note 解释原因 */
-  watermarkPreview: (id: number, params: WatermarkParams) =>
-    postBlobWithNote(`/api/images/${id}/watermark/preview`, params),
-  /** 单张应用：默认覆盖原图（有撤销备份），saveMode='copy' 时另存 */
-  watermarkImage: (id: number, params: WatermarkParams & EditSaveOptions) =>
-    request<EditResult & { width: number; height: number }>(`/api/images/${id}/watermark`, {
-      method: 'POST',
-      body: JSON.stringify(params),
-      timeoutMs: 120000,
-    }),
   // 批量编辑（异步任务）：op='crop' 用 {ratio, rect?}，op='adjust' 用调色参数
-  batchEdit: (ids: number[], op: 'crop' | 'adjust' | 'watermark', params: Record<string, unknown>) =>
+  batchEdit: (ids: number[], op: 'crop' | 'adjust', params: Record<string, unknown>) =>
     request<{ ok: boolean; job: EditJobStatus }>('/api/images/batch/edit', {
       method: 'POST',
       body: JSON.stringify({ ids, op, params }),
@@ -207,35 +188,6 @@ export const enhanceAPI = {
       method: 'DELETE',
     }),
 
-  // 定时切换壁纸
-  autoWallpaper: () => request<AutoWallpaperStatus>('/api/wallpaper/auto'),
-  wallpaperMonitors: () => request<WallpaperMonitors>('/api/wallpaper/monitors'),
-  currentWallpaper: () =>
-    request<{ imageId?: number; title?: string; favorite?: boolean }>('/api/wallpaper/current'),
-  favoriteCurrentWallpaper: () =>
-    request<{ ok: boolean; imageId: number; title: string }>('/api/wallpaper/current/favorite', {
-      method: 'POST',
-    }),
-  dislikeCurrentWallpaper: () =>
-    request<{ ok: boolean; skipped: number | null; learned?: string[] }>('/api/wallpaper/current/dislike', {
-      method: 'POST',
-    }),
-  // 动态壁纸
-  platform: () =>
-    request<{
-      ok: boolean;
-      platform: string;
-      family: string;
-      liveWallpaper: boolean;
-      desktopLayer: boolean;
-      staticWallpaper: boolean;
-      screensaver: boolean;
-      gpuMeter: boolean;
-      foregroundApp: boolean;
-      summary: string;
-      notes: string[];
-    }>('/api/platform'),
-
   /* ------------------------------ 多端同步 ------------------------------ */
   syncStatus: () =>
     request<{
@@ -282,7 +234,6 @@ export const enhanceAPI = {
     name: string;
     author?: string;
     theme: ThemePackTheme;
-    includeSettings?: boolean;
     assets?: { name: string; dataUrl: string }[];
   }) =>
     request<{ ok: boolean; pack: ThemePackFile; file: string; skipped: string[] }>('/api/workshop/export', {
@@ -296,31 +247,13 @@ export const enhanceAPI = {
       theme: ThemePackTheme;
       file: string;
       assetPaths: string[];
-      appliedSettings: string[];
       skipped: string[];
     }>('/api/workshop/import', { method: 'POST', body: JSON.stringify({ data }) }),
   workshopApply: (id: string) =>
-    request<{ ok: boolean; theme: ThemePackTheme; appliedSettings: string[]; skipped: string[] }>(
+    request<{ ok: boolean; theme: ThemePackTheme; skipped: string[] }>(
       '/api/workshop/apply',
       { method: 'POST', body: JSON.stringify({ id }) }
     ),
   workshopDelete: (id: string) => request<{ ok: boolean }>(`/api/workshop/packs/${id}`, { method: 'DELETE' }),
   workshopDownload: (id: string) => `/api/workshop/packs/${id}/file`,
-  liveWallpaper: () => request<LiveWallpaperConfig>('/api/wallpaper/live'),
-  saveLiveWallpaper: (patch: Partial<LiveWallpaperConfig>) =>
-    request<LiveWallpaperConfig>('/api/wallpaper/live', {
-      method: 'PUT',
-      body: JSON.stringify(patch),
-    }),
-  saveAutoWallpaper: (patch: Partial<AutoWallpaperConfig>) =>
-    request<AutoWallpaperStatus>('/api/wallpaper/auto', {
-      method: 'PUT',
-      body: JSON.stringify(patch),
-    }),
-  switchWallpaperNow: (scope?: string, playlistId?: number | null) =>
-    request<{ ok: boolean; imageId: number; title: string; generated: boolean }>(
-      '/api/wallpaper/now',
-      { method: 'POST', body: JSON.stringify({ scope, playlistId }) }
-    ),
-  wallpaperHistory: () => request<WallpaperLogItem[]>('/api/wallpaper/history'),
 };

@@ -85,7 +85,7 @@ export function renderGalleryHtml(items, opts = {}) {
   :root{
     color-scheme: light dark;
     --bg:#f6f7f9; --fg:#1b1d22; --muted:#6b7280; --card:#ffffff; --line:#e5e7eb;
-    --accent:#ff4d8d; --shadow:0 2px 10px rgba(16,24,40,.07);
+    --accent:#f97316; --shadow:0 2px 10px rgba(16,24,40,.07);
   }
   html[data-theme="dark"]{
     --bg:#14161a; --fg:#e8eaee; --muted:#9aa3af; --card:#1c2026; --line:#2a2f37;

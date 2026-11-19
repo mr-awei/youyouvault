@@ -27,7 +27,7 @@ const FILES = {
   'server/lib/a.js': 'export const a = 1;',
 };
 
-const manifestFor = (files, { seq = 1, notes = '修拼图首帧闪回', shellVersion = SHELL, priv = PRIV } = {}) => ({
+const manifestFor = (files, { seq = 1, notes = '修导出首帧闪回', shellVersion = SHELL, priv = PRIV } = {}) => ({
   schemaVersion: SCHEMA_VERSION,
   shellVersion,
   seq,
@@ -98,7 +98,7 @@ test('导入的包先落 pending，下次启动才换入并给出叠加层入口
     assert.equal(decision.env.TUKU_HOTFIX_ENTRY, path.join(s.hot.dir.current, 'server', 'standalone.js'));
     assert.equal(decision.env.TUKU_HOTFIX_ROOT, s.hot.dir.current);
     assert.equal(decision.webOverlay, path.join(s.hot.dir.current, 'web'));
-    assert.equal(decision.manifest.notes, '修拼图首帧闪回');
+    assert.equal(decision.manifest.notes, '修导出首帧闪回');
     assert.equal(s.hot.state().pendingSeq, 0);
     assert.equal(s.hot.state().activeSeq, 1);
 

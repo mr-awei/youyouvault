@@ -12,11 +12,10 @@
  *    一旦用 query 令牌发过 POST，泄露的就不只是"看一眼"的权限。
  * 2. 浏览器同源请求：`Sec-Fetch-Site` 为 same-origin / same-site / none。
  *    该头由浏览器（含 Electron）自动附加，页面 JS 无法伪造，覆盖本应用
- *    主窗口、动态壁纸 /live 页、Vite dev 代理等全部正常使用方式。
- * 3. 浏览器扩展采集端点：Origin 命中扩展 ID 白名单（见 config.EXTENSION_ORIGINS）。
- *    之前是任意 `chrome-extension://` 都放行，等于把图库开放给本机所有扩展。
- * 4. 健康检查 /api/health：只返回 {ok,time}，无任何图库数据。桌面版监听随机端口，
- *    扩展必须先探测出端口才能调用，因此这里不能要求令牌。
+ *    主窗口、Vite dev 代理等全部正常使用方式。
+ *
+ * 3. 健康检查 /api/health：只返回 {ok,time}，无任何图库数据。桌面版监听随机端口，
+ *    外部工具必须先探测出端口才能调用，因此这里不能要求令牌。
  *
  * 其余调用方（MCP server、调试脚本）从 TUKU_API_TOKEN 环境变量或
  * .api-token 文件读取令牌后以 Bearer 头调用。
@@ -25,7 +24,7 @@
  * 本机进程可以通过响应时间逐字节猜出令牌。
  */
 import crypto from 'node:crypto';
-import { API_SCOPE_TOKENS, API_TOKEN, EXTENSION_ORIGINS } from './config.js';
+import { API_SCOPE_TOKENS, API_TOKEN } from './config.js';
 import { expandScopes, parseTokenMap } from './lib/api-scopes.js';
 import { audit, rateGuard, tokenTag } from './lib/api-audit.js';
 
@@ -93,7 +92,7 @@ function isSameOrigin(req) {
   return site === 'same-origin' || site === 'same-site' || site === 'none';
 }
 
-/** 挂在全局，内部只拦 /api/*：静态页面与 /live 渲染页本身不含敏感数据 */
+/** 挂在全局，内部只拦 /api/*：静态页面本身不含敏感数据 */
 export function apiAuth(req, res, next) {
   if (!req.path.startsWith('/api/') && req.path !== '/api') return next();
   if (req.method === 'OPTIONS') return next();
@@ -111,10 +110,6 @@ export function apiAuth(req, res, next) {
   if (isSameOrigin(req)) return next();
   // 端口探测用：无敏感信息，允许匿名
   if (req.path === '/api/health') return next();
-  if (req.path === '/api/extension/ingest') {
-    const origin = String(req.headers['origin'] || '').toLowerCase();
-    if (EXTENSION_ORIGINS.includes(origin)) return next();
-  }
   return res.status(401).json({ error: '未授权：缺少或无效的 API 令牌' });
 }
 

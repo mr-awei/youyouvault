@@ -5,8 +5,6 @@ import path from 'node:path';
 import sharp from 'sharp';
 import * as lib from '../library.js';
 import { buildGalleryHtml, safeFileName, MAX_ITEMS } from '../gallery-export.js';
-import { buildStitch, suggestCrops, planGeometry } from '../lib/stitch.js';
-import { STITCH_TEMPLATES, FLOW_LAYOUTS } from '../lib/stitch-templates.js';
 import { eagleExportPreview, exportEagleLibrary } from '../lib/eagle-export.js';
 import { startEagleExportJob } from '../eagle-export-job.js';
 import { bumpUsage } from '../lib/usage.js';
@@ -137,110 +135,6 @@ export function register(app, ctx) {
       );
       res.setHeader('Cache-Control', 'no-store');
       res.send(result.html);
-    })
-  );
-
-  /* 拼图模板清单：构图数据放在服务端一份，前端只负责画缩略图，
-   * 避免「前端一套坐标、后端一套坐标」两边慢慢对不上 */
-  app.get('/api/export/stitch/templates', (_req, res) => {
-    res.setHeader('Cache-Control', 'public, max-age=300');
-    res.json({ templates: STITCH_TEMPLATES, layouts: FLOW_LAYOUTS });
-  });
-
-  /* 自动构图：让显著度检测给每格算出焦点与缩放，返回具体数值。
-   * 前端点「自动构图」后要在这个结果上继续手调，所以不能只回一张图。 */
-  app.get(
-    '/api/export/stitch/crops',
-    asyncRoute(async (req, res) => {
-      const ids = String(req.query.ids || '')
-        .split(',')
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isFinite(n) && n > 0);
-      const crops = await suggestCrops(ids, String(req.query.template || ''), req.query.outWidth);
-      res.setHeader('Cache-Control', 'no-store');
-      res.json({ crops });
-    })
-  );
-
-  /* 版面坐标：前端构图台要知道每一格在画布里的位置（归一化）与缩放下限 zMin。
-   * 算法版式（grid/justified/mosaic…）的格子是服务端算的，前端不能自己猜；
-   * 模板的格子也走这里，保证「拖的那个框」就是「真正被裁的那块」。 */
-  app.get(
-    '/api/export/stitch/plan',
-    asyncRoute(async (req, res) => {
-      const ids = String(req.query.ids || '')
-        .split(',')
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isFinite(n) && n > 0);
-      const rows = ids.map((id) => lib.getImage(id)).filter(Boolean);
-      if (!rows.length) return res.status(400).json({ error: '没有可用素材' });
-      const geo = planGeometry(rows, req.query);
-      const boxes = geo.boxes.map((b) => ({
-        x: b.x / geo.W,
-        y: b.y / geo.H,
-        w: b.w / geo.W,
-        h: b.h / geo.H,
-        idx: b.idx,
-      }));
-      // zMin 由 planGeometry 在像素口径里算好（归一化坐标乘常数会把比例算错）
-      res.setHeader('Cache-Control', 'no-store');
-      res.json({ ratio: geo.ratio, boxes, zMin: geo.zMin });
-    })
-  );
-
-  /* 图片拼接 / 版面生成：GET 是为了让桌面端下载（主进程只能带 ?token=）也能用。
-   * 参数：ids=1,2,3 / template=<模板 id> / crops=fx,fy,z;...（auto = 自动构图）
-   *      layout=auto|grid|justified|mosaic|poster|comic|seamless|stack（模板之外的兜底版式）
-   *      ratio=auto|1:1|4:5|3:4|16:9|9:16|2:3 / outWidth / columns / gap / bg / cell
-   *      radius / shadow / border / backdrop（覆盖模板默认装饰）
-   *      seamless=1（无缝：留白/缝隙/圆角/描边/投影全部归零）
-   *      format / quality / title / subtitle / billing（后三个是海报文字层）/ file（文件名） */
-  app.get(
-    '/api/export/stitch',
-    asyncRoute(async (req, res) => {
-      const ids = String(req.query.ids || '')
-        .split(',')
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isFinite(n) && n > 0);
-      // 叠字用的标题与文件名分开：没填标题时不能凭空在海报上压一行「拼接图」，
-      // 但没文字的模板（四格、九格…）仍然要能自己取文件名，所以单给一个 file 参数
-      const title = String(req.query.title || '').slice(0, 60);
-      const fileTitle = String(req.query.file || '').slice(0, 60) || title || '拼接图';
-      const r = await buildStitch({
-        ids,
-        template: req.query.template,
-        crops: req.query.crops,
-        subtitle: req.query.subtitle,
-        billing: req.query.billing,
-        layout: req.query.layout,
-        ratio: req.query.ratio,
-        outWidth: req.query.outWidth,
-        columns: req.query.columns,
-        gap: req.query.gap,
-        bg: req.query.bg,
-        cell: req.query.cell,
-        radius: req.query.radius,
-        shadow: req.query.shadow,
-        border: req.query.border,
-        backdrop: req.query.backdrop,
-        seamless: req.query.seamless,
-        format: req.query.format,
-        quality: req.query.quality,
-        title,
-        // 海报排版的三个可调项：字体族 / 标题字号倍率 / 标题颜色
-        font: req.query.font,
-        titleScale: req.query.titleScale,
-        titleColor: req.query.titleColor,
-      });
-      const file = `${safeFileName(fileTitle)}.${r.ext}`;
-      res.setHeader('Content-Type', r.mime);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="stitch.${r.ext}"; filename*=UTF-8''${encodeURIComponent(file)}`
-      );
-      res.setHeader('Cache-Control', 'no-store');
-      res.setHeader('X-Stitch-Size', `${r.width}x${r.height}`);
-      res.send(r.buffer);
     })
   );
 

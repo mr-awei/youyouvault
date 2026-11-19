@@ -16,13 +16,6 @@ export function settingsTutorial(): TutorialCategory[] {
         body: i18n.t('k620b1d3d'),
       },
       {
-        id: 'settings-crawl',
-        title: i18n.t('k43a8c410'),
-        summary: i18n.t('kaca0764f'),
-        keywords: [i18n.t('k92411a01'), i18n.t('k394df2b7'), i18n.t('k0bb619c2'), i18n.t('ke5168a3f')],
-        body: i18n.t('kcaab9f4b'),
-      },
-      {
         id: 'settings-ai',
         title: i18n.t('kd0ac5da4'),
         summary: i18n.t('kaef6acbd'),
@@ -42,13 +35,6 @@ export function settingsTutorial(): TutorialCategory[] {
         summary: i18n.t('kc9044431'),
         keywords: [i18n.t('kfc954d25'), i18n.t('k7ddbe15c'), 'proxy', i18n.t('k5665b68b')],
         body: i18n.t('k1384e22d'),
-      },
-      {
-        id: 'settings-extension',
-        title: i18n.t('kcbad8114'),
-        summary: i18n.t('kc449ca97'),
-        keywords: [i18n.t('k9058622f'), i18n.t('k2f3f8e81'), i18n.t('kaaeb5463'), 'Chrome'],
-        body: i18n.t('k33641b31'),
       },
       {
         id: 'settings-plugin',

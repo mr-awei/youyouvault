@@ -1,6 +1,5 @@
 // @ts-check
 // 统计路由：总量/来源/分辨率/方向/收藏/增长趋势等聚合视图（从 app.js 拆出）
-import { getJobStatus } from '../crawler.js';
 import * as lib from '../library.js';
 import * as ai from '../ai.js';
 import * as kb from '../kb.js';
@@ -25,7 +24,7 @@ let statsBuilding = null;
 /**
  * 素材表「有没有新行」的指纹：MAX(id) 走主键索引，百万行也是微秒级。
  *
- * 快照失效不能只指望入库方记得 emit：采集协程、目录监听、迁移脚本、用户手工塞库
+ * 快照失效不能只指望入库方记得 emit：目录监听、迁移脚本、用户手工塞库
  * 都可能漏掉一次通知。一旦漏了，前端看到的就永远是旧张数 ——
  * 用户的原话是「拷了新图进去没反应，得手动点一下刷新」。
  * 所以每次 GET 顺带比一眼指纹，变了当场重算（一次聚合换来「一定是新的」，划算）。
@@ -42,7 +41,7 @@ function imageFingerprint() {
 /**
  * 让统计快照立刻过期（数据留着，下一次 GET 先照旧返回、后台单飞重算）。
  *
- * 素材入库有三条路：HTTP 导入、采集协程、目录监听。后两条完全不经过 HTTP，
+ * 素材入库有两条路：HTTP 导入、目录监听。后者完全不经过 HTTP，
  * 没人让快照过期的话 /api/stats 会把旧 total 一直续期 120s，前端那套
  * 「库变大就重载列表」的对账就永远不成立 —— 用户看到的现象是
  * 「拷了新图进去没反应，得手动点一下刷新」。
@@ -162,7 +161,6 @@ export function register(app, ctx) {
       topTags,
       recent,
       largest,
-      crawling: getJobStatus().running,
     };
   }
 
@@ -486,13 +484,6 @@ export function register(app, ctx) {
     })
   );
 
-  app.post(
-    '/api/ai/suggest',
-    asyncRoute(async (_req, res) => {
-      res.json(await kb.suggestions());
-    })
-  );
-
   /* --------------------------------- 知识库 --------------------------------- */
 
   app.get('/api/kb/rules', (req, res) => {
@@ -539,7 +530,7 @@ export function register(app, ctx) {
 
   app.get('/api/kb/stats', (_req, res) => res.json(kb.feedbackStats()));
 
-  /* ------------------------------ 壁纸库文件夹管理 --------------------------- */
+  /* ------------------------------ 素材文件夹管理 --------------------------- */
 
   app.post(
     '/api/library/scan',

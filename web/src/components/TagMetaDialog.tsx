@@ -18,7 +18,7 @@ interface Props {
 }
 
 const PRESET_COLORS = [
-  '#ff4d8d',
+  '#f97316',
   '#ff8a3d',
   '#ffcf5c',
   '#5cd68a',
@@ -122,7 +122,7 @@ export default function TagMetaDialog({ tag, tags, onClose, onSaved, onToast }: 
                 className="input"
                 style={{ width: 100 }}
                 value={color}
-                placeholder="#ff4d8d"
+                placeholder="#f97316"
                 onChange={(e) => setColor(e.target.value)}
               />
             </div>

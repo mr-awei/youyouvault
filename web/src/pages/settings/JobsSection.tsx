@@ -12,7 +12,6 @@ interface Props {
 
 /** 状态文案 map：模块级不能调 t，改成按调用点传 t 的取词函数 */
 const KIND_LABEL = (): Record<string, string> => ({
-  crawl: i18n.t('ke8bc2616'),
   edit: i18n.t('ke73cefac'),
   enhance: i18n.t('kfd5e4c21'),
   'model-install': i18n.t('k02b71a79'),
@@ -46,7 +45,7 @@ function fmtTime(iso: string) {
 /**
  * 任务历史 + 操作撤销。
  *
- * 之前这些状态全在内存里：进程一退，采集/批量编辑/增强跑过什么全没了，
+ * 之前这些状态全在内存里：进程一退，批量编辑/增强跑过什么全没了，
  * 界面也只能看「当前任务」，既不能重试也没法取消已经卡住的那次。
  * 撤销同理，只有编辑类能回滚，打标/移动/删除/导入都只能人肉复原。
  */
@@ -65,7 +64,7 @@ export default function JobsSection({ onToast }: Props) {
   useEffect(() => {
     refresh();
   }, [refresh]);
-  // 任务态变化走已有 job SSE（快照含批量编辑/采集/增强），合并 400ms 内多次变化只拉一次；
+  // 任务态变化走已有 job SSE（快照含批量编辑/增强），合并 400ms 内多次变化只拉一次；
   // 轮询退化成「连续收不到推送」时的兜底，页面隐藏时 0 请求。
   useEffect(() => {
     let timer: number | undefined;

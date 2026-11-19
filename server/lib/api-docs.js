@@ -3,7 +3,7 @@
  * API 参考：直接从 Express 已注册的路由表生成，而不是另写一份文档。
  *
  * 之前的问题：只有 /api/v1 的 11 个接口有 OpenAPI，其余 380+ 个内部接口
- * （图片列表、整理、AI、维护、扩展……）没有任何清单，写脚本 / 接扩展的人只能
+ * （图片列表、整理、AI、维护……）没有任何清单，写脚本的人只能
  * 去 grep 源码。手写文档必然和代码漂移，所以这里改为「运行时自省」：
  * 路由注册完，向 app.router.stack 要一遍，分组、鉴权口径都在本文件里定。
  */
@@ -30,17 +30,13 @@ export const GROUPS = [
       '/api/library',
       '/api/libraries',
       '/api/import',
-      '/api/sources',
-      '/api/crawl',
       '/api/events',
       '/api/system',
       '/api/health',
       '/api/hardware',
-      '/api/platform',
-      '/api/live',
       '/api/settings',
     ],
-    note: '多资源库切换、扫描导入、采集、SSE 事件流与系统能力',
+    note: '多资源库切换、扫描导入、SSE 事件流与系统能力',
   },
   {
     key: 'organize',
@@ -48,11 +44,9 @@ export const GROUPS = [
     prefixes: [
       '/api/folders',
       '/api/tags',
-      '/api/keywords',
       '/api/smart-folders',
       '/api/saved-filters',
       '/api/organize',
-      '/api/bookmarks',
       '/api/playlists',
       '/api/kb',
       '/api/collections',
@@ -67,25 +61,18 @@ export const GROUPS = [
       '/api/annotations',
       '/api/comments',
       '/api/notes',
-      '/api/watermark',
       '/api/undo',
       '/api/ops',
       '/api/enhance',
       '/api/ocr',
     ],
-    note: '非破坏编辑、标注、批注、水印、增强、撤销栈',
+    note: '非破坏编辑、标注、批注、增强、撤销栈',
   },
   {
     key: 'ai',
     label: 'AI 与识别',
-    prefixes: ['/api/ai', '/api/face', '/api/models', '/api/clip', '/api/reverse'],
-    note: '模型管理、向量索引、人脸与人物、以图搜图、本地推理任务',
-  },
-  {
-    key: 'wallpaper',
-    label: '壁纸',
-    prefixes: ['/api/wallpaper', '/api/pref', '/api/privacy', '/live'],
-    note: '壁纸盘点评分、桌面设置、隐私相关的本地开关',
+    prefixes: ['/api/ai', '/api/models', '/api/clip'],
+    note: '模型管理、向量索引、本地推理任务',
   },
   {
     key: 'data',
@@ -105,20 +92,18 @@ export const GROUPS = [
   },
   {
     key: 'ext',
-    label: '扩展与集成',
+    label: '集成与同步',
     prefixes: [
-      '/api/extension',
       '/api/plugins',
       '/api/workshop',
       '/api/lan',
       '/api/sync',
       '/api/actions',
       '/api/timeline',
-      '/api/geo',
       '/api/download',
       '/api/usage',
     ],
-    note: '浏览器扩展、插件、局域网共享、同步、右键动作、时间线',
+    note: '插件、局域网共享、同步、右键动作、时间线',
   },
   { key: 'other', label: '其它', prefixes: [], note: '' },
 ];

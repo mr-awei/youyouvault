@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * 托盘图标：不打开主窗口也能换壁纸、收藏当前壁纸、重启本地服务。
+ * 托盘图标：不打开主窗口也能截图、重启本地服务。
  * 托盘菜单的结果统一走 trayNotify（提示窗 + 菜单里的「上次操作」）。
  */
 import { Menu, Tray, app } from 'electron';
@@ -12,7 +12,6 @@ import { fetchJson } from './ipc-base.js';
 import { restartLocalServer } from './service.js';
 import { requestRegionShot } from './shot.js';
 import { trayNotify } from './toast.js';
-import { wallpaperAction } from './wallpaper.js';
 import { showMainWindow } from './windows.js';
 
 const getSettings = getSettingsSnapshot;
@@ -20,7 +19,7 @@ const getSettings = getSettingsSnapshot;
 /** 供主进程其它模块调用：界面语言变了，重建托盘菜单（菜单文字在构建时取 i18n 值） */
 export function refreshTray() {
   const fn = ctx.trayMenuRefresher;
-  if (fn) void fn();
+  if (fn) fn();
 }
 
 export function createTray() {
@@ -33,30 +32,8 @@ export function createTray() {
   }
   ctx.tray.setToolTip(tf('tray.tooltip', { app: APP_NAME }));
 
-  const refreshMenu = async () => {
-    if (!ctx.tray || ctx.tray.isDestroyed()) return;    // 端口还没就绪时去请求 http://127.0.0.1:0/... 只会刷一堆错误日志
-    if (!ctx.serverPort) return;
-    let cur = {};
-    let auto = {};
-    let live = {};
-    // 托盘菜单三项状态：服务在重启的那几十毫秒里会失败，用默认值渲染即可，
-    // 但失败要留一行日志，否则「菜单里壁纸一直是旧的」永远查不到原因
-    try {
-      cur = (await fetchJson(`http://127.0.0.1:${ctx.serverPort}/api/wallpaper/current`)) || {};
-    } catch (e) {
-      console.info('[tray] 当前壁纸读取失败:', e?.message || e);
-    }
-    try {
-      auto = (await fetchJson(`http://127.0.0.1:${ctx.serverPort}/api/wallpaper/auto`))?.config || {};
-    } catch (e) {
-      console.info('[tray] 自动壁纸配置读取失败:', e?.message || e);
-    }
-    try {
-      live = (await fetchJson(`http://127.0.0.1:${ctx.serverPort}/api/wallpaper/live`)) || {};
-    } catch (e) {
-      console.info('[tray] 动态壁纸配置读取失败:', e?.message || e);
-    }
-    const title = String(cur.title || '').slice(0, 16);
+  const refreshMenu = () => {
+    if (!ctx.tray || ctx.tray.isDestroyed()) return;
     // 显式标注：否则数组里混着 {label} 与 {type:'separator'} 时 type 会被推成 string，
     // 不满足 MenuItemConstructorOptions 的字面量联合类型
     /** @type {import('electron').MenuItemConstructorOptions[]} */
@@ -116,71 +93,6 @@ export function createTray() {
         },
       },
       { type: 'separator' },
-      { label: tf('tray.changeWallpaper'), click: () => wallpaperAction('now') },
-      {
-        label: title ? tf('tray.favoriteCurrentWith', { title }) : tf('tray.favoriteCurrent'),
-        enabled: !!cur.imageId,
-        click: () => wallpaperAction('favorite'),
-      },
-      {
-        label: tf('tray.dislike'),
-        enabled: !!cur.imageId,
-        click: () => wallpaperAction('dislike'),
-      },
-      { type: 'separator' },
-      {
-        label: live.enabled ? tf('tray.liveOff') : tf('tray.liveOn'),
-        click: async () => {
-          const next = !live.enabled;
-          try {
-            // 只保存配置，真正的创建/销毁由 liveBus 广播触发（server → 主进程 → 窗口）
-            await fetchJson(
-              `http://127.0.0.1:${ctx.serverPort}/api/wallpaper/live`,
-              {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: next }),
-              }
-            );
-            trayNotify(
-              next ? tf('tray.liveEnabled') : tf('tray.liveDisabled'),
-              next ? tf('tray.liveEnabledDetail') : ''
-            );
-          } catch (err) {
-            console.error('[tray] 动态壁纸切换失败：', err?.message || err);
-            trayNotify(tf('tray.liveFailed'), err?.message || tf('tray.serviceNoResponse'));
-          }
-          refreshMenu();
-        },
-      },
-      { type: 'separator' },
-      {
-        label: auto.enabled ? tf('tray.autoPause') : tf('tray.autoEnable'),
-        click: async () => {
-          const next = !auto.enabled;
-          try {
-            const data = await fetchJson(
-              `http://127.0.0.1:${ctx.serverPort}/api/wallpaper/auto`,
-              {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: next }),
-              }
-            );
-            if (!data || data.error) throw new Error(data?.error || tf('tray.noResult'));
-            const every = data?.config?.intervalMinutes || auto.intervalMinutes;
-            trayNotify(
-              next ? tf('tray.autoOn') : tf('tray.autoPaused'),
-              next && every ? tf('tray.autoEvery', { n: every }) : ''
-            );
-          } catch (err) {
-            console.error('[tray] 切换定时失败：', err?.message || err);
-            trayNotify(tf('tray.autoFailed'), err?.message || tf('tray.serviceNoResponse'));
-          }
-          refreshMenu();
-        },
-      },
-      { type: 'separator' },
       {
         label: tf('tray.quit'),
         click: () => {
@@ -196,16 +108,5 @@ export function createTray() {
   ctx.trayMenuRefresher = refreshMenu;
   ctx.tray.on('click', showMainWindow);
   refreshMenu();
-  // 句柄要留着才能在退出时 clear：以前这个 interval 会活到进程结束
-  if (ctx.trayTimer) clearInterval(ctx.trayTimer);
-  ctx.trayTimer = setInterval(refreshMenu, 30000); // 让菜单里的「当前壁纸」保持最新
   console.info('[tray] 托盘已就绪（左键打开窗口 / 右键菜单）');
-}
-
-/** 退出前清掉托盘菜单的轮询定时器 */
-export function stopTrayTimer() {
-  if (ctx.trayTimer) {
-    clearInterval(ctx.trayTimer);
-    ctx.trayTimer = null;
-  }
 }

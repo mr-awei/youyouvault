@@ -4,7 +4,7 @@ import { GROUPS, collectRoutes, renderMarkdown } from '../lib/api-docs.js';
 
 export function register(app) {
   /**
-   * 路由清单（界面「设置 → API 参考」用它渲染）。
+   * 路由清单（供 /api/docs.md 导出与外部调试使用）。
    * 每次请求现算：路由是静态注册的，成本只是遍历一遍 stack，
    * 但换来「接口改了清单自动跟着变」，不会像手写文档一样过期。
    */

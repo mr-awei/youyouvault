@@ -221,7 +221,7 @@ textarea.input {
 }
 .export-scope-item.active {
   border-color: var(--accent);
-  background: rgba(255, 77, 141, 0.08);
+  background: rgba(249, 115, 22, 0.08);
 }
 .export-scope-item span {
   display: flex;

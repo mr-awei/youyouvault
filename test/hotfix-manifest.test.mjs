@@ -27,9 +27,9 @@ const baseManifest = () => ({
   schemaVersion: SCHEMA_VERSION,
   shellVersion: '1.2.20',
   seq: 3,
-  notes: '修拼图首帧闪回',
+  notes: '修导出首帧闪回',
   createdAt: '2026-11-16T00:00:00.000Z',
-  files: [file('web/index.html'), file('server/lib/stitch.js')],
+  files: [file('web/index.html'), file('server/lib/fonts.js')],
   urls: ['https://github.com/mr-awei/gallery/releases/download/hotfix/pack-3.zip'],
 });
 
@@ -51,7 +51,7 @@ test('改任何一个被签名字段都会验签失败', () => {
   const signed = signManifest(baseManifest(), PRIV);
   assert.equal(verifyManifest({ ...signed, seq: 99 }, PUB), false);
   assert.equal(verifyManifest({ ...signed, shellVersion: '1.2.21' }, PUB), false);
-  const tampered = { ...signed, files: [file('server/lib/stitch.js'), file('web/evil.js')] };
+  const tampered = { ...signed, files: [file('server/lib/fonts.js'), file('web/evil.js')] };
   assert.equal(verifyManifest(tampered, PUB), false);
 });
 

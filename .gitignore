@@ -20,6 +20,8 @@ storage/
 e_pid.txt
 # 热更签名私钥：只在本机与 CI secret 里，绝不进仓库
 .hotfix-private.pem
+# 授权签发私钥：同上，泄露等于谁都能签授权码
+.license-private.pem
 
 # 日志与临时输出
 logs/

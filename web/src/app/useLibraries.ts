@@ -25,6 +25,8 @@ type Options = {
   /** 当前库 id 的 state 由 App 持有（统计 hook 在本 hook 之前就要用它） */
   activeLibId: number | null;
   setActiveLibId: Dispatch<SetStateAction<number | null>>;
+  /** 服务恢复后清掉启动竞态留下的全局错误条 */
+  clearLoadError: () => void;
 };
 
 /**
@@ -51,22 +53,44 @@ export function useLibraries({
   folderId,
   activeLibId,
   setActiveLibId,
+  clearLoadError,
 }: Options) {
   const [libraries, setLibraries] = useState<Library[]>([]);
   /** 当前库锁着时的信息；非空就把整页切到解锁屏（服务端此时只回 423） */
   const [lockInfo, setLockInfo] = useState<{ id: number; name: string } | null>(null);
 
-  // 加载资源库列表与当前库的文件夹树
+  // 加载资源库列表与当前库的文件夹树。
+  // 桌面端窗口可能比本地服务先就绪：首个请求失败不立刻报错，先按退避重试几次；
+  // 成功后顺手清掉上一次失败留下的全局错误条（否则它会一直挂在页面顶部）。
   useEffect(() => {
-    api
-      .libraries()
-      .then((r) => {
-        setLibraries(r.libraries);
-        setActiveLibId(r.activeId);
-      })
-      .catch(quiet);
-    reloadFolders();
-    reloadSavedFilters();
+    let cancelled = false;
+    let timer: number | undefined;
+    const delays = [300, 800, 1600];
+    const attempt = (n: number) => {
+      api
+        .libraries()
+        .then((r) => {
+          if (cancelled) return;
+          setLibraries(r.libraries);
+          setActiveLibId(r.activeId);
+          clearLoadError();
+          reloadFolders();
+          reloadSavedFilters();
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          if (n < delays.length) {
+            timer = window.setTimeout(() => attempt(n + 1), delays[n]);
+            return;
+          }
+          quiet(err);
+        });
+    };
+    attempt(0);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -81,12 +105,13 @@ export function useLibraries({
       const r = await api.libraries();
       setLibraries(r.libraries);
       setActiveLibId(r.activeId);
+      clearLoadError();
       return r;
     } catch (err) {
       quiet(err);
       return null;
     }
-  }, []);
+  }, [clearLoadError]);
 
   /** 重新拉库列表（设/改/删密码、立即上锁之后用） */
   const reloadLibraries = useCallback(() => {

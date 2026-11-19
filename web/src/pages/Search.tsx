@@ -17,13 +17,13 @@ interface Props {
 
 export default function Search({ onToast, onOpenItem }: Props) {
   const [mode, setMode] = useState<Mode>('ai');
-  const [hex, setHex] = useState('#ff4d6d');
+  const [hex, setHex] = useState('#f97316');
   const [tol, setTol] = useState(48);
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<ImageItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [queryPreview, setQueryPreview] = useState(''); // 以图搜图的查询图预览
+  const [queryPreview, setQueryPreview] = useState(''); // 相似图的查询图预览
   /** 本次结果到底走的哪条通道（LLM 抽词 / 纯关键词 / CLIP / pHash）——
    *  以前四种情况在界面上没有任何区别，用户会以为「AI 语义搜索」在理解画面。 */
   const [engineNote, setEngineNote] = useState('');
@@ -52,7 +52,7 @@ export default function Search({ onToast, onOpenItem }: Props) {
   useEffect(() => {
     const my = ++searchSeq.current;
     if (mode !== 'color') {
-      // 切走时让颜色 / AI / 以图搜图的在途响应全部失效
+      // 切走时让颜色 / AI / 相似图的在途响应全部失效
       setLoading(false);
       return;
     }

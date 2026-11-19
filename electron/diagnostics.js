@@ -20,7 +20,6 @@ const MAX_LOG_FILES = 4;
 function maskSecrets(settings) {
   const out = { ...settings };
   if (out.aiApiKey) out.aiApiKey = '***';
-  if (out.weiboCookie) out.weiboCookie = '***';
   if (out.ai && typeof out.ai === 'object') out.ai = { ...out.ai, apiKey: '***' };
   if (out.network && typeof out.network === 'object' && out.network.proxyPassword) {
     out.network = { ...out.network, proxyPassword: '***' };

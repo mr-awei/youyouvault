@@ -339,7 +339,7 @@ export async function emptyTrash() {
   return { removed, failed };
 }
 
-/** 重命名磁盘文件并同步标题（壁纸库文件夹管理） */
+/** 重命名磁盘文件并同步标题（图库文件夹管理） */
 export async function renameImage(id, title) {
   const row = getImage(id);
   if (!row) throw new Error('图片不存在');

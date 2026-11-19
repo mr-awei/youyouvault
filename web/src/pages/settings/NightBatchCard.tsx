@@ -7,9 +7,8 @@ interface Props {
   onToast: (msg: string, type?: 'info' | 'error') => void;
 }
 
-const TASKS: { key: 'semantic' | 'face'; label: string; hint: string }[] = [
+const TASKS: { key: 'semantic'; label: string; hint: string }[] = [
   { key: 'semantic', label: i18n.t('kdcec5f42'), hint: i18n.t('ke0d26045') },
-  { key: 'face', label: i18n.t('k6945ac81'), hint: i18n.t('ke42b82fa') },
 ];
 
 /**
@@ -89,8 +88,8 @@ export default function NightBatchCard({ onToast }: Props) {
   };
 
   const pct = state && state.total > 0 ? Math.min(100, Math.round((state.done / state.total) * 100)) : 0;
-  const pending = state?.pending || { semantic: 0, face: 0, total: 0 };
-  const taskLabel = state?.task === 'semantic' ? i18n.t('kdcec5f42') : state?.task === 'face' ? i18n.t('k6945ac81') : '';
+  const pending = state?.pending || { semantic: 0, total: 0 };
+  const taskLabel = state?.task === 'semantic' ? i18n.t('kdcec5f42') : '';
 
   return (
     <Card
@@ -132,7 +131,7 @@ export default function NightBatchCard({ onToast }: Props) {
 
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10 }}>
         {TASKS.map((t) => {
-          const num = t.key === 'semantic' ? pending.semantic : pending.face;
+          const num = pending.semantic;
           return (
             <label key={t.key} className="hint" style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
               <input
@@ -182,7 +181,7 @@ export default function NightBatchCard({ onToast }: Props) {
       </div>
 
       <div className="hint" style={{ marginTop: 8, lineHeight: 1.8 }}>
-        {pending.total === 0 ? i18n.t('k1a1be048') : i18n.t('kb6133c4b', { p0: pending.semantic, p1: pending.face })}
+        {pending.total === 0 ? i18n.t('k1a1be048') : i18n.t('kb6133c4b', { p0: pending.semantic })}
         {state?.enabled && !state.running && state.skipped ? i18n.t('k51fa284f', { p0: state.skipped }) : ''}
         {state?.lastAt ? (
           <>

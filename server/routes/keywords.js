@@ -1,7 +1,6 @@
 // @ts-check
-// 关键词 / 设置 / 图库文件夹与多资源库路由（从 app.js 拆出）
+// 设置 / 图库文件夹与多资源库路由（从 app.js 拆出）
 import { applyProxy } from '../network.js';
-import { CRAWL_LIMITS, SOURCES, getJobStatus, startCrawl, stopCrawl } from '../crawler.js';
 import * as lib from '../library.js';
 import {
   addImagesToFolder,
@@ -49,48 +48,19 @@ import {
 import { autoMergeLegacy, refreshMergedRows } from '../lib/legacy-db.js';
 import { NAME_TEMPLATE_PRESETS, NAME_TEMPLATE_TOKENS, previewNameTemplate } from '../lib/name-template.js';
 import { logOp } from '../oplog.js';
-import { db, getSettings, saveSettings, listKeywords, addKeyword, updateKeyword, deleteKeyword } from '../db.js';
+import { db, getSettings, saveSettings } from '../db.js';
 
 export function register(app, ctx) {
   const { asyncRoute, sseBroadcast, startLocalImport, importState: importStateRef } = ctx;
 
 
-  app.get('/api/keywords', (_req, res) => res.json(listKeywords()));
-
-  app.post(
-    '/api/keywords',
-    asyncRoute(async (req, res) => {
-      const id = addKeyword(req.body.text);
-      res.json({ ok: true, id, keywords: listKeywords() });
-    })
-  );
-
-  app.put(
-    '/api/keywords/:id',
-    asyncRoute(async (req, res) => {
-      updateKeyword(Number(req.params.id), req.body);
-      res.json({ ok: true, keywords: listKeywords() });
-    })
-  );
-
-  app.delete(
-    '/api/keywords/:id',
-    asyncRoute(async (req, res) => {
-      deleteKeyword(Number(req.params.id));
-      res.json({ ok: true, keywords: listKeywords() });
-    })
-  );
-
-  /** settings 对外输出脱敏：凭据（微博 Cookie / AI API Key）永不下发前端，只回报「是否已配置」 */
+  /** settings 对外输出脱敏：凭据（AI API Key）永不下发前端，只回报「是否已配置」 */
   function maskSettings(s) {
-    const { weiboCookie, ...rest } = s;
-    const ai = rest.ai ? { ...rest.ai, apiKey: '' } : rest.ai;
+    const ai = s.ai ? { ...s.ai, apiKey: '' } : s.ai;
     return {
-      ...rest,
+      ...s,
       ai,
-      weiboCookie: '',
-      hasWeiboCookie: !!String(weiboCookie || '').trim(),
-      hasAiApiKey: !!String(rest.ai?.apiKey || '').trim(),
+      hasAiApiKey: !!String(s.ai?.apiKey || '').trim(),
     };
   }
 
@@ -453,66 +423,6 @@ export function register(app, ctx) {
     })
   );
 
-  /**
-   * 采集源 + 采集参数的唯一事实来源。
-   * 以前这里只回 key/label/enabled，前端另有一份硬编码的源列表和页面级并发常量，
-   * 于是「后端支持调并发/画质阈值」在界面上根本摸不到；改一处忘一处还会对不上。
-   */
-  app.get('/api/sources', (_req, res) => {
-    const settings = getSettings();
-    const sources = Object.values(SOURCES).map((s) => ({
-      key: s.key,
-      label: s.label,
-      hint: s.hint || '',
-      needsCookie: !!s.needsCookie,
-      kind: 'crawl',
-      enabled: !!settings.sources?.[s.key],
-    }));
-    // 本地导入不是「采集源」，但筛选器/统计里是一等公民，一起下发省得前端再写死一份
-    sources.push({ key: 'local', label: '本地导入', hint: '', needsCookie: false, kind: 'import', enabled: true });
-    res.json({
-      sources,
-      limits: { maxPages: CRAWL_LIMITS.MAX_PAGES, maxConcurrency: CRAWL_LIMITS.MAX_CONCURRENCY },
-      crawl: {
-        pagesPerKeyword: Number(settings.pagesPerKeyword) || 3,
-        concurrency: Number(settings.concurrency) || 5,
-        minResolution: Number(settings.minResolution) || 0,
-        minFileSize: Number(settings.minFileSize) || 0,
-        maxFileSize: Number(settings.maxFileSize) || 0,
-      },
-    });
-  });
-
-  /* --------------------------------- 采集 ---------------------------------- */
-
-  app.get('/api/crawl/status', (_req, res) => res.json(getJobStatus()));
-
-  app.post(
-    '/api/crawl/start',
-    asyncRoute(async (req, res) => {
-      const settings = getSettings();
-      const body = req.body || {};
-      let keywords = body.keywords;
-      if (!Array.isArray(keywords) || !keywords.length) {
-        keywords = listKeywords()
-          .filter((k) => k.enabled)
-          .map((k) => k.text);
-      }
-      // 只有「没传 sources」才回落到设置里的开关；显式传空数组 = 用户把源全关了，
-      // 再回落等于偷偷帮他打开，界面上勾掉的东西没生效
-      const sources = Array.isArray(body.sources)
-        ? body.sources
-        : Object.keys(settings.sources || {}).filter((k) => settings.sources[k]);
-      const result = startCrawl({ keywords, sources, pages: body.pages ?? settings.pagesPerKeyword });
-      res.json(result);
-    })
-  );
-
-  app.post('/api/crawl/stop', (_req, res) => {
-    stopCrawl();
-    res.json({ ok: true });
-  });
-
   /* ------------------------------- 导入 / 维护 ------------------------------ */
   // importState / startLocalImport 已在模块顶层定义（bootstrap 复用）
 
@@ -540,7 +450,7 @@ export function register(app, ctx) {
         rows = Array.from({ length: Math.min(count, 5) }, (_, i) => ({
           title: `示例素材 ${i + 1}.jpg`,
           abs_path: `示例素材 ${i + 1}.jpg`,
-          keyword: '壁纸',
+          keyword: '示例',
           source: 'local',
           width: 1920,
           height: 1080,

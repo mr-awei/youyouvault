@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 /**
  * 等尺寸网格的窗口虚拟滚动。
  *
- * MasonryGrid 解决的是「图片原比例瀑布流」，但人物页 / 时间线的格子是固定尺寸的
+ * MasonryGrid 解决的是「图片原比例瀑布流」，但列表页 / 时间线的格子是固定尺寸的
  * （正方形缩略图、或正方形 + 两行文字），以前都是 `items.map()` 全量铺 DOM ——
  * 一天的相册几千张就排几千个 <img>，滚动掉帧、内存随滚动持续增长。
  *
@@ -28,7 +28,7 @@ interface Props<T> {
   /** 目标列宽（px）：列数 = floor((容器宽 + gap) / (列宽 + gap))，与 CSS auto-fill 一致 */
   colWidth?: number;
   gap?: number;
-  /** 格子以外的固定附加高度（如人物卡片下方两行文字），只参与行高计算 */
+  /** 格子以外的固定附加高度（如列表卡片下方两行文字），只参与行高计算 */
   extraHeight?: number;
   /** 最多列数，避免超大屏把格子拉成一条 */
   maxCols?: number;

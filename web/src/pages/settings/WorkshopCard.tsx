@@ -15,7 +15,7 @@ interface Props {
   onToast?: (msg: string, kind?: 'info' | 'error') => void;
 }
 
-/** 创意工坊（本地）：把配色 + 壁纸设置 + 少量图片打成一个 .tuku-pack 文件分享 */
+/** 创意工坊（本地）：把配色 + 少量图片打成一个 .tuku-pack 文件分享 */
 export default function WorkshopCard({ onToast }: Props) {
   const [items, setItems] = useState<ThemePackBrief[]>([]);
   const [dir, setDir] = useState('');
@@ -25,7 +25,6 @@ export default function WorkshopCard({ onToast }: Props) {
   const [colors, setColors] = useState<Record<string, string>>(
     Object.fromEntries(COLORS.map((c) => [c.key, c.fallback]))
   );
-  const [withSettings, setWithSettings] = useState(true);
   const [assets, setAssets] = useState<{ name: string; dataUrl: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
@@ -58,7 +57,6 @@ export default function WorkshopCard({ onToast }: Props) {
         name,
         author,
         theme,
-        includeSettings: withSettings,
         assets,
       });
       const blob = new Blob([JSON.stringify(r.pack, null, 2)], { type: 'application/json' });
@@ -88,7 +86,7 @@ export default function WorkshopCard({ onToast }: Props) {
       const r = await api.workshopImport(text);
       applyThemePack(r.theme);
       onToast?.(
-        i18n.t('kef84c1d6', { p0: r.pack.name, p1: r.appliedSettings.length, p2: r.assetPaths.length }) +
+        i18n.t('kef84c1d6', { p0: r.pack.name, p2: r.assetPaths.length }) +
           (r.skipped.length ? i18n.t('k3f6fd28f', { p0: r.skipped.length }) : ''),
         'info'
       );
@@ -105,7 +103,7 @@ export default function WorkshopCard({ onToast }: Props) {
     try {
       const r = await api.workshopApply(id);
       applyThemePack(r.theme);
-      onToast?.(i18n.t('k8657fe7e', { p0: r.appliedSettings.length }), 'info');
+      onToast?.(i18n.t('k8657fe7e'), 'info');
     } catch (err) {
       onToast?.(i18n.t('k6af6e03b', { p0: (err as Error).message }), 'error');
     }
@@ -176,10 +174,6 @@ export default function WorkshopCard({ onToast }: Props) {
           placeholder={i18n.t('kb7090365')}
         />
       </div>
-      <div className="switch-row">
-        <span>{i18n.t('k79127b1c')}</span>
-        <input type="checkbox" checked={withSettings} onChange={(e) => setWithSettings(e.target.checked)} />
-      </div>
       <div className="field" style={{ marginTop: 8 }}>
         <label>{i18n.t('k76ac9943')}</label>
         <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={(e) => void addImages(e.target.files)} />
@@ -212,7 +206,7 @@ export default function WorkshopCard({ onToast }: Props) {
             <span>
               <b>{p.name}</b>{p.author ? ` · ${p.author}` : ''}
               <div className="hint">
-                {p.base === 'dark' ? i18n.t('k41e8e8b9') : i18n.t('k48d0a09b')} · {p.varCount} 项配色 · {p.settingKeys.length} 项壁纸设置 · {p.assetNames.length} 张图片
+                {p.base === 'dark' ? i18n.t('k41e8e8b9') : i18n.t('k48d0a09b')} · {p.varCount} 项配色 · {p.assetNames.length} 张图片
               </div>
             </span>
             <span style={{ display: 'inline-flex', gap: 6 }}>

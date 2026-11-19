@@ -19,11 +19,6 @@ export function posixFileExpr(p) {
   return `POSIX file "${escapeAppleScriptString(p)}"`;
 }
 
-/** 设置桌面壁纸（macOS） */
-export function setWallpaperScript(p) {
-  return `tell application "Finder" to set desktop picture to ${posixFileExpr(p)}`;
-}
-
 /** 移到废纸篓（macOS） */
 export function trashFileScript(p) {
   return `tell application "Finder" to delete ${posixFileExpr(p)}`;

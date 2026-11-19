@@ -2,7 +2,7 @@
 /**
  * 文档双语化工具：把静态 HTML 文档里的用户可见文案抽成待译清单，再按译文重建英文版。
  *
- *   node scripts/docs-bilingual.mjs extract docs/产品介绍.html docs/评测与路线图.html
+ *   node scripts/docs-bilingual.mjs extract docs/产品介绍.html
  *   node scripts/docs-bilingual.mjs build   docs/产品介绍.html
  *
  * 约定：

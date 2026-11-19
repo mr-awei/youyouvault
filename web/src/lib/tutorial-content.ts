@@ -3,7 +3,7 @@
  *
  * 一个功能一条，正文按「是什么 → 怎么用 → 边界/坑」写，正文里的 `代码` 用反引号，
  * 强调用 **粗体**（渲染器只认这两种行内标记，不引 markdown 依赖）。
- * 关键词用来补同义词（壁纸 / 桌面 / 自动换），搜索只看这里的文字，不会去猜。
+ * 关键词用来补同义词（图片 / 素材 / 导入），搜索只看这里的文字，不会去猜。
  */
 
 import type { TutorialCategory, TutorialSection, TutorialShortcut } from './tutorial/types';
@@ -279,13 +279,6 @@ export function baseTutorial(): TutorialCategory[] {
         body: i18n.t('k956a06db'),
       },
       {
-        id: 'watermark',
-        title: i18n.t('keae1798d'),
-        summary: i18n.t('kf8c9328f'),
-        keywords: [i18n.t('kdc40df8d'), i18n.t('kcdd68c8f'), i18n.t('k961534b4'), i18n.t('k09307ce8'), i18n.t('k0b098228')],
-        body: i18n.t('k97b2b08c'),
-      },
-      {
         id: 'enhance',
         title: i18n.t('k3eae58a3'),
         summary: i18n.t('ka5a73508'),
@@ -320,20 +313,6 @@ export function baseTutorial(): TutorialCategory[] {
         body: i18n.t('k24f8bf18'),
       },
       {
-        id: 'crawl',
-        title: i18n.t('k5c575428'),
-        summary: i18n.t('k067c80f0'),
-        keywords: [i18n.t('ke8bc2616'), i18n.t('kfdd054bd'), i18n.t('k18a481ea'), i18n.t('ka3f6b859'), i18n.t('k26ca20b1')],
-        body: i18n.t('k82a7a2e5'),
-      },
-      {
-        id: 'extension',
-        title: i18n.t('k7044f800'),
-        summary: i18n.t('kf94e24db'),
-        keywords: [i18n.t('k2dc90225'), i18n.t('k912302cb'), i18n.t('k483194d7'), i18n.t('k6e78d750'), 'Chrome'],
-        body: i18n.t('k3e6fe01c'),
-      },
-      {
         id: 'screenshot',
         title: i18n.t('k6fad0e07'),
         summary: i18n.t('k0712bf47'),
@@ -346,33 +325,6 @@ export function baseTutorial(): TutorialCategory[] {
         summary: i18n.t('k34752671'),
         keywords: [i18n.t('k9f9d3632'), i18n.t('k5f2a9420'), i18n.t('kce80eb22'), i18n.t('k129bfcd1'), i18n.t('kd5a73b0c')],
         body: i18n.t('k2beafa48'),
-      },
-    ],
-  },
-  {
-    id: 'wallpaper',
-    title: i18n.t('kad7d1b4e'),
-    sections: [
-      {
-        id: 'wallpaper',
-        title: i18n.t('k1c3b326f'),
-        summary: i18n.t('k378efc46'),
-        keywords: [i18n.t('k8e92193d'), i18n.t('k2828b79c'), i18n.t('k3809ac48'), i18n.t('k72ebfe28'), i18n.t('k7043d02d')],
-        body: i18n.t('k1d311e1d'),
-      },
-      {
-        id: 'dynamic-wallpaper',
-        title: i18n.t('k3694c068'),
-        summary: i18n.t('kcf470422'),
-        keywords: [i18n.t('k3bfbb815'), i18n.t('ke0817a03'), 'GLSL', i18n.t('kdeefe024'), i18n.t('k80c7f269'), i18n.t('kfaa3e374')],
-        body: i18n.t('k3bbc51f6'),
-      },
-      {
-        id: 'tray',
-        title: i18n.t('k2a5c904a'),
-        summary: i18n.t('k48434be9'),
-        keywords: [i18n.t('k59baaf28'), i18n.t('k04bb50d4'), i18n.t('k2205b60e'), i18n.t('ka7d84685')],
-        body: i18n.t('k09a69d59'),
       },
     ],
   },
@@ -407,13 +359,6 @@ export function baseTutorial(): TutorialCategory[] {
         summary: i18n.t('kfc2db90e'),
         keywords: ['OCR', i18n.t('k53cce5ba'), i18n.t('kdd0a177c'), i18n.t('k66dbcb8d')],
         body: i18n.t('k65b7b02d'),
-      },
-      {
-        id: 'reverse-image',
-        title: i18n.t('kc612b5c5'),
-        summary: i18n.t('k400398cf'),
-        keywords: [i18n.t('kc30d6c94'), i18n.t('k1f991660'), 'SauceNAO', 'Lens', 'TinEye'],
-        body: i18n.t('kcb7e33b2'),
       },
       {
         id: 'plugins',

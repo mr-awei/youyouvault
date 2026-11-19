@@ -2,7 +2,7 @@
 /**
  * 创意工坊 / 主题包（.tuku-pack）格式与校验。
  *
- * 一个包就是一个 JSON 文件：主题变量覆盖 + 壁纸设置子集 + 少量内嵌图片。
+ * 一个包就是一个 JSON 文件：主题变量覆盖 + 少量内嵌图片。
  * 不放社区 / 在线商店（产品决策未定），导出的是普通文件，靠微信/网盘/邮件分享，
  * 本机工坊目录负责收集已经导入过的包。
  *
@@ -18,22 +18,6 @@ export const MAX_ASSET_BYTES = 2 * 1024 * 1024;
 export const ALLOWED_VARS = [
   '--accent', '--accent-2', '--bg', '--bg-soft', '--panel', '--border',
   '--text', '--muted', '--ok', '--warn', '--err', '--radius', '--gradient',
-];
-/**
- * 允许带进包的壁纸设置键。绝不包含凭据、本机绝对路径、可信目录、
- * allowLocalUrl（会放开本地网页）与运行态游标/图片 id —— 那些跨机器既无效又危险。
- */
-export const ALLOWED_SETTING_KEYS = ['wallpaperFill', 'wallpaperMode', 'screensaver'];
-export const ALLOWED_LIVE_KEYS = [
-  'enabled', 'mode', 'intervalSec', 'kenBurns', 'scope', 'minScore', 'params',
-  'mute', 'volume', 'shaderPreset', 'shaderSource', 'audioSource', 'interactive',
-  'pauseOnGpu', 'gpuThreshold', 'pauseApps', 'pauseOnBattery', 'pauseOnFullscreen',
-  'clickThrough',
-];
-export const ALLOWED_AUTO_KEYS = [
-  'enabled', 'mode', 'atTime', 'weekday', 'dayOfMonth', 'minutes', 'scope',
-  'order', 'minScore', 'perMonitorDifferent', 'useAiFit', 'useTimeAware',
-  'feedbackToKb', 'autoEnhance',
 ];
 
 const COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -87,41 +71,10 @@ function cleanAssets(raw) {
   return { out, skipped };
 }
 
-/** 从当前设置里挑出可分享的壁纸子集 */
-export function pickWallpaperSettings(settings) {
-  const out = {};
-  for (const k of ALLOWED_SETTING_KEYS) {
-    if (settings && settings[k] !== undefined) out[k] = settings[k];
-  }
-  const live = settings?.liveWallpaper;
-  if (live && typeof live === 'object') {
-    const sub = {};
-    for (const k of ALLOWED_LIVE_KEYS) {
-      if (live[k] !== undefined) sub[k] = live[k];
-    }
-    if (Object.keys(sub).length) out.liveWallpaper = sub;
-  }
-  const auto = settings?.autoWallpaper;
-  if (auto && typeof auto === 'object') {
-    const sub = {};
-    for (const k of ALLOWED_AUTO_KEYS) {
-      if (auto[k] !== undefined) sub[k] = auto[k];
-    }
-    if (Object.keys(sub).length) out.autoWallpaper = sub;
-  }
-  return out;
-}
-
 /** 构造一个包（导出时用），顺便把不合规字段剔掉并记进 skipped */
 export function buildThemePack(input = {}) {
   const { out: vars, skipped: badVars } = cleanVars(input.theme?.variables);
   const { out: assets, skipped: badAssets } = cleanAssets(input.assets);
-  let settings = {};
-  let badSettings = [];
-  if (input.settings && typeof input.settings === 'object') {
-    settings = pickWallpaperSettings(input.settings);
-    badSettings = Object.keys(input.settings).filter((k) => !(k in settings));
-  }
   return {
     pack: {
       kind: PACK_KIND,
@@ -139,10 +92,9 @@ export function buildThemePack(input = {}) {
           ? String(input.theme?.fontFamily || '').trim().slice(0, 120)
           : '',
       },
-      settings,
       assets,
     },
-    skipped: [...badVars.map((k) => `变量 ${k}`), ...badAssets.map((n) => `图片 ${n}`), ...badSettings.map((k) => `设置 ${k}`)],
+    skipped: [...badVars.map((k) => `变量 ${k}`), ...badAssets.map((n) => `图片 ${n}`)],
   };
 }
 
@@ -164,13 +116,7 @@ export function parseThemePack(textOrObject) {
     name: raw.name,
     author: raw.author,
     theme: raw.theme,
-    settings: raw.settings,
     assets: raw.assets,
   });
   return { pack: built.pack, skipped: built.skipped };
-}
-
-/** 导入时只挑出能直接落到设置里的键 */
-export function settingsPatchOf(pack) {
-  return pickWallpaperSettings(pack?.settings || {});
 }

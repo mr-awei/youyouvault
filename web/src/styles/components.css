@@ -10,9 +10,9 @@
   margin-bottom: 18px;
   flex-wrap: wrap;
 }
-/* 长列表页（人物 / 整理 / 书签 / 清单 / 知识库 / 采集 …）的页头常驻：
+/* 长列表页（整理 / 清单 / 知识库 …）的页头常驻：
    这些页面的操作入口（扫描、筛选、批量按钮）全在页头上，以前一滚就得滚回顶部。
-   页面根节点有两种写法——裸 div（人物页）与 .page（智能检索等），两种都要覆盖；
+   页面根节点有两种写法——裸 div（整理页）与 .page（智能检索等），两种都要覆盖；
    包在 .sticky-head 里的（图库）不在此列，它的吸顶由自己那层负责，别嵌套两层 sticky。
    间距从 margin-bottom 挪到 padding-bottom：吸顶后 margin 区不画背景，内容会从缝里透出来。
    top 用 -22px 而不是 0：sticky 的停靠线从 .content 的内容框算（内容是 padding:22px 的
@@ -54,7 +54,7 @@
   white-space: nowrap;
   color: #fff;
   background: var(--gradient);
-  box-shadow: 0 4px 14px rgba(255, 77, 141, 0.2);
+  box-shadow: 0 4px 14px rgba(249, 115, 22, 0.2);
 }
 .page-count {
   padding: 5px 10px;
@@ -108,7 +108,7 @@
   border-color: transparent;
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 8px 22px rgba(255, 77, 141, 0.28);
+  box-shadow: 0 8px 22px rgba(249, 115, 22, 0.28);
 }
 .btn.primary:hover {
   filter: brightness(1.08);
@@ -147,7 +147,7 @@
 }
 .input:focus,
 .select:focus {
-  border-color: rgba(255, 77, 141, 0.6);
+  border-color: rgba(249, 115, 22, 0.6);
   background: rgba(255, 255, 255, 0.07);
 }
 /* 下拉选项统一暗色（原生弹出层白底白字问题） */
@@ -157,7 +157,7 @@ option {
 }
 /*
  * 原生下拉的箭头是画在内容区里的：右内边距只有 12px 时，箭头会盖住最后几个字，
- * 于是「人物 #2949（126）」看起来像被裁掉了一截。给所有 select 预留箭头位，
+ * 于是「标签 #2949（126）」看起来像被裁掉了一截。给所有 select 预留箭头位，
  * 选中文本超长时用省略号收尾（悬停看 title），而不是硬生生切断。
  */
 select,
@@ -182,18 +182,18 @@ select.select {
   border-color: var(--border-strong);
 }
 .chip.active {
-  background: linear-gradient(135deg, rgba(255, 77, 141, 0.22), rgba(168, 85, 247, 0.2));
-  border-color: rgba(255, 77, 141, 0.5);
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.22), rgba(234, 88, 12, 0.2));
+  border-color: rgba(249, 115, 22, 0.5);
   color: #fff;
 }
 /* 次要操作按钮（如「全部标记为已看」），弱化但不抢眼 */
 .chip.ghost-chip {
   border-style: dashed;
   color: var(--accent);
-  border-color: rgba(255, 77, 141, 0.4);
+  border-color: rgba(249, 115, 22, 0.4);
 }
 .chip.ghost-chip:hover {
-  background: rgba(255, 77, 141, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   color: var(--text);
 }
 
@@ -255,7 +255,7 @@ select.select {
 .view-btn.on {
   color: #fff;
   background: var(--gradient);
-  box-shadow: 0 3px 10px rgba(255, 77, 141, 0.25);
+  box-shadow: 0 3px 10px rgba(249, 115, 22, 0.25);
 }
 /* 文件夹收纳视图：筛选条件不适用于分组浏览，顶部只留一句说明 + 展示方式切换 */
 .folder-mode-bar {
@@ -290,7 +290,7 @@ select.select {
 .gi-drop {
   position: fixed;
   inset: 0;
-  /* 要压在对话框之上：否则在导出/拼图对话框里拖文件时靶盘被遮住，用户找不到落点 */
+  /* 要压在对话框之上：否则在导出对话框里拖文件时靶盘被遮住，用户找不到落点 */
   z-index: 12000;
   pointer-events: none;
   display: flex;
@@ -309,9 +309,9 @@ select.select {
   max-width: min(460px, 84vw);
   padding: 26px 40px;
   border-radius: 18px;
-  border: 2px dashed rgba(255, 77, 141, 0.75);
+  border: 2px dashed rgba(249, 115, 22, 0.75);
   background: rgba(24, 24, 34, 0.92);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 0 0 10px rgba(255, 77, 141, 0.08);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 0 0 10px rgba(249, 115, 22, 0.08);
   text-align: center;
 }
 .gi-drop-box b {
@@ -383,8 +383,8 @@ select.select {
 }
 .shot-frame {
   position: absolute;
-  border: 1px solid rgba(255, 77, 141, 0.95);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 22px rgba(255, 77, 141, 0.35);
+  border: 1px solid rgba(249, 115, 22, 0.95);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 22px rgba(249, 115, 22, 0.35);
   pointer-events: none;
 }
 .shot-size {
@@ -514,7 +514,7 @@ select.select {
 }
 .sel-btn.open,
 .sel-btn:focus-visible {
-  border-color: rgba(255, 77, 141, 0.6);
+  border-color: rgba(249, 115, 22, 0.6);
   background: rgba(255, 255, 255, 0.07);
   outline: none;
 }
@@ -539,7 +539,7 @@ select.select {
 
 .sel-pop {
   position: fixed;
-  /* 弹层是 portal 到 body 的，层级必须高过所有自绘弹窗（水印 400 / 批量确认 1500），
+  /* 弹层是 portal 到 body 的，层级必须高过所有自绘弹窗（批量确认 1500），
      否则「点开下拉框一片空白」——其实是被弹窗遮罩盖住了 */
   z-index: 3200;
   display: flex;
@@ -743,400 +743,6 @@ select.select {
   margin-top: 14px;
 }
 
-/* ============ 水印 / 相框工作台 ============ */
-.wm-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 400;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
-}
-.wm-card {
-  display: flex;
-  flex-direction: column;
-  width: min(1180px, 96vw);
-  /* 92vh 再留 24px 给遮罩内边距：小窗口下卡片不能顶出可视区，否则底部按钮会被吃掉 */
-  height: min(830px, calc(100vh - 40px));
-  max-height: calc(100vh - 24px);
-  overflow: hidden;
-  background: var(--solid-panel);
-  border: 1px solid var(--border-strong);
-  border-radius: 14px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
-}
-.wm-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.wm-head b {
-  font-size: 14px;
-}
-.wm-sub {
-  font-size: 12px;
-  color: var(--muted);
-}
-.wm-close {
-  margin-left: auto;
-}
-.wm-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 396px;
-  min-height: 0;
-  overflow: hidden;
-  flex: 1;
-}
-/* min-height:0 是关键：预览列里有一张按原始比例的大图，
-   不显式压住的话它会按图片高度把 grid 行撑到 800px+，溢出的部分被卡片裁掉，
-   页脚按钮就骑在下面那一列上（用户看到的「图片显示不全 / 按钮被遮挡」）。 */
-.wm-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  padding: 14px;
-  background: var(--panel);
-}
-.wm-stage {
-  position: relative;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  overflow: hidden;
-  background: #1a1a1a;
-  border-radius: 10px;
-}
-.wm-stage img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-.wm-empty {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
-}
-.wm-stage-mask {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.42);
-}
-.wm-stage-err {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  padding: 9px 11px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #ffd9dd;
-  background: rgba(178, 26, 48, 0.9);
-  border-radius: 8px;
-}
-/* 预览有图但没画出水印时的解释：比错误轻，比沉默清楚 */
-.wm-stage-note {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  padding: 9px 11px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #ffe8c2;
-  background: rgba(122, 78, 12, 0.92);
-  border-radius: 8px;
-}
-.wm-tip {
-  margin: 6px 0 0;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #e0b062;
-}
-.wm-preview-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--muted);
-}
-.wm-tag {
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 99px;
-}
-.wm-progress {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--muted);
-}
-.wm-progress-bar {
-  flex: 1;
-  height: 4px;
-  overflow: hidden;
-  background: var(--panel-strong);
-  border-radius: 99px;
-}
-.wm-progress-bar i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
-}
-.wm-panel {
-  overflow-y: auto;
-  padding: 14px 16px 20px;
-  border-left: 1px solid var(--border);
-}
-.wm-sec + .wm-sec {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
-.wm-sec h4 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 9px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.wm-sec h4 em {
-  font-style: normal;
-  font-weight: 400;
-  color: var(--muted);
-}
-.wm-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.wm-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  font-size: 12px;
-  color: var(--muted);
-  cursor: pointer;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.wm-field.on {
-  color: var(--text);
-  background: rgba(255, 77, 141, 0.12);
-  border-color: rgba(255, 77, 141, 0.45);
-}
-.wm-field.void span {
-  opacity: 0.55;
-}
-.wm-field i {
-  margin-left: auto;
-  padding: 0 5px;
-  font-style: normal;
-  font-size: 10px;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-.wm-field input {
-  accent-color: var(--accent);
-}
-.wm-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-.wm-row-label {
-  font-size: 12px;
-  color: var(--muted);
-}
-.wm-switch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.wm-switch input {
-  accent-color: var(--accent);
-}
-.wm-sel {
-  flex: 1;
-  min-width: 0;
-}
-/* 面板里的下拉按钮跟旁边的输入框一样高（省/市/区三个下拉挤在一行时尤其明显） */
-.wm-sel .sel-btn {
-  height: 30px;
-  padding: 0 8px 0 10px;
-  font-size: 12px;
-  border-radius: 8px;
-  background: var(--bg-elev, #1b1b1d);
-}
-.wm-row-label {
-  flex: none;
-  white-space: nowrap;
-}
-/* 「水印上显示：杭州 · 西湖」那一行 */
-.wm-loc-foot {
-  margin-top: 6px;
-  align-items: center;
-}
-.wm-loc-foot .wm-hint {
-  margin: 0;
-}
-.wm-loc-foot .wm-hint b {
-  color: var(--text);
-  font-weight: 600;
-}
-/* 拍摄地点输入框 + 字体刷新按钮 */
-.wm-input {
-  flex: 1;
-  min-width: 0;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev, #1b1b1d);
-  color: var(--fg);
-  font-size: 12px;
-}
-.wm-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.wm-font-scan {
-  flex: none;
-  height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-.wm-sec > .wm-hint {
-  margin: 8px 0 0;
-  font-size: 11px;
-  color: var(--muted);
-}
-.wm-styles {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  max-height: 196px;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-.wm-style {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 9px;
-  text-align: left;
-  cursor: pointer;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.wm-style b {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text);
-}
-.wm-style i {
-  overflow: hidden;
-  font-style: normal;
-  font-size: 10px;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.wm-style:hover {
-  border-color: var(--border-strong);
-}
-.wm-style.on {
-  background: rgba(255, 77, 141, 0.1);
-  border-color: rgba(255, 77, 141, 0.55);
-}
-.wm-style.plain {
-  grid-column: span 2;
-}
-/* 「不含所选信息」：这款样式只排某几项，当前勾选对不上，选了也出不来图 */
-.wm-style.lack {
-  border-style: dashed;
-}
-.wm-style-lack {
-  align-self: flex-start;
-  margin-top: 1px;
-  padding: 0 5px;
-  font-size: 9.5px;
-  font-style: normal;
-  line-height: 15px;
-  color: #f3b23c;
-  background: rgba(243, 178, 60, 0.12);
-  border-radius: 5px;
-}
-.wm-slider {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.wm-slider input {
-  flex: 1;
-  accent-color: var(--accent);
-}
-.wm-slider b {
-  width: 42px;
-  font-weight: 500;
-  text-align: right;
-  color: var(--text);
-}
-.wm-foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 16px;
-  border-top: 1px solid var(--border);
-}
-.wm-hint {
-  flex: 1;
-  font-size: 11px;
-  color: var(--muted);
-}
-.wm-hint.bad {
-  color: #ff6b81;
-}
-
-@media (max-width: 980px) {
-  .wm-body {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 42vh) minmax(0, 1fr);
-  }
-  .wm-panel {
-    border-left: none;
-    border-top: 1px solid var(--border);
-  }
-}
-
 /* ============ 教程导览 ============ */
 .tour-root {
   position: fixed;
@@ -1150,7 +756,7 @@ select.select {
   border-radius: 12px;
   box-shadow:
     0 0 0 9999px rgba(6, 6, 8, 0.62),
-    0 0 0 2px rgba(255, 77, 141, 0.7);
+    0 0 0 2px rgba(249, 115, 22, 0.7);
   transition:
     left 0.22s ease,
     top 0.22s ease,
@@ -1237,7 +843,7 @@ select.select {
   font-size: 11.5px;
   line-height: 1.65;
   color: var(--text);
-  background: rgba(255, 77, 141, 0.09);
+  background: rgba(249, 115, 22, 0.09);
   border-left: 2px solid var(--accent);
   border-radius: 0 7px 7px 0;
 }

@@ -95,7 +95,7 @@ export function showToastBanner(title, body) {
 
 /**
  * 托盘菜单的结果必须让用户看得见。
- * 以前每个 click 都是「请求发出去就不管了」，后端报错（比如换壁纸时提示
+ * 以前每个 click 都是「请求发出去就不管了」，后端报错（比如截图入库时提示
  * 「该范围内没有可用图片」）只写进日志，用户点完只觉得没生效。
  * @param {string} title
  * @param {string} [content]

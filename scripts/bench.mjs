@@ -140,7 +140,7 @@ function seed(dbFile, rows) {
         `E:\\bench\\img\\${String(i % 500).padStart(3, '0')}\\p${i}.jpg`,
         // 非空 thumb：后台缩略图队列只补「没有缩略图」的行，压测不该触发真实解码
         `bench-${i}.webp`,
-        i % 2 === 0 ? 'local' : 'crawl',
+        i % 2 === 0 ? 'local' : 'lan',
         i % 5 === 0 ? 'shadow mountain lake' : `keyword ${i % 97}`,
         1920 + (i % 7) * 160,
         1080 + (i % 5) * 120,

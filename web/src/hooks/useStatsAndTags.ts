@@ -54,7 +54,7 @@ export function useStatsAndTags({
   const [dupeCounts, setDupeCounts] = useState<Record<string, number>>({});
   const [missingCount, setMissingCount] = useState(0);
 
-  // 上一次统计到的全库张数：library 推送后若库变大（导入/采集），自动重载列表
+  // 上一次统计到的全库张数：library 推送后若库变大（导入/入库），自动重载列表
   const libTotalRef = useRef(-1);
   // 标签是全量扫 images.tags 算出来的，比 stats 贵得多；而导入进度推送期间
   // 标签集合不会变（入库不带标签）。2s 内重复拉只是白扫一遍全表。
@@ -99,7 +99,7 @@ export function useStatsAndTags({
             showToast(i18n.t('kf828260b'));
           }
         }
-        // 导入进行中：新入库图片必然出现在默认「最新采集」列表里，
+        // 导入进行中：新入库图片必然出现在默认列表里，
         // 让筛选栏「共 X 张」随导入实时跳动，而不是等下一次 load 才更新
         if (isImporting()) setTotal((cur) => Math.max(cur, s.total));
       })
@@ -145,7 +145,7 @@ export function useStatsAndTags({
   }, [refreshStats]);
 
   /**
-   * 「后端自己入库了」（目录监听自动导入 / 采集协程）推送 → 直接重载当前列表。
+   * 「后端自己入库了」（目录监听自动导入）推送 → 直接重载当前列表。
    *
    * 以前只靠 refreshStats 的「库变大就对账」：但 /api/stats 是 120s 快照，
    * 目录监听入库不走 HTTP，没人让快照过期 → total 恒为旧值 → 列表永不重载，

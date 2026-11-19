@@ -10,7 +10,6 @@
  */
 export * from './api/types';
 export * from './api/core';
-export * from './api/models';
 
 import { resourcesAPI } from './api/resources';
 import { curateAPI } from './api/curate';
@@ -18,6 +17,7 @@ import { integrationsAPI } from './api/integrations';
 import { enhanceAPI } from './api/enhance';
 import { insightAPI } from './api/insight';
 import { smartAPI } from './api/smart';
+import { licenseAPI } from './api/license';
 
 /** 全部接口的唯一出口：域模块的对象在这里拼成一个 */
 export const api = {
@@ -27,4 +27,5 @@ export const api = {
   ...enhanceAPI,
   ...insightAPI,
   ...smartAPI,
+  ...licenseAPI,
 };

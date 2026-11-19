@@ -9,21 +9,17 @@ import { undoLastEdit, redoLastEdit, lastEdit, hasUndo, undoStatus } from './lib
 import { writeSidecar } from './lib/xmp.js';
 import { startBackupSchedule } from './lib/backup-schedule.js';
 import { getActiveLibrary, setImportPending, isImportPending } from './libraries.js';
-import { getJobStatus } from './crawler.js';
 import { editJobStatus } from './edit-job.js';
 import * as clip from './clip.js';
 import { importLocalImages, watchStorageDir, invalidateMissingCache } from './importer.js';
 import { sweepThumbTemp } from './bulk-import.js';
 import { prefetchPreviews } from './lib/preview-queue.js';
-import { openFolder, revealFile, setWallpaper, platform } from './desktop.js';
+import { openFolder, revealFile } from './desktop.js';
 import * as kb from './kb.js';
 import * as search from './search.js';
-import * as wallpaper from './wallpaper.js';
 import * as aiUpscale from './ai-upscale.js';
 import * as srDeep from './sr-deep.js';
-import * as matting from './matting.js';
 import * as enhanceJob from './enhance-job.js';
-import * as auto from './auto.js';
 import { liveBus } from './live-bus.js';
 import { apiAuth } from './auth.js';
 import { isActiveLibraryLocked, libraryLockGate } from './lib/library-lock.js';
@@ -32,7 +28,6 @@ import { register as registerEnhance } from './routes/enhance.js';
 import { register as registerFiles } from './routes/files.js';
 import { expireStatsCache, register as registerStats } from './routes/stats.js';
 import { register as registerCatalog } from './routes/catalog.js';
-import { register as registerWallpaper } from './routes/wallpaper.js';
 import { register as registerKeywords } from './routes/keywords.js';
 import { register as registerEdit } from './routes/edit.js';
 import { register as registerOrganize } from './routes/organize.js';
@@ -42,10 +37,7 @@ import { register as registerUpload } from './routes/upload.js';
 import { register as registerExport } from './routes/export.js';
 import { register as registerMaintenance } from './routes/maintenance.js';
 import { register as registerJobs } from './routes/jobs.js';
-import { register as registerBookmarks } from './routes/bookmarks.js';
-import { register as registerExtension } from './routes/extension.js';
 import { register as registerOcr } from './routes/ocr.js';
-import { register as registerSource } from './routes/source.js';
 import { register as registerInspect } from './routes/inspect.js';
 import { register as registerEpub } from './routes/epub.js';
 import { register as registerActions } from './routes/actions.js';
@@ -55,16 +47,15 @@ import { register as registerPlugins } from './routes/plugins.js';
 import { register as registerLan } from './routes/lan.js';
 import { register as registerWorkshop } from './routes/workshop.js';
 import { register as registerSync } from './routes/sync.js';
-import { register as registerFace } from './routes/face.js';
 import { register as registerTimeline } from './routes/timeline.js';
 import { register as registerModels } from './routes/models.js';
 import { register as registerRuntime } from './routes/runtime.js';
-import { register as registerReverse } from './routes/reverse.js';
 import { register as registerDocs } from './routes/docs.js';
 import { register as registerNightBatch } from './routes/night-batch.js';
+import { register as registerLicense } from './routes/license.js';
+import { requirePro } from './lib/license.js';
 import { registerBusyProbe, startNightBatchSchedule } from './lib/night-batch.js';
 import { modelsSnapshot } from './lib/model-registry.js';
-import { capabilitiesFor, platformSummary } from './lib/platform.js';
 import { markInterruptedJobs, pruneJobs } from './jobs.js';
 import { startThumbRebuild, thumbMissingCount } from './lib/thumb-rebuild.js';
 import { autoMergeLegacy, refreshMergedRows } from './lib/legacy-db.js';
@@ -103,7 +94,7 @@ function sseBroadcast(type, data) {
   }
 }
 
-/* 浏览器扩展采集时勾了「存入画布」：路由只管把新入库 id 发到总线上，这里统一转成 SSE */
+/* 素材入库时勾了「存入画布」：路由只管把新入库 id 发到总线上，这里统一转成 SSE */
 liveBus.on('canvas-add', (ids) => {
   if (Array.isArray(ids) && ids.length) sseBroadcast('canvas', { ids });
 });
@@ -362,6 +353,11 @@ export function buildApp({ desktop = false } = {}) {
   // 资源库密码锁：锁着的库一律 423（解锁 / 切库 / 读设置除外，见 lib/library-lock.js）
   app.use('/api', libraryLockGate);
 
+  // 专业版能力闸：免费版直接 402，文案里指明去哪里激活。
+  // 只挡「增值能力」，浏览 / 整理 / 搜索这些基础功能始终可用。
+  app.use('/api/lan', requirePro('lan'));
+  app.use('/api/night-batch', requirePro('night-batch'));
+
   /* ----------------------------- 实时事件（SSE） ----------------------------- */
   // 前端所有任务进度 / 库变化由此推送，替代各页面散落的 setInterval 轮询。
   // sseClients / sseBroadcast 已在模块顶层定义（bootstrap 也要广播）。
@@ -388,14 +384,11 @@ export function buildApp({ desktop = false } = {}) {
     });
   });
 
-  // 动态壁纸配置变更：Electron 主进程已在监听，这里转发给网页端
-  liveBus.on('changed', (cfg) => sseBroadcast('live', { mode: cfg?.mode || '' }));
-
   // 服务端单点采样：任务状态全在进程内存里，1.5s 对比一次，变化才广播。
   // 此前是「N 个页面 × 各自 setInterval × HTTP 请求」，现在收敛为进程内一次快照对比。
-  // 素材入库（采集协程 / 目录监听 / 后台批量）不经过 HTTP 中间件，
+  // 素材入库（目录监听 / 后台批量）不经过 HTTP 中间件，
   // 必须自己广播「库已变化」：否则前端停在上一次的张数，用户得手动点刷新才看得到新图。
-  // 600ms 合并窗口：采集是 24 张一批入库，逐批广播会把前端打成刷新风暴
+  // 600ms 合并窗口：批量导入一次几十张，逐张广播会把前端打成刷新风暴
   let ingestPending = 0;
   let ingestTimer = null;
   liveBus.on('library-changed', (payload) => {
@@ -415,14 +408,12 @@ export function buildApp({ desktop = false } = {}) {
   });
 
   const jobSnapshot = () => ({
-    crawl: getJobStatus(),
     import: importState,
     enhance: enhanceJob.jobStatus(),
     clip: clip.backfillStatus(),
     sr: srDeep.srStatus(),
     aiUp: aiUpscale.aiStatus(),
-    matting: matting.mattingStatus(),
-    // 批量裁切/调色/水印以前只能各自 800ms 轮询，现在一起走 SSE 快照
+    // 批量裁切/调色以前只能各自 800ms 轮询，现在一起走 SSE 快照
     edit: editJobStatus(),
     // 下载中心：任何模块在下载，这里都能看到「下的是哪一项、到哪了」
     models: modelsSnapshot(),
@@ -465,7 +456,7 @@ export function buildApp({ desktop = false } = {}) {
     next();
   });
 
-  // 上次进程退出时没跑完的任务（采集/批量编辑/增强/模型下载）一律标成 interrupted：
+  // 上次进程退出时没跑完的任务（批量编辑/增强/模型下载）一律标成 interrupted：
   // 否则它们会永远停在 running，任务中心显示「进行中」但实际什么都没发生
   markInterruptedJobs();
   pruneJobs(200);
@@ -487,7 +478,6 @@ export function buildApp({ desktop = false } = {}) {
   registerFiles(app, ctx);
   registerStats(app, ctx);
   registerCatalog(app, ctx);
-  registerWallpaper(app, ctx);
   registerKeywords(app, ctx);
   registerEdit(app, ctx);
   registerOrganize(app, ctx);
@@ -497,10 +487,7 @@ export function buildApp({ desktop = false } = {}) {
   registerExport(app, ctx);
   registerMaintenance(app, ctx);
   registerJobs(app, ctx);
-  registerBookmarks(app, ctx);
-  registerExtension(app, ctx);
   registerOcr(app, ctx);
-  registerSource(app, ctx);
   registerInspect(app, ctx);
   registerEpub(app, ctx);
   registerActions(app, ctx);
@@ -510,32 +497,26 @@ export function buildApp({ desktop = false } = {}) {
   registerLan(app, ctx);
   registerWorkshop(app, ctx);
   registerSync(app, ctx);
-  registerFace(app, ctx);
   registerTimeline(app, ctx);
   registerModels(app, ctx);
   registerRuntime(app, ctx);
-  registerReverse(app, ctx);
+  registerLicense(app, ctx);
   registerNightBatch(app, ctx);
   // 放在最后注册：/api/docs 要自省整个路由表，晚注册才不会漏掉别人的接口
   registerDocs(app, ctx);
 
   /* -------------------------------- 系统能力 ------------------------------- */
-  app.get('/api/platform', (_req, res) => {
-    const caps = capabilitiesFor();
-    res.json({ ok: true, ...caps, summary: platformSummary(caps) });
-  });
-
   app.get('/api/system/info', (_req, res) => {
     const settings = getSettings();
     res.json({
-      platform,
+      platform: process.platform,
       desktop,
       storageDir: settings.storageDir,
       hasBuild: fs.existsSync(WEB_DIST),
     });
   });
 
-  // 大模型功能的硬件门槛：设置页展示本机配置 + 抠图/超分开跑前的一次判定。
+  // 大模型功能的硬件门槛：设置页展示本机配置 + 超分/语义开跑前的一次判定。
   // 探测要起 PowerShell（Windows），所以模块内有 30s 缓存，?refresh=1 才强制重探。
   app.get(
     '/api/hardware',
@@ -590,34 +571,6 @@ export function buildApp({ desktop = false } = {}) {
       }
       revealFile(abs);
       res.json({ ok: true });
-    })
-  );
-
-  /** 设为桌面壁纸：竖版图会合成「完整竖图居中 + 氛围底」，不裁切 */
-  app.post(
-    '/api/images/:id/wallpaper',
-    asyncRoute(async (req, res) => {
-      const row = lib.getImage(Number(req.params.id));
-      if (!row || !fs.existsSync(row.abs_path)) return res.status(404).json({ error: '图片不存在' });
-      try {
-        const style = req.body?.style || getSettings().wallpaperFill || 'blur';
-        const result = await wallpaper.buildWallpaper(Number(req.params.id), style);
-        await setWallpaper(result.path);
-        res.json({ ok: true, ...result });
-      } catch (err) {
-        res.status(500).json({ error: `设置壁纸失败：${err.message}` });
-      }
-    })
-  );
-
-  /** 预览合成后的壁纸（不会真的设置） */
-  app.get(
-    '/api/images/:id/wallpaper-preview',
-    asyncRoute(async (req, res) => {
-      const style = String(req.query.style || getSettings().wallpaperFill || 'blur');
-      const result = await wallpaper.buildWallpaper(Number(req.params.id), style);
-      res.set('Cache-Control', 'no-store');
-      res.sendFile(result.path, { dotfiles: 'allow' });
     })
   );
 
@@ -1015,7 +968,6 @@ export function startServer(port = PORT, options = {}) {
       const addr = server.address();
       if (!addr) return;
       bootstrap();
-      auto.startScheduler();
       // 自动备份排程：手动备份按钮在设置页，但「记得点」不该是备份的前提
       startBackupSchedule();
       // AI 夜间批处理：导入期间不能跑（会抢推理与写库），这里给调度器一个「此刻是否忙」的探针

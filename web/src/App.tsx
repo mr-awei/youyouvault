@@ -39,7 +39,7 @@ import { useEnhance } from './app/useEnhance';
 import { useDialogState } from './app/useDialogState';
 
 /**
- * 27 个浮层（导出、水印、批注、人物、堆叠、命令面板…）不该压在首包里：
+ * 各项浮层（导出、批注、堆叠、命令面板…）不该压在首包里：
  * 首屏只用外壳 + 图库列表，浮层等真要打开时再取。启动后空闲时段预取，
  * 所以第一次按 Cmd+K 也不会等加载。
  */
@@ -76,7 +76,7 @@ export default function App() {
   const ui = useAppUiState();
   const {
     showToast, loadError, setLoadError,
-    setShowCreateLib, setBookmarkOpen, setExportOpen, setCoverFolderId,
+    setShowCreateLib, setExportOpen, setCoverFolderId,
     toolsOpen, setToolsOpen, setPalette,
   } = ui;
   // 各类集合弹窗的开关（纯 useState，无 effect）：先声明，命令面板与快捷键都要用
@@ -115,6 +115,8 @@ export default function App() {
   const requestStatsRefresh = useCallback(() => refreshStatsRef.current(), []);
   const isImportingNow = useCallback(() => importingRef.current, []);
   const showGallery = useCallback(() => setView('gallery'), []);
+  /** 启动竞态 / 服务重启后，成功请求要能把顶部残留的错误条清掉 */
+  const clearLoadError = useCallback(() => setLoadError(''), [setLoadError]);
 
   const {
     items, setItems, total, setTotal, hasMore, loading, pageRef, newAtTopRef, refreshSeq, setRefreshSeq,
@@ -167,7 +169,7 @@ export default function App() {
   } = useLibraries({
     showToast, setView, setFolderId, setFolders, setShowCreateLib, setActiveSavedId, pageRef, load,
     refreshStats, followImport, reloadFolders, reloadSavedFilters, libTotalRef, folders, folderId,
-    activeLibId, setActiveLibId,
+    activeLibId, setActiveLibId, clearLoadError,
   });
 
   // effect 8：importing 状态同步到 ref（job 事件 / importStatus 等多处 setImporting 都会覆盖）
@@ -184,8 +186,8 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, []);
 
-  // effect 9-13：后台错误收口 / 本地服务状态 / 事件异常 toast / 全网搜图 / 在图库中定位
-  const { rsTarget, setRsTarget, peopleFocus, setPeopleFocus } = useAppServices({
+  // effect 9-13：后台错误收口 / 本地服务状态 / 事件异常 toast / 在图库中定位
+  useAppServices({
     setLoadError, showToast, setView, setFolderId, openItem,
     setServiceRestarting: ui.setServiceRestarting,
     setServiceOffline: ui.setServiceOffline,
@@ -225,14 +227,14 @@ export default function App() {
 
   const {
     pendingDelete, setPendingDelete, requestDelete, confirmDelete,
-    toggleFavorite, saveTags, deleteFromGrid, setWallpaper, download,
+    toggleFavorite, saveTags, deleteFromGrid, download,
   } = useItemActions({
     patchItem, setStats, setItems, setLb, setTags, setTagGroups, refreshStats, showToast,
   });
 
   const {
     changeViewMode, changeColWidth, openSavedFilter, openRoot, openFromFolderGroup, showUnfiled,
-    openPending, openTag, openPlace, handleNav, onFiltersChange, openFromGrid, startCrawl, undoFromGrid,
+    openPending, openTag, handleNav, onFiltersChange, openFromGrid, undoFromGrid,
     markAllSeen, relocateMissing, purgeMissing, addToPlaylist, addToFolder,
   } = useViewActions({
     setView, setFolderId, setFilters, setViewMode, setColWidth, setSelected, setFolders, setActiveSavedId,
@@ -242,7 +244,7 @@ export default function App() {
 
   // effect 24：命令面板命令表 + 「卡片右键搜命令」事件桥
   const { paletteCommands } = usePaletteCommands({
-    theme, setTheme, setView, setFolderId, setFilters, setBookmarkOpen, setExportOpen, setPalette, setLb,
+    theme, setTheme, setView, setFolderId, setFilters, setExportOpen, setPalette, setLb,
     setHelpOpen: dialogs.setHelpOpen, selectAllMatching, load, refreshStats, defaultFilters,
   });
 
@@ -284,14 +286,6 @@ export default function App() {
     followImport();
   };
 
-  /** 书签保存后只要列表与统计，不跟扫描 */
-  const onLibraryChangedOnly = () => {
-    pageRef.current = 1;
-    load(1, true);
-    refreshStats();
-  };
-
-  const crawling = !!stats?.crawling || importing;
   const activeFolder = folders.find((f) => f.id === folderId) || null;
   const activeLib = libraries.find((l) => l.id === activeLibId) || null;
   const activeLibName = activeLib?.name || i18n.t('k5435325b');
@@ -335,7 +329,6 @@ export default function App() {
         toolsActive={toolsActive}
         theme={theme}
         onToggleTheme={toggleTheme}
-        onBookmark={() => setBookmarkOpen(true)}
         onExportGallery={() => setExportOpen(true)}
         onShareLink={() => dialogs.setShareOpen(true)}
       />
@@ -431,7 +424,6 @@ export default function App() {
               hoverIdRef={hoverIdRef}
               activeFolder={activeFolder}
               activeLibName={activeLibName}
-              peopleFocus={peopleFocus}
               tourDone={tourDone === true}
               showToast={showToast}
               setView={setView}
@@ -453,7 +445,6 @@ export default function App() {
               deleteFromGrid={deleteFromGrid}
               changeViewMode={changeViewMode}
               changeColWidth={changeColWidth}
-              startCrawl={startCrawl}
               refreshGallery={refreshGallery}
               undoFromGrid={undoFromGrid}
               relocateMissing={relocateMissing}
@@ -471,16 +462,12 @@ export default function App() {
               openRoot={openRoot}
               openFromFolderGroup={openFromFolderGroup}
               showUnfiled={showUnfiled}
-              openPlace={openPlace}
               startTour={startTour}
-              onSetWallpaper={setWallpaper}
               onLibraryChanged={onLibraryChanged}
-              onLibraryChangedOnly={onLibraryChangedOnly}
             />
           </div>
 
           <StatusBar
-            crawling={crawling}
             stats={stats}
             importing={importing}
             isDesktop={isDesktop}
@@ -523,8 +510,6 @@ export default function App() {
         tourOpen={tourOpen}
         pendingDelete={pendingDelete}
         confirmDelete={confirmDelete}
-        rsTarget={rsTarget}
-        setRsTarget={setRsTarget}
         paletteCommands={paletteCommands}
         lockFolderId={lockFolderId}
         lockFolder={lockFolder}
@@ -537,7 +522,6 @@ export default function App() {
         toggleFavorite={toggleFavorite}
         saveTags={saveTags}
         requestDelete={requestDelete}
-        setWallpaper={setWallpaper}
         enhanceOne={enhanceOne}
         patchItem={patchItem}
         download={download}
@@ -549,7 +533,6 @@ export default function App() {
         setView={setView}
         setFolderId={setFolderId}
         setLb={setLb}
-        setPeopleFocus={setPeopleFocus}
         setPendingDelete={setPendingDelete}
         setLockFolderId={setLockFolderId}
         onFiltersChange={onFiltersChange}

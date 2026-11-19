@@ -18,14 +18,14 @@
  * 刻意不建外键的表（写在这里，免得以后被人当漏项补上）：
  * - images.*：父表本身；且 images.stack_id 用 0 表示「没堆叠」，0 不是合法父 id，
  *   建 FK 就得把百万行里的 0 全改成 NULL，牵连所有 `stack_id = 0` 的查询
- * - trash / wallpaper_log / feedback：删素材后仍要留档，image_id 指的是「曾经的」素材
- * - folders.cover_image_id / persons.cover_face_id：封面被删时要保留文件夹/人物行
- *   （业务层回退到自动封面），而建 SET NULL 需要连带重建 images / persons 两张主表
+ * - trash / feedback：删素材后仍要留档，image_id 指的是「曾经的」素材
+ * - folders.cover_image_id：封面被删时要保留文件夹行（业务层回退到自动封面），
+ *   而建 SET NULL 需要连带重建 images 主表
  */
 
 /**
  * 子表 → 约束列表。**数组顺序即重建顺序，父表必须排在子表前面**：
- * `folders` 自引用且是 `image_folders` 的父表，`images` / `playlists` / `persons`
+ * `folders` 自引用且是 `image_folders` 的父表，`images` / `playlists`
  * 都先于引用它们的表存在（它们是老表，本模块不重建）。
  *
  * @typedef {{ column: string, parent: string, action: 'CASCADE'|'SET NULL' }} FkRef
@@ -59,15 +59,6 @@ export const FK_TABLES = [
   { table: 'ai_desc', refs: [{ column: 'image_id', parent: 'images', action: 'CASCADE' }] },
   { table: 'edit_history', refs: [{ column: 'image_id', parent: 'images', action: 'CASCADE' }] },
   { table: 'edit_ops', refs: [{ column: 'image_id', parent: 'images', action: 'CASCADE' }] },
-  { table: 'wallpaper_fit', refs: [{ column: 'image_id', parent: 'images', action: 'CASCADE' }] },
-  {
-    // 人脸：素材删了脸跟着删；人物被删则把脸退回「未归属」，而不是连脸一起删
-    table: 'faces',
-    refs: [
-      { column: 'image_id', parent: 'images', action: 'CASCADE' },
-      { column: 'person_id', parent: 'persons', action: 'SET NULL' },
-    ],
-  },
 ];
 
 /** 这张表要追加到 CREATE TABLE 末尾的约束原文（没有外键的表返回空串） */
@@ -100,7 +91,7 @@ function hasForeignKey(conn, table) {
 function cleanOrphansBeforeRebuild(conn, table, ref) {
   if (!tableExists(conn, ref.parent) || !tableExists(conn, table)) return;
   const col = `${table}.${ref.column}`;
-  // 0 / NULL 都是「没有关联」的哨兵值（folders.parent_id、faces.person_id），不是孤儿
+  // 0 / NULL 都是「没有关联」的哨兵值（如 folders.parent_id），不是孤儿
   const orphan = `${col} IS NOT NULL AND ${col} <> 0 AND NOT EXISTS (SELECT 1 FROM ${ref.parent} p WHERE p.id = ${col})`;
   if (ref.action === 'SET NULL') {
     conn.prepare(`UPDATE ${table} SET ${ref.column} = NULL WHERE ${orphan}`).run();

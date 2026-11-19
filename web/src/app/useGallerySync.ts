@@ -99,8 +99,8 @@ export function useGallerySync({
   }, [activeLibId, setSelected]);
 
   /**
-   * 从别的视图（采集 / 任务中心 / 设置）回到列表时对账一次。
-   * queryKey 没变，上面那个效应不会重跑 —— 采集刚入库的图就永远不出现，
+   * 从别的视图（收件箱 / 任务中心 / 设置）回到列表时对账一次。
+   * queryKey 没变，上面那个效应不会重跑 —— 刚入库的图就永远不出现，
    * 用户只能手动点刷新（这正是「列表不自动刷新」的根因之一）。
    */
   const prevViewRef = useRef(view);

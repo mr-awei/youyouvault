@@ -6,7 +6,7 @@
  * `PRAGMA foreign_keys = ON`），新产生的孤儿由 ON DELETE CASCADE 兜住。
  * 这个模块仍然保留，负责两类外键管不到的历史问题：
  * 1. 外键上线之前留下的孤儿行（老库重建时清过一轮，但用户可能升级前一直没开）；
- * 2. 刻意没建外键的表 —— trash / wallpaper_log / feedback 的 image_id 指向的是
+ * 2. 刻意没建外键的表 —— trash / feedback 的 image_id 指向的是
  *    「曾经的」素材，用 SET NULL 会毁掉历史记录，用 CASCADE 又等于删记录。
  * 另外 images.stack_id / folders.cover_image_id 这类哨兵列（0 = 未设置）也只在
  * 这里巡检。
@@ -31,12 +31,8 @@ export const ORPHAN_RULES = [
   { table: 'ai_desc', column: 'image_id', parent: 'images', note: 'AI 描述' },
   { table: 'edit_history', column: 'image_id', parent: 'images', note: '编辑历史' },
   { table: 'edit_ops', column: 'image_id', parent: 'images', note: '编辑操作' },
-  { table: 'faces', column: 'image_id', parent: 'images', note: '人脸' },
-  { table: 'wallpaper_fit', column: 'image_id', parent: 'images', note: '壁纸适配' },
-  { table: 'wallpaper_log', column: 'image_id', parent: 'images', note: '壁纸日志' },
   { table: 'playlist_items', column: 'image_id', parent: 'images', note: '清单条目' },
   { table: 'trash', column: 'image_id', parent: 'images', note: '回收站记录' },
-  { table: 'faces', column: 'person_id', parent: 'persons', note: '人脸归属' },
   { table: 'image_folders', column: 'folder_id', parent: 'folders', note: '文件夹反查' },
   { table: 'folders', column: 'parent_id', parent: 'folders', note: '父子文件夹' },
   { table: 'folders', column: 'cover_image_id', parent: 'images', note: '文件夹封面' },
@@ -46,7 +42,7 @@ export const ORPHAN_RULES = [
 
 /**
  * 孤儿不是「父行不存在」就够了：库里大量列用 NULL 或 0 表示「没有关联」
- * （images.stack_id 全库都是 0，faces.person_id 未归属是 NULL）。
+ * （images.stack_id 全库都是 0）。
  * 不排除这两种哨兵值，整库都会被判成孤儿。
  */
 function orphanCond(rule) {

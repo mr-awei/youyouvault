@@ -14,7 +14,6 @@ type Options = {
   setView: Dispatch<SetStateAction<View>>;
   setFolderId: Dispatch<SetStateAction<number | null>>;
   setFilters: Dispatch<SetStateAction<Filters>>;
-  setBookmarkOpen: Dispatch<SetStateAction<boolean>>;
   setExportOpen: Dispatch<SetStateAction<boolean>>;
   setHelpOpen: Dispatch<SetStateAction<boolean>>;
   setPalette: Dispatch<SetStateAction<'command' | 'filter' | null>>;
@@ -35,7 +34,6 @@ export function usePaletteCommands({
   setView,
   setFolderId,
   setFilters,
-  setBookmarkOpen,
   setExportOpen,
   setHelpOpen,
   setPalette,
@@ -59,22 +57,13 @@ export function usePaletteCommands({
     return [
       go('gallery', i18n.t('k6084bc4b')),
       go('dashboard', i18n.t('k3fa8b34a')),
-      go('people', i18n.t('k215ffde6')),
       go('search', i18n.t('k16d27cb3')),
       go('tidy', i18n.t('kc461222f')),
       go('smart', i18n.t('k04ff0a57')),
       go('enhance', i18n.t('kfd5e4c21')),
-      go('crawl', i18n.t('ke8bc2616')),
-      go('bookmarks', i18n.t('k46779389')),
       go('playlists', i18n.t('k3d7d51f5')),
       go('knowledge', i18n.t('k7e433388')),
       go('settings', i18n.t('ke366ccf1')),
-      {
-        id: 'act:bookmark',
-        label: i18n.t('k2778ded6'),
-        group: i18n.t('k2b6bc0f2'),
-        run: () => setBookmarkOpen(true),
-      },
       ...(desktop?.openNewWindow
         ? [
             {
@@ -154,7 +143,6 @@ export function usePaletteCommands({
     setView,
     setFolderId,
     setFilters,
-    setBookmarkOpen,
     setExportOpen,
     setHelpOpen,
     setLb,

@@ -1,7 +1,7 @@
 import type { TutorialCategory } from './types';
 import i18n from '../../i18n';
 
-/** 整理进阶、采集/书签/清单、检索与智能、增强 */
+/** 整理进阶、清单、检索与智能、增强 */
 export function workflowTutorial(): TutorialCategory[] {
   return [
   {
@@ -64,48 +64,6 @@ export function workflowTutorial(): TutorialCategory[] {
     title: i18n.t('kf0a5041a'),
     sections: [
       {
-        id: 'crawl-run',
-        title: i18n.t('k5d17dd13'),
-        summary: i18n.t('k13055b21'),
-        keywords: [i18n.t('ke8bc2616'), i18n.t('ka3e3b883'), i18n.t('k095e938e'), i18n.t('kd8d7ca77'), i18n.t('kc7db6d4f')],
-        body: i18n.t('k1d4448ed'),
-      },
-      {
-        id: 'crawl-keywords',
-        title: i18n.t('k1478f338'),
-        summary: i18n.t('k944b6cb7'),
-        keywords: [i18n.t('k9699a50e'), i18n.t('kad00783c'), i18n.t('ka6beb974'), i18n.t('kfb050d6c'), i18n.t('k8736cdfb')],
-        body: i18n.t('kb3697e6a'),
-      },
-      {
-        id: 'crawl-limits',
-        title: i18n.t('k38678637'),
-        summary: i18n.t('ke86b63de'),
-        keywords: [i18n.t('kdab16cb8'), i18n.t('k065a9b80'), i18n.t('k11f1a688'), i18n.t('k972d5f82'), i18n.t('kdf9c9706')],
-        body: i18n.t('ke86b6c3f'),
-      },
-      {
-        id: 'crawl-logs',
-        title: i18n.t('kd924db71'),
-        summary: i18n.t('k9685971e'),
-        keywords: [i18n.t('k456d29ef'), i18n.t('k6060a344'), i18n.t('k7030ff64'), i18n.t('k5665b68b')],
-        body: i18n.t('k5e904589'),
-      },
-      {
-        id: 'bookmarks',
-        title: i18n.t('kf85593f3'),
-        summary: i18n.t('k8abb24c2'),
-        keywords: [i18n.t('k46779389'), i18n.t('k18a481ea'), i18n.t('k9f5e5b6d'), i18n.t('kb5dbc9ed'), i18n.t('k597224e6')],
-        body: i18n.t('k16db7ebc'),
-      },
-      {
-        id: 'bookmark-actions',
-        title: i18n.t('kb7da7be2'),
-        summary: i18n.t('k84fe9ffe'),
-        keywords: [i18n.t('ka3d1ec98'), i18n.t('k3444ac8a'), i18n.t('k879058ce'), i18n.t('k095ea43d')],
-        body: i18n.t('k567b4a4e'),
-      },
-      {
         id: 'playlists',
         title: i18n.t('kb51f96d9'),
         summary: i18n.t('kf01f71f5'),
@@ -116,7 +74,7 @@ export function workflowTutorial(): TutorialCategory[] {
         id: 'playlist-actions',
         title: i18n.t('k361822ab'),
         summary: i18n.t('k3221f93d'),
-        keywords: [i18n.t('k2b24d037'), i18n.t('kb033f97f'), i18n.t('kd8c27345'), i18n.t('ka5987d5c')],
+        keywords: [i18n.t('k2b24d037'), i18n.t('kb033f97f'), i18n.t('ka5987d5c')],
         body: i18n.t('kc7779bd3'),
       },
     ],
@@ -194,13 +152,6 @@ export function workflowTutorial(): TutorialCategory[] {
         summary: i18n.t('kdb588c19'),
         keywords: [i18n.t('k8f053fef'), i18n.t('k8000f187'), i18n.t('k0bd527e9'), i18n.t('k8ab7234b')],
         body: i18n.t('k9ff8dbda'),
-      },
-      {
-        id: 'ai-cutout',
-        title: i18n.t('kddf25199'),
-        summary: i18n.t('k60e001bf'),
-        keywords: [i18n.t('k28ff2515'), i18n.t('k246ed331'), i18n.t('ka9cec4ef'), i18n.t('ka2a3346a')],
-        body: i18n.t('k4d08bf21'),
       },
     ],
   },

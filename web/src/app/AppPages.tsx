@@ -9,7 +9,6 @@ import type { ImportProgress } from './useImportWatch';
 import type { Toast } from './types';
 import i18n from '../i18n';
 
-const Crawl = lazy(() => import('../pages/Crawl'));
 const TimelinePage = lazy(() => import('../pages/Timeline').then((m) => ({ default: m.Timeline })));
 // 低频且体积大的页面按需加载：设置页（含各分区面板）与教程（150 条文案）
 // 不该拖进首包。只有图库保持静态导入——它是启动后的第一个视图，懒加载会闪骨架；
@@ -22,10 +21,6 @@ const Tidy = lazy(() => import('../pages/Tidy'));
 const EnhancePage = lazy(() => import('../pages/Enhance'));
 const Search = lazy(() => import('../pages/Search'));
 const Smart = lazy(() => import('../pages/Smart'));
-const Bookmarks = lazy(() => import('../pages/Bookmarks'));
-const People = lazy(() => import('../pages/People'));
-// 地点视图带一张世界地图 + 聚合数据，首屏用不到，按需加载
-const Places = lazy(() => import('../pages/Places'));
 const Tutorial = lazy(() => import('../pages/Tutorial'));
 // 无限画布：DOM + transform 实现，进页面才加载
 const CanvasBoard = lazy(() => import('../pages/CanvasBoard'));
@@ -57,7 +52,6 @@ type Props = {
   hoverIdRef: MutableRefObject<number | null>;
   activeFolder: FolderNode | null;
   activeLibName: string;
-  peopleFocus: { id: number; n: number } | null;
   tourDone: boolean;
   showToast: Toast;
   setView: Dispatch<SetStateAction<View>>;
@@ -79,7 +73,6 @@ type Props = {
   deleteFromGrid: (item: ImageItem) => void;
   changeViewMode: (m: ViewMode) => void;
   changeColWidth: (w: number) => void;
-  startCrawl: () => void;
   refreshGallery: () => Promise<void>;
   undoFromGrid: () => void;
   relocateMissing: () => Promise<void>;
@@ -97,13 +90,9 @@ type Props = {
   openRoot: () => void;
   openFromFolderGroup: (item: ImageItem, pool: ImageItem[]) => void;
   showUnfiled: () => void;
-  openPlace: (bbox: string, label: string) => void;
   startTour: () => void;
-  onSetWallpaper: (item: ImageItem, style?: string) => Promise<void>;
   /** 库内写操作后统一对账（列表 + 统计 + 跟着后台扫描） */
   onLibraryChanged: () => void;
-  /** 书签保存后只要列表与统计（不跟扫描） */
-  onLibraryChangedOnly: () => void;
 };
 
 /**
@@ -115,13 +104,13 @@ export default function AppPages(props: Props) {
     view, viewMode, loadError, stats, filters, effectiveFilters, folderId, folders, items, total,
     hasMore, loading, selected, annotationCounts, dupeCounts, tags, pendingCounts, importProgress,
     missingCount, refreshSeq, refreshing, importing, colWidth, hoverIdRef, activeFolder, activeLibName,
-    peopleFocus, tourDone, showToast, setView, setLb, setStackViewId, setQuickClassifyIds, reloadTags,
+    tourDone, showToast, setView, setLb, setStackViewId, setQuickClassifyIds, reloadTags,
     openItem, onFiltersChange, loadMore, toggleSelect, clearSelection, selectAll, bulk, openFromGrid,
-    toggleFavorite, download, patchItem, deleteFromGrid, changeViewMode, changeColWidth, startCrawl,
+    toggleFavorite, download, patchItem, deleteFromGrid, changeViewMode, changeColWidth,
     refreshGallery, undoFromGrid, relocateMissing, purgeMissing, addToPlaylist, addToFolder,
     reorderInFolder, markAllSeen, dropTagOnImage, ungroupStackAt, stackSelection, stackDropOnImage,
-    enterFolder, dropImagesOnFolderAt, openRoot, openFromFolderGroup, showUnfiled, openPlace,
-    startTour, onSetWallpaper, onLibraryChanged, onLibraryChangedOnly,
+    enterFolder, dropImagesOnFolderAt, openRoot, openFromFolderGroup, showUnfiled,
+    startTour, onLibraryChanged,
   } = props;
 
   return (
@@ -133,7 +122,6 @@ export default function AppPages(props: Props) {
             stats={stats}
             error={loadError}
             onOpen={(item, pool) => openItem(item, pool)}
-            onNavigate={(v) => setView(v as View)}
           />
         )}
 
@@ -184,7 +172,6 @@ export default function AppPages(props: Props) {
             dupeCounts={dupeCounts}
             tags={tags}
             hideFavorite={view === 'favorites'}
-            onStartCrawl={startCrawl}
             onRefresh={refreshGallery}
             onUndo={undoFromGrid}
             importing={importing}
@@ -223,17 +210,6 @@ export default function AppPages(props: Props) {
           />
         )}
 
-        {view === 'people' && (
-          <People
-            onToast={showToast}
-            onOpen={openItem}
-            focusPersonId={peopleFocus?.id ?? null}
-            focusNonce={peopleFocus?.n ?? 0}
-          />
-        )}
-
-        {view === 'places' && <Places onToast={showToast} onOpenPlace={openPlace} />}
-
         {view === 'tidy' && (
           <Tidy
             onToast={showToast}
@@ -244,11 +220,7 @@ export default function AppPages(props: Props) {
           />
         )}
 
-        {view === 'crawl' && <Crawl onToast={showToast} />}
-
-        {view === 'playlists' && (
-          <Playlists onToast={showToast} onOpen={openItem} onSetWallpaper={onSetWallpaper} />
-        )}
+        {view === 'playlists' && <Playlists onToast={showToast} onOpen={openItem} />}
 
         {view === 'knowledge' && <Knowledge onToast={showToast} onLibraryChanged={onLibraryChanged} />}
 
@@ -259,16 +231,6 @@ export default function AppPages(props: Props) {
         {view === 'smart' && <Smart onToast={showToast} onOpenItem={openItem} onTagsChanged={reloadTags} />}
 
         {view === 'enhance' && <EnhancePage onToast={showToast} onLibraryChanged={onLibraryChanged} />}
-
-        {view === 'bookmarks' && (
-          <Bookmarks
-            onToast={showToast}
-            onLibraryChanged={onLibraryChangedOnly}
-            onOpen={(item, list) =>
-              setLb({ items: list, index: Math.max(0, list.findIndex((x) => x.id === item.id)) })
-            }
-          />
-        )}
 
         {view === 'tutorial' && (
           <Suspense fallback={<div style={{ padding: 40, color: 'var(--muted)' }}>{i18n.t('k3bbda7b4')}</div>}>

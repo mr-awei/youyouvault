@@ -18,15 +18,12 @@ const manualDir = path.join(root, 'scripts', 'manual');
 const REGISTRY = {
   'verify-browse.mjs': '浏览页交互（需 dev 页面 + agent-browser）',
   'verify-filterbar.mjs': '筛选栏交互（需 dev 页面 + agent-browser）',
-  'verify-live.mjs': '动态壁纸配置（需桌面端 + 本机视频文件）',
   'verify-tidy-ui.mjs': '整理页 UI（需 dev 页面 + 真实库数据）',
   'verify-tidy.mjs': '整理后端断言（依赖真实图库样本数据）',
-  'verify-tray-ui.mjs': '托盘与自绘提示窗（需桌面端窗口）',
   'test-clip-align.mjs': 'CLIP 图文对齐抽查（需已下载模型）',
   'test-clip-proj.mjs': 'CLIP 投影抽查（需已下载模型）',
   'test-clip-text.mjs': 'CLIP 文本塔抽查（需已下载模型）',
   'test-psd.mjs': 'PSD 解析抽查（需样本文件）',
-  'stitch-preview.mjs': '拼图模板出图预览（需真实素材，只读库、只写 out）',
 };
 
 let bad = 0;
@@ -47,7 +44,7 @@ for (const [file, desc] of Object.entries(REGISTRY)) {
 }
 
 // 新加进来的脚本必须登记，否则又变成「谁都不会执行」的孤儿
-const known = new Set([...Object.keys(REGISTRY), '_cap.mjs', 'gen-extension-icons.mjs']);
+const known = new Set([...Object.keys(REGISTRY), '_cap.mjs']);
 for (const f of fs.readdirSync(manualDir).filter((f) => f.endsWith('.mjs'))) {
   if (!known.has(f)) {
     console.warn(`  ! ${f} 未登记到 scripts/verify-manual.mjs 的 REGISTRY`);

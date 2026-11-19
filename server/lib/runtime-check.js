@@ -81,7 +81,7 @@ const NATIVE_PROBES = [
   {
     id: 'sharp',
     label: 'Sharp (libvips)',
-    desc: '图片处理底层；缺了水印、缩略图、拼图都跑不起来。',
+    desc: '图片处理底层；缺了缩略图、导出都跑不起来。',
     probe: () => {
       const sharp = require('sharp');
       // @ts-expect-error sharp 的类型导出没有 .version；运行时 .versions.vips 才是 libvips 版本

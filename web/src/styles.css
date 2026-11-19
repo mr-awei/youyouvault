@@ -13,7 +13,6 @@
 @import './styles/dashboard.css';
 @import './styles/lightbox.css';
 @import './styles/enhance.css';
-@import './styles/crawl.css';
 @import './styles/settings.css';
 @import './styles/bulkbar.css';
 @import './styles/modal.css';
@@ -26,4 +25,3 @@
 @import './styles/collections.css';
 @import './styles/timeline.css';
 @import './styles/canvas-board.css';
-@import './styles/reverse.css';

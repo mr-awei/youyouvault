@@ -85,13 +85,6 @@ export function lightboxTutorial(): TutorialCategory[] {
         body: i18n.t('k12d4bc34'),
       },
       {
-        id: 'source-panel',
-        title: i18n.t('ke8aff156'),
-        summary: i18n.t('kdd657f61'),
-        keywords: [i18n.t('k26ca20b1'), i18n.t('kc30d6c94'), i18n.t('k98e1611e'), i18n.t('ke8999472')],
-        body: i18n.t('k9f4d16b6'),
-      },
-      {
         id: 'comments',
         title: i18n.t('k1c2ea0ae'),
         summary: i18n.t('ke558e038'),
@@ -131,20 +124,6 @@ export function lightboxTutorial(): TutorialCategory[] {
         summary: i18n.t('k8cc10e6c'),
         keywords: [i18n.t('ka2247c1d'), 'ZIP', i18n.t('kc6b2bfc5'), i18n.t('k55405ea6')],
         body: i18n.t('k6461a517'),
-      },
-      {
-        id: 'bulk-stitch',
-        title: i18n.t('kc881aedd'),
-        summary: i18n.t('k60cc3786'),
-        keywords: [i18n.t('ka6b363bb'), i18n.t('kd22ed49b'), i18n.t('k68192d08'), i18n.t('kbd81577a')],
-        body: i18n.t('ke76df312'),
-      },
-      {
-        id: 'bulk-watermark',
-        title: i18n.t('k5cf62a48'),
-        summary: i18n.t('k763d8534'),
-        keywords: [i18n.t('k70420943'), i18n.t('kcdd68c8f'), i18n.t('ke099c261'), i18n.t('k2ed671bd')],
-        body: i18n.t('k80b431f2'),
       },
       {
         id: 'bulk-edit',
