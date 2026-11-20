@@ -159,6 +159,11 @@ export const IconFolder = strokeIcon(
   <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
 );
 
+/** 上传：箭头向上 + 托盘 */
+export const IconUpload = strokeIcon(
+  <path d="M12 16V4m0 0 4 4m-4-4-4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+);
+
 /** 展开态文件夹：多一条翻起的盖，和 IconFolder 同轮廓，视觉不跳 */
 export const IconFolderOpen = strokeIcon(
   <>

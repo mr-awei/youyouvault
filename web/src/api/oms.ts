@@ -30,6 +30,42 @@ export interface OmsSkuResult {
   error?: string;
 }
 
+export interface OmsProductLookup {
+  ok: boolean;
+  sku: string;
+  displayName: string;
+  platform: string;
+  type: string;
+  shootCount: number;
+  totalCount: number;
+}
+
+export interface OmsProductScanRow {
+  name: string;
+  sku: string;
+  dir: string;
+  imageCount: number;
+  mtime: string;
+}
+
+export interface OmsProductUploadResult {
+  ok: boolean;
+  sku: string;
+  displayName: string;
+  uploaded: number;
+  skipped: number;
+  failed: { file: string; error: string }[];
+  total: number;
+  shootCount: number;
+}
+
+const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** SKU 文件夹截图（工作成果列用） */
+export function omsProductFolderShotUrl(dir: string) {
+  return `/api/oms/product/folder-shot?${new URLSearchParams({ dir }).toString()}`;
+}
+
 export const omsAPI = {
   omsStatus: () => request<OmsStatus>('/api/oms/status'),
 
@@ -56,5 +92,28 @@ export const omsAPI = {
       method: 'POST',
       body: JSON.stringify({ skus }),
       timeoutMs: 120000,
+    }),
+
+  /** 产品图上传：扫描根目录里的 SKU 子文件夹（只读） */
+  omsProductScan: (dir: string) =>
+    request<{ ok: boolean; root: string; rows: OmsProductScanRow[] }>('/api/oms/product/scan', {
+      method: 'POST',
+      body: JSON.stringify({ dir }),
+    }),
+
+  /** 按完整 SKU 查产品图库后台名称（只读） */
+  omsProductLookup: (sku: string) =>
+    request<OmsProductLookup>('/api/oms/product/lookup', {
+      method: 'POST',
+      body: JSON.stringify({ sku }),
+      timeoutMs: 60000,
+    }),
+
+  /** 手动上传一个 SKU 文件夹；名称不一致服务端会 409，不上传 */
+  omsProductUpload: (payload: { sku: string; dir: string; expectedName: string }) =>
+    request<OmsProductUploadResult>('/api/oms/product/upload', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeoutMs: UPLOAD_TIMEOUT_MS,
     }),
 };

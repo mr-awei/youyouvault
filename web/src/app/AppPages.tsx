@@ -22,6 +22,7 @@ const EnhancePage = lazy(() => import('../pages/Enhance'));
 const Search = lazy(() => import('../pages/Search'));
 const Smart = lazy(() => import('../pages/Smart'));
 const BarcodeSplit = lazy(() => import('../pages/BarcodeSplit'));
+const ProductUpload = lazy(() => import('../pages/ProductUpload'));
 const Tutorial = lazy(() => import('../pages/Tutorial'));
 // 无限画布：DOM + transform 实现，进页面才加载
 const CanvasBoard = lazy(() => import('../pages/CanvasBoard'));
@@ -240,6 +241,7 @@ export default function AppPages(props: Props) {
             onLibraryChanged={onLibraryChanged}
           />
         )}
+        {view === 'productUpload' && <ProductUpload onToast={showToast} />}
 
         {view === 'enhance' && <EnhancePage onToast={showToast} onLibraryChanged={onLibraryChanged} />}
 

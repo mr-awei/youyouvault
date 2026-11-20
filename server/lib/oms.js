@@ -10,6 +10,7 @@
  *
  * 后续「上传后台」也复用同一个 token，不要再各写一套登录。
  */
+import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { DATA_DIR } from '../config.js';
@@ -267,6 +268,105 @@ class OmsClient {
       throw new Error(json?.msg || `OMS 接口异常（HTTP ${res.status}）`);
     }
     return json;
+  }
+
+  /**
+   * 有些接口（如 OSS 签名）不包 code/data，直接返回根对象。
+   * @param {string} pathname
+   * @param {{method?: string, params?: Record<string, string>}} [options]
+   */
+  async rawRequest(pathname, { method = 'GET', params } = {}) {
+    const account = await this.loadAccount();
+    if (!account) throw new Error('尚未配置 OMS 账号');
+    const qs = params ? `?${new URLSearchParams(params).toString()}` : '';
+    const res = await fetchRetry(
+      `${account.baseUrl}${API_PREFIX}${pathname}${qs}`,
+      {
+        method,
+        headers: {
+          'Content-Type': 'application/json;charset=utf-8',
+          clientid: CLIENT_ID,
+          Authorization: `Bearer ${(await this.login()).token}`,
+        },
+      },
+      30000
+    );
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.msg || `OMS 接口异常（HTTP ${res.status}）`);
+    return json;
+  }
+
+  /** 产品图库：按完整 SKU 读后台记录（displayName / 已上传图片） */
+  async getProductGallery(sku) {
+    const s = String(sku || '').trim();
+    if (!s) return null;
+    const json = await this.request(`/oms-admin/visual/designOss/busi/${encodeURIComponent(s)}`, {
+      method: 'GET',
+    });
+    return json?.data || null;
+  }
+
+  /**
+   * 直接上传一张图到 OSS（POST policy）。
+   * 返回 { key, url, originalName, ext }；不写库，写库由 saveProductGalleryFiles 完成。
+   */
+  async uploadOssFile(filePath, originalName) {
+    const buf = await fsp.readFile(filePath);
+    // 后台签名 policy 的 content-length-range 上限是 10MB
+    if (buf.length > 10 * 1024 * 1024) {
+      throw new Error(`图片超过 OSS 10MB 限制：${path.basename(filePath)}`);
+    }
+    const sig = await this.rawRequest('/oms-admin/get_post_signature_for_oss_upload', { method: 'GET' });
+    if (!sig?.host || !sig?.policy || !sig?.signature) throw new Error('获取 OSS 上传签名失败');
+    const name = String(originalName || path.basename(filePath));
+    const ext = (path.extname(name).slice(1) || 'jpg').toLowerCase();
+    const hash = crypto.createHash('md5').update(buf).digest('hex');
+    const dir = String(sig.dir || '').replace(/^\/+|\/+$/g, '');
+    const key = dir ? `${dir}/${hash}.${ext}` : `${hash}.${ext}`;
+    const form = new FormData();
+    form.append('key', key);
+    form.append('policy', sig.policy);
+    form.append('x-oss-signature-version', sig.version);
+    form.append('x-oss-credential', sig.credential);
+    form.append('x-oss-date', sig.ossdate);
+    form.append('x-oss-security-token', sig.token);
+    form.append('x-oss-signature', sig.signature);
+    form.append('success_action_status', '200');
+    form.append('file', new Blob([buf]), name);
+    const res = await fetch(sig.host, { method: 'POST', body: form });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`OSS 上传失败（HTTP ${res.status}）${text.slice(0, 200)}`);
+    }
+    return {
+      key,
+      url: `https://image.uyoyous.com/youyou-prod/${key}`,
+      originalName: name,
+      ext,
+    };
+  }
+
+  /** 把刚上传的 OSS 文件写进「产品图库 → 摄影师拍摄图」 */
+  async saveProductGalleryFiles(sku, files) {
+    const detail = await this.getProductGallery(sku);
+    if (!detail) throw new Error('OMS 产品图库没有这个 SKU 的记录');
+    const existing = Array.isArray(detail.shootFiles) ? detail.shootFiles : [];
+    const added = (Array.isArray(files) ? files : []).map((f) => ({
+      fileName: f.key,
+      originalName: `${sku}/${f.originalName}`,
+      fileSuffix: f.ext ? f.ext.toUpperCase() : '',
+      url: f.url,
+      service: 'aliyun',
+    }));
+    if (!added.length) return detail;
+    const body = { ...detail, shootFiles: [...existing, ...added] };
+    try {
+      await this.request('/oms-admin/visual/designOss', { method: 'PUT', data: body });
+    } catch {
+      // 部分环境用 POST 新增；PUT 失败后再试一次
+      await this.request('/oms-admin/visual/designOss', { method: 'POST', data: body });
+    }
+    return await this.getProductGallery(sku);
   }
 
   /**

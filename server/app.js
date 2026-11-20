@@ -40,6 +40,7 @@ import { register as registerJobs } from './routes/jobs.js';
 import { register as registerOcr } from './routes/ocr.js';
 import { register as registerBarcode } from './routes/barcode.js';
 import { register as registerOms } from './routes/oms.js';
+import { register as registerOmsProduct } from './routes/oms-product.js';
 import { register as registerInspect } from './routes/inspect.js';
 import { register as registerEpub } from './routes/epub.js';
 import { register as registerActions } from './routes/actions.js';
@@ -492,6 +493,7 @@ export function buildApp({ desktop = false } = {}) {
   registerOcr(app, ctx);
   registerBarcode(app, ctx);
   registerOms(app, ctx);
+  registerOmsProduct(app, ctx);
   registerInspect(app, ctx);
   registerEpub(app, ctx);
   registerActions(app, ctx);
