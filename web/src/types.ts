@@ -557,6 +557,15 @@ export interface LicenseStatus {
   licensed: boolean;
   /** 本机机器码（XXXX-XXXX-XXXX-XXXX），购买时发给作者 */
   machineCode: string;
+  /** 授权绑定的账号；远程停用按这个账号匹配 */
+  account?: string;
+  /** 账号/机器已被远程停用 */
+  revoked?: boolean;
+  /** 开发环境临时 Pro（TUKU_DEV_PRO=1），安装包不会带 */
+  devPro?: boolean;
+  revokedAt?: string;
+  revokeCheckedAt?: string;
+  revokeError?: string;
   issuedAt?: string;
   /** 到期日期（YYYY-MM-DD）；null = 永久 */
   expires?: string | null;

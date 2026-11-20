@@ -13,7 +13,9 @@ import {
   machineMatches,
   normalizeCode,
   signLicenseKey,
+  signRevocationList,
   verifyLicenseKey,
+  verifyRevocationList,
 } from '../server/lib/license-core.js';
 
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -127,4 +129,30 @@ test('支持 JSON 包装的激活码（邮件里常见的存法）', () => {
 
 test('没有公钥时一律不通过', () => {
   assert.equal(verify(issue(), { publicKeyPem: '' }).ok, false);
+});
+
+test('授权账号写入 payload，供远程停用匹配', () => {
+  const r = verify(issue({ account: 'zhangsan' }));
+  assert.equal(r.ok, true);
+  assert.equal(r.payload.account, 'zhangsan');
+});
+
+test('远程停用清单：验签通过，篡改拒绝', () => {
+  const token = signRevocationList(
+    { seq: 3, issuedAt: '2026-11-21', revokedAccounts: ['zhangsan'], revokedMachines: [machine] },
+    PRIV
+  );
+  const r = verifyRevocationList(token, { publicKeyPem: PUB });
+  assert.equal(r.ok, true);
+  assert.equal(r.payload.seq, 3);
+  assert.deepEqual(r.payload.revokedAccounts, ['zhangsan']);
+
+  const seg = token.split('.');
+  const payload = JSON.parse(Buffer.from(seg[1], 'base64url').toString('utf8'));
+  payload.seq = 99;
+  const tampered = `TUKU-REVOKE1.${Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')}.${seg[2]}`;
+  const bad = verifyRevocationList(tampered, { publicKeyPem: PUB });
+  assert.equal(bad.ok, false);
+  assert.match(bad.reason, /签名/);
+  assert.equal(verifyRevocationList(token, { publicKeyPem: '' }).ok, false);
 });

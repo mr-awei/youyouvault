@@ -4,6 +4,7 @@ import type { LightboxState } from '../hooks/useLightbox';
 import type { PendingCounts } from '../hooks/useStatsAndTags';
 import type { Filters, FolderNode, ImageItem, Stats, TagNode, View, ViewMode } from '../types';
 import ErrorBoundary from '../components/ErrorBoundary';
+import { ProGate } from './LicenseGate';
 import GalleryPage from '../pages/Gallery';
 import type { ImportProgress } from './useImportWatch';
 import type { Toast } from './types';
@@ -127,11 +128,23 @@ export default function AppPages(props: Props) {
         )}
 
         {view === 'timeline' && (
-          <TimelinePage onToast={showToast} onOpen={(item, pool) => openItem(item, pool)} />
+          <ProGate
+            feature="timeline"
+            label="时间线"
+            onOpenSettings={() => setView('settings')}
+          >
+            <TimelinePage onToast={showToast} onOpen={(item, pool) => openItem(item, pool)} />
+          </ProGate>
         )}
 
         {view === 'canvas' && (
-          <CanvasBoard onToast={showToast} onOpen={(item, pool) => openItem(item, pool)} />
+          <ProGate
+            feature="canvas"
+            label="无限画布"
+            onOpenSettings={() => setView('settings')}
+          >
+            <CanvasBoard onToast={showToast} onOpen={(item, pool) => openItem(item, pool)} />
+          </ProGate>
         )}
 
         {(view === 'gallery' || view === 'favorites') && (
@@ -212,13 +225,15 @@ export default function AppPages(props: Props) {
         )}
 
         {view === 'tidy' && (
-          <Tidy
-            onToast={showToast}
-            filters={filters}
-            folderId={folderId}
-            selectedIds={[...selected]}
-            onLibraryChanged={onLibraryChanged}
-          />
+          <ProGate feature="batch" label="批量整理" onOpenSettings={() => setView('settings')}>
+            <Tidy
+              onToast={showToast}
+              filters={filters}
+              folderId={folderId}
+              selectedIds={[...selected]}
+              onLibraryChanged={onLibraryChanged}
+            />
+          </ProGate>
         )}
 
         {view === 'playlists' && <Playlists onToast={showToast} onOpen={openItem} />}
@@ -232,17 +247,27 @@ export default function AppPages(props: Props) {
         {view === 'smart' && <Smart onToast={showToast} onOpenItem={openItem} onTagsChanged={reloadTags} />}
 
         {view === 'barcode' && (
-          <BarcodeSplit
-            onToast={showToast}
-            folderId={folderId}
-            activeFolder={activeFolder}
-            activeLibName={activeLibName}
-            onLibraryChanged={onLibraryChanged}
-          />
+          <ProGate
+            feature="barcode"
+            label="条码分文件夹"
+            onOpenSettings={() => setView('settings')}
+          >
+            <BarcodeSplit
+              onToast={showToast}
+              folderId={folderId}
+              activeFolder={activeFolder}
+              activeLibName={activeLibName}
+              onLibraryChanged={onLibraryChanged}
+            />
+          </ProGate>
         )}
 
 
-        {view === 'enhance' && <EnhancePage onToast={showToast} onLibraryChanged={onLibraryChanged} />}
+        {view === 'enhance' && (
+          <ProGate feature="batch" label="批量增强" onOpenSettings={() => setView('settings')}>
+            <EnhancePage onToast={showToast} onLibraryChanged={onLibraryChanged} />
+          </ProGate>
+        )}
 
         {view === 'tutorial' && (
           <Suspense fallback={<div style={{ padding: 40, color: 'var(--muted)' }}>{i18n.t('k3bbda7b4')}</div>}>

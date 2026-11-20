@@ -10,6 +10,11 @@ const FEATURE_LABELS: Record<string, string> = {
   lan: i18n.t('kacd2de59'),
   plugins: i18n.t('k309f5454'),
   'night-batch': i18n.t('k41284d5b'),
+  barcode: '条码分文件夹与产品图上传',
+  timeline: '时间线',
+  canvas: '无限画布',
+  edit: '调色 / 裁切 / 修图',
+  batch: '批量编辑 / 导出 / 增强 / 动作',
 };
 
 interface Props {
@@ -108,6 +113,34 @@ export default function LicenseCard({ onToast }: Props) {
         </div>
         <div className="hint">{i18n.t('ka8a841d1')}</div>
       </div>
+
+      {status.account && (
+        <div className="field">
+          <label>授权账号</label>
+          <div style={{ fontFamily: 'ui-monospace, monospace' }}>{status.account}</div>
+          <div className="hint">
+            {status.revokeCheckedAt
+              ? `最近检查停用状态：${new Date(status.revokeCheckedAt).toLocaleString()}`
+              : status.revokeError || '尚未拉取远程停用清单'}
+          </div>
+        </div>
+      )}
+
+      {status.revoked && (
+        <div
+          style={{
+            margin: '8px 0',
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--danger, #d9534f)',
+            background: 'rgba(217, 83, 79, 0.12)',
+            color: 'var(--danger, #d9534f)',
+            fontWeight: 600,
+          }}
+        >
+          该账号已被远程停用，软件数据接口已锁定。请联系管理员。
+        </div>
+      )}
 
       {status.licensed ? (
         <>

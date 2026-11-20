@@ -6,7 +6,7 @@
  *   node scripts/license-issue.mjs --machine A1B2-C3D4-E5F6-7890 --days 365 --note buyer@example.com
  *   node scripts/license-issue.mjs --machine A1B2-C3D4-E5F6-7890 --expires 2027-11-20
  *   node scripts/license-issue.mjs --any --days 30          # 不绑定机器（试用 / 内部测试）
- *   node scripts/license-issue.mjs --machine ... --out licenses/buyer.key
+ *   node scripts/license-issue.mjs --machine ... --account zhangsan --out licenses/buyer.key
  *
  * --machine 就是用户在「设置 → 授权」里看到的机器码（带不带横线都可以）。
  * 私钥优先读环境变量 TUKU_LICENSE_PRIVATE_KEY（CI），否则读仓库根 .license-private.pem。
@@ -32,6 +32,7 @@ const anyMachine = process.argv.includes('--any');
 const input = arg('machine');
 const daysArg = arg('days');
 const note = arg('note');
+const account = arg('account');
 const edition = arg('edition', 'pro');
 const out = arg('out');
 
@@ -82,10 +83,11 @@ if (!privateKey) {
 }
 
 const key = signLicenseKey(
-  { edition, machine, issuedAt: today(), expires, note },
+  { edition, machine, account, issuedAt: today(), expires, note },
   privateKey
 );
 
+console.log('[license] 账号：', account || '（未绑定账号）');
 console.log('[license] 机器码：', machine || '（不绑定机器）');
 console.log('[license] 有效期：', expires || '永久');
 console.log('[license] 激活码：');

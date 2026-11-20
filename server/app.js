@@ -56,7 +56,8 @@ import { register as registerRuntime } from './routes/runtime.js';
 import { register as registerDocs } from './routes/docs.js';
 import { register as registerNightBatch } from './routes/night-batch.js';
 import { register as registerLicense } from './routes/license.js';
-import { requirePro } from './lib/license.js';
+import { register as registerDiagnostics } from './routes/diagnostics.js';
+import { isRevoked, requirePro } from './lib/license.js';
 import { registerBusyProbe, startNightBatchSchedule } from './lib/night-batch.js';
 import { modelsSnapshot } from './lib/model-registry.js';
 import { markInterruptedJobs, pruneJobs } from './jobs.js';
@@ -358,8 +359,61 @@ export function buildApp({ desktop = false } = {}) {
 
   // 专业版能力闸：免费版直接 402，文案里指明去哪里激活。
   // 只挡「增值能力」，浏览 / 整理 / 搜索这些基础功能始终可用。
+  // 远程停用优先于专业版闸：被停用的账号不该再看到「去买专业版」。
+  // 只放行授权状态、诊断包与系统信息，前端才能显示「已停用」而不是白屏。
+  app.use('/api', (req, res, next) => {
+    const p = req.path || '';
+    if (
+      p === '/license' ||
+      p.startsWith('/license/') ||
+      p.startsWith('/diagnostics/') ||
+      p === '/system/info' ||
+      p === '/app/info'
+    ) {
+      return next();
+    }
+    if (isRevoked()) {
+      return res.status(403).json({
+        error: '账号已被远程停用，请联系管理员',
+        code: 'account_revoked',
+      });
+    }
+    next();
+  });
+
   app.use('/api/lan', requirePro('lan'));
   app.use('/api/night-batch', requirePro('night-batch'));
+  app.use('/api/barcode', requirePro('barcode'));
+  app.use('/api/timeline', requirePro('timeline'));
+  app.use(
+    [
+      '/api/images/:id/crop',
+      '/api/images/:id/adjust',
+      '/api/images/:id/inpaint',
+      '/api/images/:id/rotate',
+      '/api/images/:id/edits',
+      '/api/images/:id/focus',
+      '/api/images/:id/annotations',
+    ],
+    requirePro('edit')
+  );
+  app.use('/api/actions/:id/run', requirePro('batch'));
+  app.use('/api/enhance', requirePro('batch'));
+  app.use('/api/export', requirePro('batch'));
+  app.use('/api/tidy', requirePro('batch'));
+  app.use(
+    [
+      '/api/images/batch',
+      '/api/images/bulk-metadata',
+      '/api/images/rename-batch',
+      '/api/images/ocr-batch',
+      '/api/tags/batch',
+      '/api/folders/batch',
+      '/api/ai/tag-batch',
+      '/api/ai/local-tags',
+    ],
+    requirePro('batch')
+  );
 
   /* ----------------------------- 实时事件（SSE） ----------------------------- */
   // 前端所有任务进度 / 库变化由此推送，替代各页面散落的 setInterval 轮询。
@@ -507,6 +561,7 @@ export function buildApp({ desktop = false } = {}) {
   registerModels(app, ctx);
   registerRuntime(app, ctx);
   registerLicense(app, ctx);
+  registerDiagnostics(app, ctx);
   registerNightBatch(app, ctx);
   // 放在最后注册：/api/docs 要自省整个路由表，晚注册才不会漏掉别人的接口
   registerDocs(app, ctx);

@@ -20,10 +20,15 @@ import {
   PRODUCT,
   daysLeft,
   machineCodeFromParts,
+  normalizeCode,
   verifyLicenseKey,
+  verifyRevocationList,
 } from './license-core.js';
 
 const LICENSE_FILE = path.join(DATA_DIR, 'license.key');
+const REVOKE_FILE = path.join(DATA_DIR, 'license-revoke.json');
+const REVOKE_URL = String(process.env.TUKU_LICENSE_REVOKE_URL || '').trim();
+const REVOKE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 /**
  * 授权公钥：优先环境变量（CI / 内部构建），否则读随包文件。
@@ -106,16 +111,84 @@ function readKeyFile() {
   }
 }
 
+function readRevokeCache() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(REVOKE_FILE, 'utf8'));
+    const token = String(raw?.token || '').trim();
+    if (!token) return null;
+    const verified = verifyRevocationList(token, { publicKeyPem: PUBLIC_KEY });
+    if (!verified.ok || !verified.payload) return null;
+    return { token, fetchedAt: Number(raw?.fetchedAt) || 0, payload: verified.payload };
+  } catch {
+    return null;
+  }
+}
+
+function revokeStamp() {
+  try {
+    const st = fs.statSync(REVOKE_FILE);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return 'none';
+  }
+}
+
+let revokeRefreshing = false;
+
+/** 拉取并验签远程停用清单；失败保留旧缓存 */
+export async function refreshRevocation({ force = false } = {}) {
+  if (!REVOKE_URL) return { ok: false, skipped: true, reason: '未配置远程停用地址' };
+  const cached = readRevokeCache();
+  if (!force && cached && Date.now() - cached.fetchedAt < REVOKE_MAX_AGE_MS) {
+    return { ok: true, cached: true, payload: cached.payload };
+  }
+  if (revokeRefreshing) return { ok: false, busy: true, reason: '正在刷新停用清单' };
+  revokeRefreshing = true;
+  try {
+    const res = await fetch(REVOKE_URL, {
+      headers: { 'Cache-Control': 'no-cache' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const verified = verifyRevocationList(text, { publicKeyPem: PUBLIC_KEY });
+    if (!verified.ok || !verified.payload) throw new Error(verified.reason || '停用清单验签失败');
+    if (cached && Number(verified.payload.seq || 0) < Number(cached.payload.seq || 0)) {
+      return { ok: true, ignored: true, reason: '远程清单版本更旧，保留本地缓存' };
+    }
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(
+      REVOKE_FILE,
+      JSON.stringify({ token: text.trim(), fetchedAt: Date.now() }, null, 2),
+      { encoding: 'utf8', mode: 0o600 }
+    );
+    statusCache = null;
+    return { ok: true, payload: verified.payload };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  } finally {
+    revokeRefreshing = false;
+  }
+}
+
+function maybeRefreshRevocation() {
+  if (!REVOKE_URL) return;
+  const cached = readRevokeCache();
+  if (cached && Date.now() - cached.fetchedAt < REVOKE_MAX_AGE_MS) return;
+  void refreshRevocation({ force: true });
+}
+
 /**
  * 当前授权状态。refresh=true 时重新探测硬件（换过硬件后可手动刷新）。
  * @param {{ refresh?: boolean }} [opts]
  */
 export function licenseStatus({ refresh = false } = {}) {
+  maybeRefreshRevocation();
   if (refresh) {
     partsCache = null;
     statusCache = null;
   }
-  const stamp = fileStamp();
+  const stamp = `${fileStamp()}|${revokeStamp()}`;
   if (!refresh && statusCache && statusCache.stamp === stamp) return statusCache.value;
 
   const parts = components(refresh);
@@ -132,11 +205,33 @@ export function licenseStatus({ refresh = false } = {}) {
     reason = '尚未激活';
   }
 
+  const account = payload ? String(payload.account || payload.email || payload.note || '').trim() : '';
+  const revoke = readRevokeCache();
+  const revokedAccounts = Array.isArray(revoke?.payload?.revokedAccounts)
+    ? revoke.payload.revokedAccounts.map((a) => String(a || '').trim().toLowerCase()).filter(Boolean)
+    : [];
+  const revokedMachines = Array.isArray(revoke?.payload?.revokedMachines)
+    ? revoke.payload.revokedMachines.map((m) => normalizeCode(m)).filter(Boolean)
+    : [];
+  const revoked =
+    !!payload &&
+    ((account && revokedAccounts.includes(account.toLowerCase())) ||
+      revokedMachines.includes(normalizeCode(machineCode)));
+  if (revoked) reason = '账号已被远程停用，请联系管理员';
+  // 仅开发环境：不写授权文件也能测 Pro 页面；安装包绝不能带这个环境变量
+  const devPro = process.env.TUKU_DEV_PRO === '1';
+
   const value = {
     product: PRODUCT,
-    edition: payload ? String(payload.edition || 'pro') : 'free',
-    licensed: !!payload,
+    edition: !revoked && (payload || devPro) ? String(payload?.edition || 'pro') : 'free',
+    licensed: !revoked && (!!payload || devPro),
+    devPro,
     machineCode,
+    account,
+    revoked,
+    revokedAt: revoked ? String(revoke?.payload?.issuedAt || '') : '',
+    revokeCheckedAt: revoke?.fetchedAt ? new Date(revoke.fetchedAt).toISOString() : '',
+    revokeError: REVOKE_URL ? '' : '未配置远程停用地址',
     issuedAt: payload?.issuedAt ? String(payload.issuedAt) : '',
     expires: payload?.expires ? String(payload.expires) : null,
     daysLeft: payload ? daysLeft(payload.expires) : null,
@@ -153,6 +248,11 @@ export function licenseStatus({ refresh = false } = {}) {
 /** 专业版能力是否可用（能力闸的唯一判断点） */
 export function isPro() {
   return licenseStatus().licensed;
+}
+
+/** 账号/机器是否被远程停用 */
+export function isRevoked() {
+  return licenseStatus().revoked;
 }
 
 /**

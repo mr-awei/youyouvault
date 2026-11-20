@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { LicenseProvider } from './app/LicenseGate';
 import { applyTheme, getStoredTheme, restoreThemePack } from './theme';
 import { watchUiScale } from './lib/screen-scale';
 import './styles.css';
@@ -37,6 +38,8 @@ window.addEventListener('error', (e) => {
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <LicenseProvider>
+      <App />
+    </LicenseProvider>
   </React.StrictMode>
 );

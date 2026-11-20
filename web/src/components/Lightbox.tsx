@@ -34,6 +34,7 @@ import InfoPanel from './lightbox/InfoPanel';
 import EditOpsPanel from './lightbox/EditOpsPanel';
 import { confirmDialog } from './Dialogs';
 import type { WbSample } from './AdjustPanel';
+import { useLicense } from '../app/LicenseGate';
 import {
   IconClock,
   IconClose,
@@ -177,6 +178,8 @@ export default function Lightbox({
   onOpenFolder,
 }: Props) {
   const item = items[index];
+  const { status: licenseStatus } = useLicense();
+  const canEdit = licenseStatus?.licensed === true;
   const [tagInput, setTagInput] = useState('');
   /* 该图归属的文件夹：补上「能加不能移」的缺口（Eagle 里详情区可直接移出） */
   const [imgFolders, setImgFolders] = useState<{ id: number; name: string; parent_id: number | null; path: string }[]>([]);
@@ -725,6 +728,10 @@ export default function Lightbox({
 
   /* ---------------------- 编辑：打开 / 关闭 / 保存 ---------------------- */
   const openEditor = (mode: 'crop' | 'color') => {
+    if (!canEdit) {
+      onChangeToast?.('调色 / 裁切需要专业版授权，请到「设置 → 授权」激活');
+      return;
+    }
     setCrop(defaultCropControls('free'));
     setCropRect({ x: 0, y: 0, w: 1, h: 1 });
     setAdjust(ADJUST_DEFAULTS);
@@ -1137,8 +1144,8 @@ export default function Lightbox({
           {/* 高频编辑只留三个：裁切 / 调色 / 旋转（左转右转合成一个下拉） */}
           <button
             className={`btn sm${editor === 'crop' ? ' primary' : ''}`}
-            title={i18n.t('k61aa5612')}
-            disabled={!isImage || !!rotating || !!enhancing}
+            title={!canEdit ? '裁切需要专业版授权' : i18n.t('k61aa5612')}
+            disabled={!isImage || !!rotating || !!enhancing || !canEdit}
             onClick={() => (editor === 'crop' ? closeEditor() : openEditor('crop'))}
           >
             <IconExpand />
@@ -1147,8 +1154,8 @@ export default function Lightbox({
           </button>
           <button
             className={`btn sm${colorRoom ? ' primary' : ''}`}
-            title={i18n.t('k44a93c0b')}
-            disabled={!isImage || !!rotating || !!enhancing}
+            title={!canEdit ? '调色需要专业版授权' : i18n.t('k44a93c0b')}
+            disabled={!isImage || !!rotating || !!enhancing || !canEdit}
             onClick={() => (colorRoom ? setColorRoom(false) : openEditor('color'))}
           >
             <IconSun />
@@ -1158,9 +1165,9 @@ export default function Lightbox({
           <div className="lb-more-wrap">
             <button
               className={`btn sm${rotOpen ? ' primary' : ''}`}
-              title={i18n.t('k605f30a2')}
+              title={!canEdit ? '旋转需要专业版授权' : i18n.t('k605f30a2')}
               aria-expanded={rotOpen}
-              disabled={!isImage || !!rotating}
+              disabled={!isImage || !!rotating || !canEdit}
               onClick={() => setRotOpen((v) => !v)}
             >
               <IconRotateCw />

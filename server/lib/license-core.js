@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 
 export const PRODUCT = 'tuku';
 const PREFIX = 'TUKU1';
+const REVOKE_PREFIX = 'TUKU-REVOKE1';
 
 /**
  * 需要专业版的能力。key 与 requirePro('...') 一一对应，
@@ -23,6 +24,11 @@ export const PRO_FEATURES = [
   { key: 'lan', label: '局域网投送与只读分享' },
   { key: 'plugins', label: '插件脚本执行' },
   { key: 'night-batch', label: 'AI 夜间批处理' },
+  { key: 'barcode', label: '条码分文件夹与产品图上传' },
+  { key: 'timeline', label: '时间线' },
+  { key: 'canvas', label: '无限画布' },
+  { key: 'edit', label: '调色 / 裁切 / 修图' },
+  { key: 'batch', label: '批量编辑 / 导出 / 增强 / 动作' },
 ];
 
 /** 取 sha256 的前 16 个十六进制字符：64 位指纹，足够区分机器，也不会长到没法抄 */
@@ -96,6 +102,7 @@ export function signLicenseKey(payload, privateKeyPem) {
     product: PRODUCT,
     edition: 'pro',
     machine: '',
+    account: '',
     issuedAt: '',
     expires: null,
     note: '',
@@ -175,6 +182,67 @@ export function verifyLicenseKey(key, opts = {}) {
     }
   }
 
+  return { ok: true, reason: '', payload: p };
+}
+
+/**
+ * 远程停用清单：作者私钥签名，客户端用同一把公钥验签。
+ * payload: { v:1, product:'tuku', seq, issuedAt, revokedAccounts:[], revokedMachines:[] }
+ */
+export function signRevocationList(payload, privateKeyPem) {
+  const body = {
+    v: 1,
+    product: PRODUCT,
+    seq: 1,
+    issuedAt: '',
+    revokedAccounts: [],
+    revokedMachines: [],
+    ...payload,
+  };
+  const json = JSON.stringify(body);
+  const sig = crypto.sign(null, Buffer.from(json, 'utf8'), privateKeyPem);
+  return `${REVOKE_PREFIX}.${Buffer.from(json, 'utf8').toString('base64url')}.${Buffer.from(sig).toString('base64url')}`;
+}
+
+/** 接受原始 token 或 {token:'...'} */
+export function parseRevocationList(input) {
+  let raw = String(input ?? '').trim();
+  if (!raw) return null;
+  if (raw.startsWith('{')) {
+    try {
+      raw = String(JSON.parse(raw)?.token || '').trim();
+    } catch {
+      return null;
+    }
+  }
+  const parts = raw.split('.');
+  if (parts.length !== 3 || parts[0] !== REVOKE_PREFIX) return null;
+  try {
+    const json = Buffer.from(parts[1], 'base64url').toString('utf8');
+    const sig = Buffer.from(parts[2], 'base64url');
+    const payload = JSON.parse(json);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+    return { json, sig, payload };
+  } catch {
+    return null;
+  }
+}
+
+export function verifyRevocationList(token, { publicKeyPem = '' } = {}) {
+  if (!publicKeyPem) return { ok: false, reason: '未内置授权公钥' };
+  const parsed = parseRevocationList(token);
+  if (!parsed) return { ok: false, reason: '停用清单格式不正确' };
+  const valid = (() => {
+    try {
+      return crypto.verify(null, Buffer.from(parsed.json, 'utf8'), publicKeyPem, parsed.sig);
+    } catch {
+      return false;
+    }
+  })();
+  if (!valid) return { ok: false, reason: '停用清单签名无效' };
+  const p = parsed.payload;
+  if (String(p.product || '') !== PRODUCT) return { ok: false, reason: '停用清单不属于这个产品' };
+  if (Number(p.v) !== 1) return { ok: false, reason: '停用清单版本不受支持' };
   return { ok: true, reason: '', payload: p };
 }
 

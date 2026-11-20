@@ -4,15 +4,25 @@
  *
  * 只有这三个入口，参数都极小；验签在本地完成，不依赖任何远程服务。
  */
-import { activateLicense, deactivateLicense, licenseStatus } from '../lib/license.js';
+import {
+  activateLicense,
+  deactivateLicense,
+  licenseStatus,
+  refreshRevocation,
+} from '../lib/license.js';
 
 export function register(app, ctx) {
   const { asyncRoute } = ctx;
 
   /** 当前状态：免费版也返回机器码，用户拿它去买授权 */
-  app.get('/api/license', (req, res) => {
-    res.json(licenseStatus({ refresh: req.query.refresh === '1' }));
-  });
+  app.get(
+    '/api/license',
+    asyncRoute(async (req, res) => {
+      const refresh = req.query.refresh === '1';
+      if (refresh) await refreshRevocation({ force: true }).catch(() => {});
+      res.json(licenseStatus({ refresh }));
+    })
+  );
 
   app.post(
     '/api/license/activate',

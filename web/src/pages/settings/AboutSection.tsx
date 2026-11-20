@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { desktop, getAppInfo, quiet } from '../../api';
+import { BASE, desktop, getApiToken, getAppInfo, quiet } from '../../api';
 import type { AppInfo, HotfixState, UpdateState } from '../../api';
 import type { Settings as SettingsType } from '../../types';
 import Card from './Card';
@@ -208,6 +208,47 @@ export default function AboutSection({ settings, patch, onToast, onOpenTutorial 
       onToast(i18n.t('k2f3ef2b7'));
     } catch {
       onToast(i18n.t('k12263b09'), 'error');
+    }
+  };
+
+  /** 一键诊断包：用户只提交一个 zip，系统环境/网络/操作/日志都在里面 */
+  const downloadBundle = async () => {
+    const description = window.prompt('问题描述 / 复现步骤（会写入诊断包，可留空）') || '';
+    try {
+      const token = await getApiToken();
+      const client = {
+        userAgent: navigator.userAgent,
+        platform: (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform || '',
+        language: navigator.language,
+        screen: {
+          width: window.screen.width,
+          height: window.screen.height,
+          dpr: window.devicePixelRatio,
+        },
+        url: window.location.href.replace(/token=[^&]+/i, 'token=***'),
+        view: new URLSearchParams(window.location.search).get('v') || 'dashboard',
+      };
+      const res = await fetch(`${BASE}/api/diagnostics/bundle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ description, client }),
+      });
+      if (!res.ok) throw new Error(`生成失败（HTTP ${res.status}）`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `TuKu-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      onToast('诊断包已生成，直接把这个 zip 发给开发者即可');
+    } catch (err) {
+      onToast((err as Error).message, 'error');
     }
   };
 
@@ -471,9 +512,12 @@ export default function AboutSection({ settings, patch, onToast, onOpenTutorial 
           <button className="btn" onClick={copyDiagnostics}>
             {i18n.t('ka5b98f67')}
           </button>
+          <button className="btn primary" onClick={() => void downloadBundle()}>
+            生成诊断包（ZIP）
+          </button>
         </div>
         <div className="hint" style={{ marginTop: 8 }}>
-          {i18n.t('k4c45e133')}
+          诊断包包含系统环境、网络接口/代理、设置（密钥脱敏）、最近 200 条操作、最近日志和问题描述；不包含密码、token 或图片原文件。提交 Bug 时只需要发这个 zip。
         </div>
       </Card>
 
