@@ -74,7 +74,7 @@ export default function ProductUpload({ onToast }: Props) {
           shootCount: 0,
         }))
       );
-      setShowShot(true);
+      setShowShot(false);
       if (!res.rows.length) onToast('没有找到 SKU 子文件夹');
     } catch (err) {
       onToast((err as Error).message, 'error');
