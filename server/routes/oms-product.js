@@ -126,8 +126,8 @@ export function register(app, ctx) {
       if (!detail) return res.status(404).json({ error: 'OMS 产品图库没有这个 SKU 的记录' });
       if (normalizeName(detail.displayName) !== normalizeName(expectedName)) {
         return res.status(409).json({
-          error: 'name_mismatch',
-          message: '后台显示名称与记录不一致，已停止上传，请先核对',
+          error: `后台名称「${detail.displayName || '—'}」与记录名称「${expectedName}」不一致，已停止上传，请先核对`,
+          code: 'name_mismatch',
           sku,
           displayName: detail.displayName || '',
           expectedName,

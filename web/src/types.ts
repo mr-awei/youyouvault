@@ -1155,7 +1155,6 @@ export type View =
   | 'dashboard'
   | 'gallery'
   | 'barcode'
-  | 'productUpload'
   | 'timeline'
   | 'canvas'
   | 'favorites'

@@ -51,6 +51,8 @@ export interface BarcodeApplyGroup {
 }
 
 export interface BarcodeApplyResult {
+  /** 对应请求里的第几组（跳过的不占位） */
+  sourceIndex: number;
   /** 实际使用的文件夹名（重复编码会带 -2） */
   code: string;
   folder: string;

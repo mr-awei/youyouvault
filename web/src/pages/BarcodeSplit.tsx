@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   api,
+  BASE,
   barcodeThumbUrl,
   copyText,
+  downloadFile,
+  getApiToken,
   isDesktop,
+  omsProductFolderShotUrl,
   openFolder,
   pickFolder,
   type BarcodeApplyResponse,
@@ -38,6 +42,14 @@ interface GroupEdit {
   omsState?: 'found' | 'multiple' | 'empty' | 'error';
   /** 产品名：单独一行，入库时作为标签写到该组每一张图片 */
   productName?: string;
+}
+
+interface UploadOutcome {
+  state: 'uploading' | 'uploaded' | 'skipped' | 'mismatch' | 'error';
+  uploaded: number;
+  skipped: number;
+  shootCount: number;
+  message: string;
 }
 
 /** 完整编码形如 45661-Y01Y0001-QD08；只有主 SKU 时没有连字符段 */
@@ -81,6 +93,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const applying = applyMode !== null;
   const [cleanStale, setCleanStale] = useState(true);
   const [applied, setApplied] = useState<BarcodeApplyResponse | null>(null);
+  const [uploads, setUploads] = useState<Record<string, UploadOutcome>>({});
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [oms, setOms] = useState<OmsStatus | null>(null);
   const [omsOpen, setOmsOpen] = useState(false);
   const [omsUser, setOmsUser] = useState('');
@@ -272,6 +286,80 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
+  /**
+   * 保存后自动核对 OMS 名称并上传：名称一致才传，不一致写红色状态并停止该 SKU。
+   * 不弹二次确认；用户点主按钮「保存 / 入库 / 上传」即视为同意这一步。
+   */
+  const uploadAppliedGroups = async (result: BarcodeApplyResponse) => {
+    const pending = result.results.filter((r) => r.folder);
+    setUploads({});
+    setUploadProgress({ done: 0, total: pending.length });
+    let uploadedTotal = 0;
+    let mismatch = 0;
+    let done = 0;
+    for (const r of result.results) {
+      if (!r.folder) continue;
+      const idx = r.sourceIndex;
+      const edit = edits[idx];
+      const group = scan?.groups[idx];
+      const code = String(edit?.code || group?.code || '').trim();
+      const expectedName = String(edit?.productName || '').trim();
+      const base: UploadOutcome = {
+        state: 'uploading',
+        uploaded: 0,
+        skipped: 0,
+        shootCount: 0,
+        message: '正在上传…',
+      };
+      setUploads((prev) => ({ ...prev, [r.folder]: base }));
+      try {
+        if (!isFullCode(code)) {
+          throw Object.assign(new Error('缺少完整编码，未上传到 OMS'), { code: 'no_full_code' });
+        }
+        if (!expectedName) {
+          throw Object.assign(new Error('缺少产品名，未上传到 OMS（请先填写产品名）'), {
+            code: 'no_product_name',
+          });
+        }
+        const res = await api.omsProductUpload({
+          sku: code,
+          dir: r.folder,
+          expectedName,
+        });
+        uploadedTotal += res.uploaded;
+        const outcome: UploadOutcome = {
+          state: res.uploaded > 0 ? 'uploaded' : 'skipped',
+          uploaded: res.uploaded,
+          skipped: res.skipped,
+          shootCount: res.shootCount,
+          message:
+            res.uploaded > 0
+              ? `已上传 ${res.uploaded} 张到 OMS${res.skipped ? `，跳过 ${res.skipped} 张已存在` : ''}`
+              : `后台已有这 ${res.skipped} 张，未重复上传`,
+        };
+        setUploads((prev) => ({ ...prev, [r.folder]: outcome }));
+      } catch (err) {
+        const e = err as Error & { code?: string };
+        const isMismatch = e.code === 'name_mismatch';
+        if (isMismatch) mismatch += 1;
+        setUploads((prev) => ({
+          ...prev,
+          [r.folder]: {
+            state: isMismatch ? 'mismatch' : 'error',
+            uploaded: 0,
+            skipped: 0,
+            shootCount: 0,
+            message: e.message,
+          },
+        }));
+      } finally {
+        done += 1;
+        setUploadProgress({ done, total: pending.length });
+      }
+    }
+    return { uploadedTotal, mismatch };
+  };
+
   const runApply = async (importToLibrary: boolean) => {
     if (!scan) return;
     if (!rootDir.trim()) {
@@ -307,12 +395,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setApplied(result);
       if (importToLibrary) {
         onLibraryChanged();
+        const up = await uploadAppliedGroups(result);
         onToast(
-          i18n.t('k4a555f20', {
-            p0: result.totalCopied,
-            p1: result.importedTotal ?? 0,
-            p2: result.importSkippedTotal ?? 0,
-          })
+          up.mismatch
+            ? `已复制 ${result.totalCopied} 张，入库 ${result.importedTotal ?? 0} 张，上传 ${up.uploadedTotal} 张；有 ${up.mismatch} 个 SKU 名称不一致，已停止上传`
+            : `已复制 ${result.totalCopied} 张，入库 ${result.importedTotal ?? 0} 张，上传 ${up.uploadedTotal} 张`,
+          up.mismatch ? 'error' : 'info'
         );
       } else {
         onToast(i18n.t('k2827af98', { p0: result.totalCopied, p1: result.dateDir }));
@@ -321,6 +409,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       onToast((err as Error).message, 'error');
     } finally {
       setApplyMode(null);
+      setUploadProgress(null);
     }
   };
 
@@ -333,6 +422,63 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       );
       return { ...prev, groups, ungrouped: [] };
     });
+  };
+
+  const reportRows = scan
+    ? scan.groups
+        .map((g, i) => {
+          const edit = edits[i];
+          if (edit?.skip) return null;
+          const code = (edit?.code || g.code || '').trim();
+          if (!code) return null;
+          const shoot = edit?.omsRows?.[0]?.shootStatus || '';
+          const platform = /NOT_EBAY/i.test(shoot)
+            ? '非eBay'
+            : /EBAY/i.test(shoot)
+              ? 'eBay'
+              : '';
+          return {
+            sku: code,
+            name: edit?.productName || '',
+            platform,
+            category: '产品/视频拍摄',
+          };
+        })
+        .filter((r): r is { sku: string; name: string; platform: string; category: string } => !!r)
+    : [];
+
+  const downloadReport = async () => {
+    if (!reportRows.length) {
+      onToast('没有可导出的 SKU', 'error');
+      return;
+    }
+    try {
+      const token = await getApiToken();
+      const res = await fetch(`${BASE}/api/oms/product/report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ date: date || new Date().toISOString().slice(0, 10), rows: reportRows }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text.slice(0, 300) || `导出失败（HTTP ${res.status}）`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `工作日报-${date || new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      onToast('Excel 已生成，工作时长留了「待填」等你补');
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    }
   };
 
   const scanLabel = scanning
@@ -584,8 +730,18 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   {(applied.cleanedTotal ?? 0) > 0
                     ? ` · ${i18n.t('k6b18e06e', { p0: applied.cleanedTotal })}`
                     : ''}
+                  {uploadProgress ? ` · 正在上传 OMS ${uploadProgress.done}/${uploadProgress.total}` : ''}
                 </span>
-                <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => openFolder(applied.dateDir)}>
+                <button className="btn sm" onClick={downloadReport}>
+                  生成 Excel
+                </button>
+                <button
+                  className="btn sm"
+                  onClick={() => downloadFile(omsProductFolderShotUrl(applied.dateDir))}
+                >
+                  下载文件夹截图
+                </button>
+                <button className="btn sm" onClick={() => openFolder(applied.dateDir)}>
                   {i18n.t('kc49c4607')}
                 </button>
               </div>
@@ -640,6 +796,23 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                         {i18n.t('k3cbd8ca0', { p0: r.cleanErrors!.map((e) => e.error).join('；') })}
                       </span>
                     )}
+                    {uploads[r.folder] && (
+                      <span
+                        style={{
+                          color:
+                            uploads[r.folder].state === 'mismatch' || uploads[r.folder].state === 'error'
+                              ? 'var(--danger, #d9534f)'
+                              : uploads[r.folder].state === 'uploaded' ||
+                                  uploads[r.folder].state === 'skipped'
+                                ? 'var(--ok, #3c9d5d)'
+                                : 'var(--muted)',
+                          fontWeight:
+                            uploads[r.folder].state === 'mismatch' ? 600 : 400,
+                        }}
+                      >
+                        {uploads[r.folder].message}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -665,7 +838,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 onClick={() => runApply(true)}
                 disabled={applying || !scan.groups.length}
               >
-                <IconFolder /> {applyMode === 'import' ? i18n.t('k7cbf2d09') : i18n.t('k4d48d381')}
+                <IconFolder /> {applyMode === 'import' ? '保存/上传中…' : '保存 / 入库 / 上传'}
               </button>
               <button
                 className="btn sm"
@@ -696,6 +869,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                     {(applied.cleanedTotal ?? 0) > 0
                       ? ` · ${i18n.t('k6b18e06e', { p0: applied.cleanedTotal })}`
                       : ''}
+                    {applied.importedToLibrary
+                      ? ` · 上传 ${Object.values(uploads).reduce((n, u) => n + u.uploaded, 0)} 张`
+                      : ''}
                   </span>
                   <button className="btn sm" onClick={() => openFolder(applied.dateDir)}>
                     {i18n.t('kc49c4607')}
@@ -706,6 +882,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             <div className="hint" style={{ marginTop: 6 }} title={i18n.t('k58179dae')}>
               {i18n.t('k168903f9')}：{activeFolder?.name || activeLibName || i18n.t('k1dae2087')} ·{' '}
               {i18n.t('k948019e4')}
+            </div>
+            <div className="hint" style={{ marginTop: 4 }}>
+              保存后会核对 OMS 产品图库名称：一致自动上传，不一致停止并等你核对；不需要再单独点上传。
             </div>
           </div>
         </>

@@ -229,11 +229,13 @@ export function register(app, ctx) {
       let importSkippedTotal = 0;
       let cleanedTotal = 0;
 
-      for (const g of input) {
+      for (let sourceIndex = 0; sourceIndex < input.length; sourceIndex++) {
+        const g = input[sourceIndex];
         if (g?.skip) continue;
         const code = safeCodeName(g?.code);
         if (!code) {
           results.push({
+            sourceIndex,
             code: '',
             folder: '',
             copied: 0,
@@ -326,6 +328,7 @@ export function register(app, ctx) {
         importSkippedTotal += importSkipped;
 
         results.push({
+          sourceIndex,
           code: folderName,
           folder,
           copied,

@@ -9,7 +9,6 @@ export const VIEWS = [
   'dashboard',
   'gallery',
   'barcode',
-  'productUpload',
   'timeline',
   'canvas',
   'favorites',

@@ -18,7 +18,6 @@ import {
   IconLayers,
   IconSearch,
   IconSquare,
-  IconUpload,
   IconWand,
 } from '../components/Icons';
 import i18n from '../i18n';
@@ -42,7 +41,6 @@ export const PRIMARY_NAV: NavItem[] = [
   { key: 'dashboard', label: i18n.t('k3fa8b34a'), icon: <IconDashboard /> },
   { key: 'gallery', label: i18n.t('k6084bc4b'), icon: <IconImages /> },
   { key: 'barcode', label: i18n.t('kc01889de'), icon: <IconBarcode /> },
-  { key: 'productUpload', label: '产品图上传', icon: <IconUpload /> },
   { key: 'timeline', label: i18n.t('k4404a8da'), icon: <IconCalendar /> },
   { key: 'canvas', label: i18n.t('k7c3f1a2e'), icon: <IconSquare /> },
 ];
