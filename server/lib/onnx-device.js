@@ -26,6 +26,7 @@ import {
   defaultUserRoot,
   gpuForcedOff,
   gpuProbeCrashed,
+  isNativeCrashCode,
   readDeviceState,
   statePath,
   writeDeviceState,
@@ -72,10 +73,22 @@ function resolvePersistedState() {
     return;
   }
   const version = appVersion();
+  // 原生崩溃（0xC0000005 等）不是「本程序版本旧」，升级并不能修好驱动/ORT 的墙。
+  // 旧逻辑每次升级都清记录重试，结果每次升级都再崩一次；原生崩溃必须等用户
+  // 手动删 device-state.json（或显式「重新尝试显卡」）才重试。
+  const nativeCrash =
+    isNativeCrashCode(/** @type {any} */ (st).code) ||
+    /原生崩溃|未正常结束/.test(String(st.reason || ''));
   if (st.version && version && st.version !== version) {
-    console.info(`[gpu] 版本已从 ${st.version} 变到 ${version}，重新尝试显卡后端`);
-    clearDeviceState(userRoot);
-    return;
+    if (nativeCrash) {
+      console.info(
+        `[gpu] 上次是原生崩溃（${st.version} → ${version}），升级后不自动重试；本次继续用 CPU。恢复请删除 ${statePath(userRoot)}`
+      );
+    } else {
+      console.info(`[gpu] 版本已从 ${st.version} 变到 ${version}，重新尝试显卡后端`);
+      clearDeviceState(userRoot);
+      return;
+    }
   }
   blockedReason = String(st.reason || '上次启用显卡时进程崩溃');
   gpuDisabled = true;
