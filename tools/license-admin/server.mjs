@@ -401,7 +401,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/import-legacy') {
-    const files = [];
+    const files = new Set();
     const walk = (dir, depth) => {
       if (depth > 3) return;
       let entries;
@@ -413,10 +413,22 @@ async function handleApi(req, res, url) {
       for (const entry of entries) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) walk(full, depth + 1);
-        else if (entry.isFile() && /\.(key|txt)$/i.test(entry.name)) files.push(full);
+        else if (entry.isFile() && /\.(key|txt)$/i.test(entry.name)) files.add(full);
       }
     };
-    walk(cfg.dataDir, 0);
+    // 除了当前数据目录，也找 exe / 工作目录附近的 licenses/，方便把以前命令行导出的 key 导进来
+    const scanDirs = new Set([cfg.dataDir]);
+    for (const root of [process.env.PORTABLE_EXECUTABLE_DIR, process.cwd(), path.dirname(process.execPath)]) {
+      if (!root) continue;
+      let dir = root;
+      for (let i = 0; i < 4; i++) {
+        scanDirs.add(path.join(dir, 'licenses'));
+        const next = path.dirname(dir);
+        if (next === dir) break;
+        dir = next;
+      }
+    }
+    for (const dir of scanDirs) walk(dir, 0);
 
     let added = 0;
     let skipped = 0;
@@ -464,7 +476,7 @@ async function handleApi(req, res, url) {
       added++;
     }
     if (added) saveStore();
-    return sendJson(res, 200, { ok: true, added, skipped, files: files.length, state: state() });
+    return sendJson(res, 200, { ok: true, added, skipped, files: files.size, state: state() });
   }
 
   return sendJson(res, 404, { error: '接口不存在' });
