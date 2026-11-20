@@ -30,6 +30,7 @@
     "dist:secure": "node scripts/build-secure.mjs",
     "obfuscate:restore": "node scripts/restore-obfuscated.mjs",
     "dist:dir": "vite build && electron-builder --dir",
+    "license:admin": "node tools/license-admin/server.mjs",
     "gen:dto": "node scripts/gen-dto-types.mjs",
     "typecheck": "node scripts/gen-dto-types.mjs && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.lib.json && tsc --noEmit -p tsconfig.server.json",
     "lint": "eslint . && node scripts/lint.mjs",

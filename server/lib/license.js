@@ -21,6 +21,7 @@ import {
   daysLeft,
   machineCodeFromParts,
   normalizeCode,
+  normalizePhone,
   verifyLicenseKey,
   verifyRevocationList,
 } from './license-core.js';
@@ -205,19 +206,26 @@ export function licenseStatus({ refresh = false } = {}) {
     reason = '尚未激活';
   }
 
-  const account = payload ? String(payload.account || payload.email || payload.note || '').trim() : '';
+  const phone = payload
+    ? String(payload.phone || payload.account || payload.email || payload.note || '').trim()
+    : '';
+  const account = phone; // 兼容旧字段：新授权码的账号就是手机号
   const revoke = readRevokeCache();
+  const revokedPhones = Array.isArray(revoke?.payload?.revokedPhones)
+    ? revoke.payload.revokedPhones.map((p) => normalizePhone(p)).filter(Boolean)
+    : [];
   const revokedAccounts = Array.isArray(revoke?.payload?.revokedAccounts)
-    ? revoke.payload.revokedAccounts.map((a) => String(a || '').trim().toLowerCase()).filter(Boolean)
+    ? revoke.payload.revokedAccounts.map((a) => normalizePhone(a)).filter(Boolean)
     : [];
   const revokedMachines = Array.isArray(revoke?.payload?.revokedMachines)
     ? revoke.payload.revokedMachines.map((m) => normalizeCode(m)).filter(Boolean)
     : [];
+  const phoneKey = normalizePhone(phone);
   const revoked =
     !!payload &&
-    ((account && revokedAccounts.includes(account.toLowerCase())) ||
+    ((phoneKey && (revokedPhones.includes(phoneKey) || revokedAccounts.includes(phoneKey))) ||
       revokedMachines.includes(normalizeCode(machineCode)));
-  if (revoked) reason = '账号已被远程停用，请联系管理员';
+  if (revoked) reason = '该手机号或设备已被远程停用，请联系管理员';
   // 仅开发环境：不写授权文件也能测 Pro 页面；安装包绝不能带这个环境变量
   const devPro = process.env.TUKU_DEV_PRO === '1';
 
@@ -225,8 +233,11 @@ export function licenseStatus({ refresh = false } = {}) {
     product: PRODUCT,
     edition: !revoked && (payload || devPro) ? String(payload?.edition || 'pro') : 'free',
     licensed: !revoked && (!!payload || devPro),
+    /** 本机是否真的有验签通过的授权文件（区别于只是开发模式临时 Pro） */
+    licensedByKey: !revoked && !!payload,
     devPro,
     machineCode,
+    phone,
     account,
     revoked,
     revokedAt: revoked ? String(revoke?.payload?.issuedAt || '') : '',

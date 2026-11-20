@@ -162,7 +162,14 @@ try {
 
     // 用测试私钥签一张绑定本机的授权，后续受控能力的冒烟都在专业版下跑
     const key = signLicenseKey(
-      { machine: lic.machineCode, expires: null, issuedAt: '2026-11-20', note: 'smoke' },
+      {
+        machine: lic.machineCode,
+        phone: '13800000000',
+        account: '13800000000',
+        expires: null,
+        issuedAt: '2026-11-20',
+        note: 'smoke',
+      },
       LICENSE_PRIV
     );
     const act = await fetch(`${BASE}/api/license/activate`, {
@@ -173,8 +180,8 @@ try {
     const actBody = await act.json().catch(() => ({}));
     check(
       '有效激活码可激活本机并切换为专业版',
-      act.ok && actBody.licensed === true && actBody.edition === 'pro',
-      `${act.status} ${JSON.stringify({ licensed: actBody.licensed, edition: actBody.edition, reason: actBody.error })}`
+      act.ok && actBody.licensed === true && actBody.edition === 'pro' && actBody.phone === '13800000000',
+      `${act.status} ${JSON.stringify({ licensed: actBody.licensed, edition: actBody.edition, phone: actBody.phone, reason: actBody.error })}`
     );
     const lanAfter = await fetch(`${BASE}/api/lan/status`, { headers: { Authorization: `Bearer ${token}` } });
     check('激活后局域网能力放行', lanAfter.status === 200, String(lanAfter.status));
@@ -1466,37 +1473,6 @@ try {
     } else {
       check('擦除修复：真实图片 + 蒙版能另存副本并回报覆盖率', false, '库里没有素材');
     }
-
-    // 创意工坊：导出 → 导入往返，配色与图片都要还原，注入的 CSS 要被剔掉
-    const cover = await sharp({ create: { width: 16, height: 16, channels: 3, background: { r: 12, g: 34, b: 56 } } })
-      .png().toBuffer();
-    const exp = await fetch(`${BASE}/api/workshop/export`, {
-      method: 'POST',
-      headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: '冒烟主题',
-        theme: { base: 'dark', variables: { '--accent': '#aabbcc', '--bg': 'url(https://evil/x)' } },
-        assets: [{ name: 'cover.png', dataUrl: `data:image/png;base64,${cover.toString('base64')}` }],
-      }),
-    });
-    const expj = await json(exp);
-    check(
-      '创意工坊：导出过滤注入值、保留合法配色与图片',
-      exp.ok && expj.pack?.theme?.variables?.['--accent'] === '#aabbcc' &&
-        !('--bg' in (expj.pack?.theme?.variables || {})) && expj.pack.assets.length === 1,
-      `${exp.status} skipped=${expj.skipped?.length}`
-    );
-    const imp = await fetch(`${BASE}/api/workshop/import`, {
-      method: 'POST',
-      headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: JSON.stringify(expj.pack) }),
-    });
-    const impj = await json(imp);
-    check(
-      '创意工坊：导入还原配色 / 图片',
-      imp.ok && impj.theme?.variables?.['--accent'] === '#aabbcc' && impj.assetPaths?.length === 1,
-      `${imp.status}`
-    );
 
     // 多端同步：发布 → 第二次发布增量跳过 → 已是最新时不重复拉取
     const syncDir = path.join(tmpUser, 'sync-folder');

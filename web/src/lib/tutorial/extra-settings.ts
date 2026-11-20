@@ -92,13 +92,6 @@ export function settingsTutorial(): TutorialCategory[] {
         body: i18n.t('kf64aa46d'),
       },
       {
-        id: 'workshop',
-        title: i18n.t('k661cc070'),
-        summary: i18n.t('k39f19240'),
-        keywords: [i18n.t('k9c84d139'), i18n.t('k16eb2e5d'), 'tuku-pack', i18n.t('k8d9a071e'), i18n.t('k55405ea6')],
-        body: i18n.t('kf0da5957'),
-      },
-      {
         id: 'recycle-settings',
         title: i18n.t('k86a2b694'),
         summary: i18n.t('k40a81eb8'),

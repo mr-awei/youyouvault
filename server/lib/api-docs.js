@@ -95,7 +95,6 @@ export const GROUPS = [
     label: '集成与同步',
     prefixes: [
       '/api/plugins',
-      '/api/workshop',
       '/api/lan',
       '/api/sync',
       '/api/actions',

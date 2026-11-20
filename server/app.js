@@ -48,7 +48,6 @@ import { register as registerTransfer } from './routes/transfer.js';
 import { register as registerV1 } from './routes/v1.js';
 import { register as registerPlugins } from './routes/plugins.js';
 import { register as registerLan } from './routes/lan.js';
-import { register as registerWorkshop } from './routes/workshop.js';
 import { register as registerSync } from './routes/sync.js';
 import { register as registerTimeline } from './routes/timeline.js';
 import { register as registerModels } from './routes/models.js';
@@ -555,7 +554,6 @@ export function buildApp({ desktop = false } = {}) {
   registerV1(app, ctx);
   registerPlugins(app, ctx);
   registerLan(app, ctx);
-  registerWorkshop(app, ctx);
   registerSync(app, ctx);
   registerTimeline(app, ctx);
   registerModels(app, ctx);

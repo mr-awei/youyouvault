@@ -9,9 +9,11 @@ import crypto from 'node:crypto';
 import test from 'node:test';
 import {
   formatCode,
+  isValidPhone,
   machineCodeFromParts,
   machineMatches,
   normalizeCode,
+  normalizePhone,
   signLicenseKey,
   signRevocationList,
   verifyLicenseKey,
@@ -26,7 +28,18 @@ const parts = ['guid-1', 'cpu-2', 'board-3', 'disk-4'];
 const machine = machineCodeFromParts(parts);
 
 const issue = (extra = {}) =>
-  signLicenseKey({ machine, expires: null, issuedAt: '2026-11-20', note: 'buyer@example.com', ...extra }, PRIV);
+  signLicenseKey(
+    {
+      machine,
+      phone: '13800000000',
+      account: '13800000000',
+      expires: null,
+      issuedAt: '2026-11-20',
+      note: 'buyer@example.com',
+      ...extra,
+    },
+    PRIV
+  );
 
 const verify = (key, extra = {}) =>
   verifyLicenseKey(key, { publicKeyPem: PUB, machineCode: machine, ...extra });
@@ -131,21 +144,38 @@ test('没有公钥时一律不通过', () => {
   assert.equal(verify(issue(), { publicKeyPem: '' }).ok, false);
 });
 
-test('授权账号写入 payload，供远程停用匹配', () => {
-  const r = verify(issue({ account: 'zhangsan' }));
+test('授权手机号写入 payload，供远程停用匹配', () => {
+  const r = verify(issue({ phone: '139 0000 1111', account: '13900001111' }));
   assert.equal(r.ok, true);
-  assert.equal(r.payload.account, 'zhangsan');
+  assert.equal(r.payload.phone, '139 0000 1111');
+  assert.equal(normalizePhone(r.payload.phone), '13900001111');
+});
+
+test('手机号规范化与校验：允许带 + / 空格 / 横线', () => {
+  assert.equal(normalizePhone('+86 138-0000-0000'), '+8613800000000');
+  assert.equal(normalizePhone('（138）0000 0000'), '13800000000');
+  assert.equal(isValidPhone('13800000000'), true);
+  assert.equal(isValidPhone('+8613800000000'), true);
+  assert.equal(isValidPhone('123'), false);
+  assert.equal(isValidPhone('abc'), false);
 });
 
 test('远程停用清单：验签通过，篡改拒绝', () => {
   const token = signRevocationList(
-    { seq: 3, issuedAt: '2026-11-21', revokedAccounts: ['zhangsan'], revokedMachines: [machine] },
+    {
+      seq: 3,
+      issuedAt: '2026-11-21',
+      revokedPhones: ['13800000000'],
+      revokedAccounts: ['13800000000'],
+      revokedMachines: [machine],
+    },
     PRIV
   );
   const r = verifyRevocationList(token, { publicKeyPem: PUB });
   assert.equal(r.ok, true);
   assert.equal(r.payload.seq, 3);
-  assert.deepEqual(r.payload.revokedAccounts, ['zhangsan']);
+  assert.deepEqual(r.payload.revokedPhones, ['13800000000']);
+  assert.deepEqual(r.payload.revokedMachines, [machine]);
 
   const seg = token.split('.');
   const payload = JSON.parse(Buffer.from(seg[1], 'base64url').toString('utf8'));

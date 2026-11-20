@@ -3,17 +3,27 @@
  * 签发授权码：完全离线，不需要服务器，也不需要用户注册账号。
  *
  * 用法：
- *   node scripts/license-issue.mjs --machine A1B2-C3D4-E5F6-7890 --days 365 --note buyer@example.com
- *   node scripts/license-issue.mjs --machine A1B2-C3D4-E5F6-7890 --expires 2027-11-20
- *   node scripts/license-issue.mjs --any --days 30          # 不绑定机器（试用 / 内部测试）
- *   node scripts/license-issue.mjs --machine ... --account zhangsan --out licenses/buyer.key
+ *   node scripts/license-issue.mjs --phone 13800000000 --machine A1B2-C3D4-E5F6-7890 --days 365
+ *   node scripts/license-issue.mjs --phone 13800000000 --expires 2027-11-20
+ *   node scripts/license-issue.mjs --phone 13800000000 --any --days 30   # 不绑定设备（内部测试）
  *
- * --machine 就是用户在「设置 → 授权」里看到的机器码（带不带横线都可以）。
+ * 规则：
+ * - 手机号必填：远程停用按手机号匹配，一个手机号可以签多台设备。
+ * - 设备码必填（除非显式 --any）：同一台设备也可以签给多个手机号（不同授权码）。
+ * - 设备码就是用户在「设置 → 授权」里看到的机器码，带不带横线都可以。
+ *
  * 私钥优先读环境变量 TUKU_LICENSE_PRIVATE_KEY（CI），否则读仓库根 .license-private.pem。
+ * 日常签发建议用图形工具：npm run license:admin
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { formatCode, normalizeCode, signLicenseKey } from '../server/lib/license-core.js';
+import {
+  formatCode,
+  isValidPhone,
+  normalizeCode,
+  normalizePhone,
+  signLicenseKey,
+} from '../server/lib/license-core.js';
 
 const root = path.resolve(import.meta.dirname, '..');
 
@@ -32,18 +42,25 @@ const anyMachine = process.argv.includes('--any');
 const input = arg('machine');
 const daysArg = arg('days');
 const note = arg('note');
-const account = arg('account');
+const phoneRaw = arg('phone') || arg('account');
 const edition = arg('edition', 'pro');
 const out = arg('out');
+
+const phone = normalizePhone(phoneRaw);
+if (!phone || !isValidPhone(phone)) {
+  console.error('[license] 缺少或格式不正确的 --phone <手机号>（5–20 位数字，可带 + 前缀）');
+  console.error('[license] 手机号和设备码是签发的必填项：一个手机号可以绑定多台设备。');
+  process.exit(1);
+}
 
 let machine = '';
 if (!anyMachine) {
   if (!input) {
-    console.error('[license] 缺少 --machine <机器码>（用户可在「设置 → 授权」里复制），或加 --any 表示不绑定机器');
+    console.error('[license] 缺少 --machine <设备码>（用户可在「设置 → 授权」里复制），或加 --any 表示不绑定设备');
     process.exit(1);
   }
   if (normalizeCode(input).length !== 16) {
-    console.error('[license] 机器码应为 16 位十六进制（形如 A1B2-C3D4-E5F6-7890），实际收到：', input);
+    console.error('[license] 设备码应为 16 位十六进制（形如 A1B2-C3D4-E5F6-7890），实际收到：', input);
     process.exit(1);
   }
   machine = formatCode(input);
@@ -51,7 +68,8 @@ if (!anyMachine) {
 
 const addDays = (n) => {
   const d = new Date();
-  d.setDate(d.getDate() + n);
+  // 按「含今天」计算：30 天 = 今天 + 29 天，到期日 23:59，剩余天数显示 30
+  d.setDate(d.getDate() + Math.max(0, n - 1));
   const pad = (v) => String(v).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
@@ -83,12 +101,12 @@ if (!privateKey) {
 }
 
 const key = signLicenseKey(
-  { edition, machine, account, issuedAt: today(), expires, note },
+  { edition, machine, phone, account: phone, issuedAt: today(), expires, note },
   privateKey
 );
 
-console.log('[license] 账号：', account || '（未绑定账号）');
-console.log('[license] 机器码：', machine || '（不绑定机器）');
+console.log('[license] 手机号：', phone);
+console.log('[license] 设备码：', machine || '（不绑定设备）');
 console.log('[license] 有效期：', expires || '永久');
 console.log('[license] 激活码：');
 console.log(key);

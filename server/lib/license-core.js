@@ -53,6 +53,21 @@ export function normalizeCode(value) {
 }
 
 /**
+ * 手机号规范化：去掉空格 / 横线 / 括号，保留开头的 +。
+ * 授权与停用都按这个结果匹配，避免「138 0000 0000」和「13800000000」被当成两个账号。
+ */
+export function normalizePhone(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  return `${raw.startsWith('+') ? '+' : ''}${raw.replace(/\D/g, '')}`;
+}
+
+/** 5–20 位数字（可带 + 前缀）：够覆盖国内手机号与常见国际号码 */
+export function isValidPhone(value) {
+  return /^\+?\d{5,20}$/.test(normalizePhone(value));
+}
+
+/**
  * 由硬件特征算出机器码：每项取 sha256 的前 4 位，共 4 组（XXXX-XXXX-XXXX-XXXX）。
  *
  * 分项而不是把 4 项混成一个哈希，是为了能「按项」容错：换硬盘只会让其中一组变，
@@ -103,6 +118,7 @@ export function signLicenseKey(payload, privateKeyPem) {
     edition: 'pro',
     machine: '',
     account: '',
+    phone: '',
     issuedAt: '',
     expires: null,
     note: '',
@@ -195,6 +211,7 @@ export function signRevocationList(payload, privateKeyPem) {
     product: PRODUCT,
     seq: 1,
     issuedAt: '',
+    revokedPhones: [],
     revokedAccounts: [],
     revokedMachines: [],
     ...payload,

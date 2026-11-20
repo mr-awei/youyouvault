@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图库 · 授权管理</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>图库 · 授权管理</h1>
+        <p class="sub">手机号 + 设备码签发；一个手机号可绑多台设备，一台设备也可绑多个手机号</p>
+      </div>
+      <div class="top-actions">
+        <span id="keyState" class="pill">读取中…</span>
+        <button id="reload" class="btn ghost" type="button">刷新</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="tokenBar" class="token-bar" hidden>
+        <div>
+          <strong>需要访问令牌</strong>
+          <div class="hint">用启动工具时打印的地址打开（地址里带 <code>?token=...</code>），或把令牌粘贴到这里。</div>
+        </div>
+        <div class="row">
+          <input id="tokenInput" class="input" placeholder="访问令牌" autocomplete="off" />
+          <button id="tokenSave" class="btn primary" type="button">连接</button>
+        </div>
+      </section>
+
+      <section id="stats" class="stats"></section>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="issue" type="button">签发授权</button>
+        <button class="tab" data-tab="list" type="button">授权记录</button>
+        <button class="tab" data-tab="revoke" type="button">停用清单</button>
+      </nav>
+
+      <section id="tab-issue" class="panel">
+        <div class="grid-2">
+          <form id="issueForm" class="card">
+            <h2>签发 / 续期</h2>
+            <div class="field">
+              <label for="phone">手机号 <span class="req">必填</span></label>
+              <input id="phone" class="input" placeholder="13800000000" autocomplete="off" />
+              <div class="hint">远程停用按手机号匹配；同一个手机号可多次签发给不同设备。</div>
+            </div>
+            <div class="field">
+              <label for="machines">设备码 <span class="req">必填</span></label>
+              <textarea id="machines" class="input mono" rows="4" placeholder="每行一个设备码，例如：&#10;A1B2-C3D4-E5F6-7890&#10;B2C3-D4E5-F6A7-8901"></textarea>
+              <div class="hint">支持每行一个，或用逗号 / 空格分隔；带不带横线都可以。设备码在用户软件的「设置 → 授权」里复制。</div>
+            </div>
+            <div class="grid-2 tight">
+              <div class="field">
+                <label for="days">有效期</label>
+                <select id="days" class="input">
+                  <option value="30">30 天</option>
+                  <option value="90">90 天</option>
+                  <option value="180">180 天</option>
+                  <option value="365" selected>1 年</option>
+                  <option value="730">2 年</option>
+                  <option value="0">永久</option>
+                  <option value="custom">自定义到期日</option>
+                </select>
+              </div>
+              <div class="field" id="expiresField" hidden>
+                <label for="expires">到期日</label>
+                <input id="expires" class="input" type="date" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="note">备注（可选）</label>
+              <input id="note" class="input" placeholder="订单号 / 购买渠道 / 对接人" autocomplete="off" />
+            </div>
+            <div class="row">
+              <button class="btn primary" type="submit" id="issueBtn">签发授权码</button>
+              <span class="hint">同一手机号 + 同一设备码再次签发会覆盖旧码并更新有效期</span>
+            </div>
+          </form>
+
+          <div class="card">
+            <h2>签发结果</h2>
+            <div id="issueResult" class="result empty">签发后在这里显示激活码，可逐个复制或整批下载。</div>
+          </div>
+        </div>
+
+        <div class="card tip">
+          <h3>规则说明</h3>
+          <ul>
+            <li><strong>手机号 ↔ 设备</strong>：多对多。一个手机号可以签多台设备；同一台设备也可以签给多个手机号（各自一份激活码）。</li>
+            <li><strong>设备码</strong>：由 MachineGuid、CPU ProcessorId、主板序列号、系统盘卷序列号各取 SHA-256 前 4 位组成。</li>
+            <li><strong>会变的情况</strong>：换主板 / CPU / 系统盘、重装或克隆系统、系统盘重新格式化、虚拟机迁移。4 段允许变 1 段，变 2 段需重新签发。</li>
+            <li><strong>取消授权</strong>：签发记录只是台账；真正让客户端失效要把手机号或设备加入停用清单，并让客户端能访问到清单地址。</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="tab-list" class="panel" hidden>
+        <div class="card">
+          <div class="row between">
+            <h2>授权记录</h2>
+            <div class="row">
+              <input id="search" class="input search" placeholder="搜索手机号 / 设备码 / 备注" />
+              <button
+                id="importLegacy"
+                class="btn ghost"
+                type="button"
+                title="扫描 licenses/ 下以前用命令行导出的 .key / .txt 激活码"
+              >
+                导入旧激活码
+              </button>
+            </div>
+          </div>
+          <div id="listTable" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <section id="tab-revoke" class="panel" hidden>
+        <div class="grid-2">
+          <div class="card">
+            <h2>停用手机号</h2>
+            <p class="hint">该手机号名下的所有设备一起锁定。适用于离职、违约、整账号退款。</p>
+            <div class="row">
+              <input id="revokePhone" class="input" placeholder="13800000000" autocomplete="off" />
+              <button id="revokePhoneBtn" class="btn danger" type="button">停用手机号</button>
+            </div>
+            <div id="revokedPhoneList" class="chips"></div>
+          </div>
+          <div class="card">
+            <h2>停用设备</h2>
+            <p class="hint">只锁定这一台设备，同手机号下的其它设备不受影响。</p>
+            <div class="row">
+              <input id="revokeMachine" class="input mono" placeholder="A1B2-C3D4-E5F6-7890" autocomplete="off" />
+              <button id="revokeMachineBtn" class="btn danger" type="button">停用设备</button>
+            </div>
+            <div id="revokedMachineList" class="chips"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row between">
+            <h2>签名停用清单</h2>
+            <span id="manifestSeq" class="pill"></span>
+          </div>
+          <p class="hint">
+            客户端启动 / 手动刷新授权时会拉取并用内置公钥验签。把清单放到任意静态 HTTPS 地址，再让软件设置
+            <code>TUKU_LICENSE_REVOKE_URL</code> 指向它即可。本工具也临时提供本机地址，便于测试。
+          </p>
+          <div class="kv"><span>清单文件</span><code id="manifestPath"></code></div>
+          <div class="kv"><span>本机地址</span><code id="manifestUrl"></code></div>
+          <textarea id="manifestText" class="input mono" rows="5" readonly></textarea>
+          <div class="row">
+            <button id="copyManifest" class="btn" type="button">复制清单内容</button>
+            <button id="copyManifestUrl" class="btn ghost" type="button">复制地址</button>
+            <button id="downloadManifest" class="btn ghost" type="button">下载 JSON</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="app.js"></script>
+  </body>
+</html>

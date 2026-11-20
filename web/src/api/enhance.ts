@@ -3,9 +3,7 @@
  * 由 api.ts 组合成单一的 `api` 对象对外暴露（调用点不需要改 import）。
  */
 import { request } from './core';
-import type { ThemePackBrief, ThemePackFile } from './types';
 import type { AdjustParams, EditJobStatus, EditOpsInfo, EditResult, EditSaveOptions, AiUpscaleStatus, EnhanceAiModel, EnhanceCandidates, EnhanceConfig, EnhanceJobStatus, EnhanceModel, EnhanceRemoteService, EnhanceStandard, Playlist, ImageItem } from '../types';
-import type { ThemePackTheme } from '../lib/theme-pack-vars';
 
 export const enhanceAPI = {
   // 画质增强
@@ -226,34 +224,4 @@ export const enhanceAPI = {
       missing?: number;
       note?: string;
     }>('/api/sync/pull', { method: 'POST', body: JSON.stringify({ force }) }),
-
-  /* --------------------------- 创意工坊 / 主题包 --------------------------- */
-  workshopPacks: () =>
-    request<{ ok: boolean; items: ThemePackBrief[]; dir: string }>('/api/workshop/packs'),
-  workshopExport: (body: {
-    name: string;
-    author?: string;
-    theme: ThemePackTheme;
-    assets?: { name: string; dataUrl: string }[];
-  }) =>
-    request<{ ok: boolean; pack: ThemePackFile; file: string; skipped: string[] }>('/api/workshop/export', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  workshopImport: (data: string) =>
-    request<{
-      ok: boolean;
-      pack: ThemePackBrief;
-      theme: ThemePackTheme;
-      file: string;
-      assetPaths: string[];
-      skipped: string[];
-    }>('/api/workshop/import', { method: 'POST', body: JSON.stringify({ data }) }),
-  workshopApply: (id: string) =>
-    request<{ ok: boolean; theme: ThemePackTheme; skipped: string[] }>(
-      '/api/workshop/apply',
-      { method: 'POST', body: JSON.stringify({ id }) }
-    ),
-  workshopDelete: (id: string) => request<{ ok: boolean }>(`/api/workshop/packs/${id}`, { method: 'DELETE' }),
-  workshopDownload: (id: string) => `/api/workshop/packs/${id}/file`,
 };

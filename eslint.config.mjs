@@ -115,4 +115,21 @@ export default [
       'no-unused-vars': 'off',
     },
   },
+  {
+    // 授权管理工具的浏览器端脚本：补上 DOM 全局
+    files: ['tools/license-admin/public/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...nodeGlobals,
+        window: 'readonly',
+        document: 'readonly',
+        location: 'readonly',
+        history: 'readonly',
+        sessionStorage: 'readonly',
+        localStorage: 'readonly',
+        confirm: 'readonly',
+        alert: 'readonly',
+      },
+    },
+  },
 ];

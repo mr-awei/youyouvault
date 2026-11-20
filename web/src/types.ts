@@ -555,11 +555,15 @@ export interface LicenseStatus {
   /** free = 未激活；pro = 已激活 */
   edition: string;
   licensed: boolean;
+  /** 本机是否真的有验签通过的授权文件（区别于 devPro 临时授权） */
+  licensedByKey?: boolean;
   /** 本机机器码（XXXX-XXXX-XXXX-XXXX），购买时发给作者 */
   machineCode: string;
-  /** 授权绑定的账号；远程停用按这个账号匹配 */
+  /** 授权绑定的手机号；远程停用按这个手机号匹配 */
+  phone?: string;
+  /** 兼容旧字段：与 phone 相同 */
   account?: string;
-  /** 账号/机器已被远程停用 */
+  /** 手机号/设备已被远程停用 */
   revoked?: boolean;
   /** 开发环境临时 Pro（TUKU_DEV_PRO=1），安装包不会带 */
   devPro?: boolean;

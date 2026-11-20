@@ -30,7 +30,6 @@ import PluginSection from './settings/PluginSection';
 import LanSection from './settings/LanSection';
 import NetworkSection from './settings/NetworkSection';
 import DebouncedInput from './settings/DebouncedInput';
-import WorkshopCard from './settings/WorkshopCard';
 import SyncCard from './settings/SyncCard';
 import AiSection from './settings/AiSection';
 import NightBatchCard from './settings/NightBatchCard';
@@ -549,8 +548,7 @@ export default function Settings({
               <RecycleBinCard onLibraryChanged={onLibraryChanged} onToast={onToast} />
               <SyncCard onToast={onToast} onLibraryChanged={onLibraryChanged} />
 
-              <div className="settings-subhead">{i18n.t('kbe44fe20')}</div>
-              <WorkshopCard onToast={onToast} />
+              <div className="settings-subhead">目录监听</div>
               <WatchCard onToast={onToast} />
             </>
           )}

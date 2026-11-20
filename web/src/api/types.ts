@@ -2,7 +2,6 @@
  * 接口返回值的类型定义（原本堆在 api.ts 头部）。
  * 这些是「请求层 + 各域接口」共用的形状，单独一个文件，改字段时一眼能看全。
  */
-import type { ThemePackTheme } from '../lib/theme-pack-vars';
 import type {
   AdjustParams,
   AnnotationItem,
@@ -51,30 +50,6 @@ import type {
   LanShareInput,
   LanStatus,
 } from '../types';
-
-export type { ThemePackTheme } from '../lib/theme-pack-vars';
-
-export interface ThemePackBrief {
-  id: string;
-  name: string;
-  author: string;
-  createdAt: string;
-  base: 'dark' | 'light';
-  varCount: number;
-  assetNames: string[];
-  file: string;
-}
-
-export interface ThemePackFile {
-  kind: string;
-  version: number;
-  id: string;
-  name: string;
-  author: string;
-  createdAt: string;
-  theme: ThemePackTheme;
-  assets: { name: string; dataUrl: string }[];
-}
 
 export interface AppInfo {
   /** 实际生效的全局快捷键（被占用时会自动换备用键） */
