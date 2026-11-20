@@ -37,6 +37,9 @@ DECODE_HINTS.set(DecodeHintType.POSSIBLE_FORMATS, [
   BarcodeFormat.UPC_A,
 ]);
 
+/** 送货单上一定有的字样；黄色产品包装不会有这些词 */
+const LABEL_TEXT_RE = /拍照送货|送货单|主\s*SKU|主SKU|PO\s*\d{8,}/i;
+
 /** 自然排序：MG_2 排在 MG_10 前面，中文目录名也按拼音稳定比较 */
 const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' });
 
@@ -418,11 +421,24 @@ export async function scanDir(dir, { lang = '' } = {}) {
     if (reason) skipped.push({ file: f.rel, reason });
   });
 
-  // 只对条码照片跑解码 + OCR：其余照片不需要，省下大量时间
-  const barcodes = entries.filter((e) => e.isBarcode);
-  await mapLimit(barcodes, 2, async (e) => {
+  // 只对黄色候选跑解码 + OCR：其余照片不需要，省下大量时间
+  const candidates = entries.filter((e) => e.isBarcode);
+  await mapLimit(candidates, 2, async (e) => {
     try {
       const parsed = await readLabelPhoto(e.abs, lang);
+      const labelHint = LABEL_TEXT_RE.test(parsed.rawText);
+      const decoded = !!parsed.barcodeText;
+      // 黄色包装盒 / 黄色产品也会过黄筛，但它们没有「拍照送货单 / 主SKU / PO」
+      // 字样，也解不出一维码。这类图片要退回产品图，不能让它们开新组。
+      if (!decoded && !labelHint) {
+        e.isBarcode = false;
+        e.code = '';
+        e.codeSource = '';
+        e.candidates = [];
+        e.rawText = '';
+        e.barcodeText = '';
+        return;
+      }
       e.code = parsed.code;
       e.codeSource = parsed.codeSource;
       e.candidates = parsed.candidates;
@@ -433,6 +449,7 @@ export async function scanDir(dir, { lang = '' } = {}) {
     }
   });
 
+  const barcodes = entries.filter((e) => e.isBarcode);
   const grouped = groupFiles(entries);
   markDuplicates(grouped.groups);
 

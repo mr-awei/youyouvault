@@ -52,13 +52,11 @@ function isFullCode(code: string) {
  * 多个候选时点开对应设计单详情，用户可以在后台核对/选择；
  * 没有具体 id 时落到「视觉设计」列表页。
  */
-function omsPageUrl(baseUrl: string, designId?: string, mainSku?: string) {
+function omsPageUrl(baseUrl: string, mainSku?: string) {
   const base = String(baseUrl || 'https://sit.uyoyous.com').replace(/\/+$/, '');
-  const path = designId
-    ? `/oms-test-ui/visual/designProcessDetail/${encodeURIComponent(designId)}`
-    : '/oms-test-ui/visual/designProcess';
   try {
-    const url = new URL(path, `${base}/`);
+    // 完整编码以「WMS → 视觉拍摄」页为准
+    const url = new URL('/oms-test-ui/wms_shouhuo/visualShooting', `${base}/`);
     // 把主 SKU 带进 URL；同时调用处会复制到剪贴板，兼容后台暂时不读这个参数的版本
     if (mainSku) url.searchParams.set('mainSkuId', mainSku);
     return url.toString();
@@ -750,18 +748,18 @@ function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, on
     return () => window.removeEventListener('keydown', onKey);
   }, [preview]);
 
-  const openOms = (designId?: string) => {
+  const openOms = () => {
     // 主 SKU 优先取 OCR 保留的 5 位；已有完整编码时从完整编码前缀补
     const mainSku = (edit.mainSku || group.code.trim().match(/^(\d{4,6})/)?.[1] || '').trim();
-    // 打开列表页时顺手把主 SKU 放进剪贴板：后台 URL 暂不读 mainSkuId 时也能直接粘贴搜索。
+    // 打开视觉拍摄页时顺手把主 SKU 放进剪贴板：后台 URL 暂不读 mainSkuId 时也能直接粘贴搜索。
     // 不 await：复制是异步的，先同步 window.open，避免浏览器把新窗口当弹窗拦掉。
-    if (!designId && mainSku) {
+    if (mainSku) {
       void copyText(mainSku).then((ok) =>
         onToast(ok ? i18n.t('k6f6d997e', { p0: mainSku }) : i18n.t('kba7e6692'), ok ? 'info' : 'error')
       );
     }
     // Electron 的 setWindowOpenHandler 会把 http(s) 外链交给系统浏览器
-    window.open(omsPageUrl(omsBaseUrl, designId, mainSku), '_blank', 'noopener,noreferrer');
+    window.open(omsPageUrl(omsBaseUrl, mainSku), '_blank', 'noopener,noreferrer');
   };
 
   const copyCode = async () => {
@@ -940,7 +938,7 @@ function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, on
                       className="btn sm"
                       style={{ padding: '2px 6px' }}
                       title={i18n.t('k952f0e4e')}
-                      onClick={() => openOms(r.id)}
+                      onClick={() => openOms()}
                     >
                       <IconArrowUpRight />
                     </button>

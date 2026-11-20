@@ -49,12 +49,13 @@ export function uniqueSalesSkus(rows) {
     if (!sku || seen.has(sku)) continue;
     seen.add(sku);
     out.push({
-      /** 设计单 id：前端用它打开 OMS 后台详情，让用户自己核对/选择 */
-      id: row?.id != null ? String(row.id) : '',
+      /** 行 id（视觉拍摄列表的质检/送拍行） */
+      id: row?.id != null ? String(row.id) : row?.shootingItemId != null ? String(row.shootingItemId) : '',
       salesSku: sku,
       productName: String(row?.productName || ''),
-      billNo: String(row?.billNo || ''),
-      shootStatus: String(row?.shootStatus || ''),
+      // 视觉拍摄页把采购单/送拍单放在 poNo / documentNo
+      billNo: String(row?.documentNo || row?.poNo || row?.billNo || ''),
+      shootStatus: String(row?.shootingType || row?.shootStatus || ''),
       status: String(row?.status || ''),
     });
   }
@@ -268,21 +269,49 @@ class OmsClient {
     return json;
   }
 
-  /** 按 5 位主 SKU 查待拍摄需求，返回去重后的完整编码 */
-  async findPendingByMainSku(mainSku) {
+  /**
+   * 按 5 位主 SKU 查完整编码。
+   * 数据源改为「WMS → 视觉拍摄」页：/wms/qc/qcBillDetail/printList。
+   * 这页表格里的「系统SKU」列才是当前要用的完整编码；旧 designProcess 页只用来补产品名。
+   */
+  async findVisualShootingByMainSku(mainSku) {
     const sku = String(mainSku || '').trim();
     if (!sku) return { total: 0, rows: [] };
-    const json = await this.request('/oms-admin/visual/designProcess/list', {
-      method: 'POST',
-      data: {
-        pageNum: 1,
-        pageSize: 50,
-        mainSkuId: sku,
-        shootStatus: SHOOT_STATUS_PENDING,
-      },
+    const json = await this.request('/wms/qc/qcBillDetail/printList', {
+      method: 'GET',
+      params: { pageNum: '1', pageSize: '50', mainSkuId: sku },
     });
     const rows = uniqueSalesSkus(json?.rows);
     return { total: rows.length, rows };
+  }
+
+  /** 旧设计流程接口只补产品名；编码一律以视觉拍摄页为准 */
+  async findDesignProductName(mainSku) {
+    const sku = String(mainSku || '').trim();
+    if (!sku) return '';
+    try {
+      const json = await this.request('/oms-admin/visual/designProcess/list', {
+        method: 'POST',
+        data: { pageNum: 1, pageSize: 50, mainSkuId: sku, shootStatus: SHOOT_STATUS_PENDING },
+      });
+      const row = (Array.isArray(json?.rows) ? json.rows : []).find((r) => r?.productName);
+      return row?.productName ? String(row.productName) : '';
+    } catch {
+      return '';
+    }
+  }
+
+  /** 按 5 位主 SKU 查完整编码；产品名从旧接口尽力补，失败不影响编码 */
+  async findPendingByMainSku(mainSku) {
+    const sku = String(mainSku || '').trim();
+    if (!sku) return { total: 0, rows: [] };
+    const visual = await this.findVisualShootingByMainSku(sku);
+    if (!visual.total) return visual;
+    const productName = await this.findDesignProductName(sku);
+    return {
+      total: visual.total,
+      rows: visual.rows.map((r) => ({ ...r, productName: r.productName || productName })),
+    };
   }
 
   /** 批量查询：并发 4，单个失败不影响其它 SKU */
