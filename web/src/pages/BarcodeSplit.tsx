@@ -730,6 +730,8 @@ interface GroupRowProps {
 /** 一个条码组：条码缩略图 + 可编辑编码 + 候选 + 产品缩略图 */
 function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, onChange }: GroupRowProps) {
   const [preview, setPreview] = useState(false);
+  // 每次双击都换一个 v：服务端换新后，浏览器不会继续用旧的 240px 缓存
+  const [previewNonce, setPreviewNonce] = useState(0);
   const thumbStyle: React.CSSProperties = {
     width: 120,
     height: 90,
@@ -803,7 +805,10 @@ function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, on
             alt=""
             loading="lazy"
             title={i18n.t('kdf093f7d')}
-            onDoubleClick={() => setPreview(true)}
+            onDoubleClick={() => {
+              setPreviewNonce(Date.now());
+              setPreview(true);
+            }}
             style={{ ...thumbStyle, cursor: 'zoom-in' }}
           />
           <div className="hint" style={{ marginTop: 4 }}>
@@ -1023,7 +1028,7 @@ function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, on
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={barcodeThumbUrl(dir, group.barcodeFile, 2400)}
+              src={`${barcodeThumbUrl(dir, group.barcodeFile, 2400)}&v=${previewNonce}`}
               alt=""
               style={{
                 maxWidth: '94vw',

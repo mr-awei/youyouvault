@@ -388,7 +388,8 @@ export function register(app, ctx) {
           .jpeg({ quality: max > 480 ? 86 : 72 })
           .toBuffer();
         res.set('Content-Type', 'image/jpeg');
-        res.set('Cache-Control', 'private, max-age=3600');
+        // 大图预览不缓存：服务端升级后不能继续拿旧的 240px 缓存
+        res.set('Cache-Control', max > 480 ? 'private, no-store' : 'private, max-age=3600');
         res.send(buf);
       } catch {
         res.status(404).json({ error: '无法生成预览' });
