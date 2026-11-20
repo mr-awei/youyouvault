@@ -189,6 +189,21 @@ function findPublishFile() {
   return '';
 }
 
+/** 读仓库发布文件里的 seq；用来保证管理工具生成的 seq 一定大于线上版本 */
+function readPublishedSeq() {
+  const file = findPublishFile();
+  if (!file) return 0;
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const token = String(raw?.token || '').trim();
+    if (!token || !cfg.publicKey) return 0;
+    const checked = verifyRevocationList(token, { publicKeyPem: cfg.publicKey });
+    return checked.ok ? Number(checked.payload?.seq) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function decorate(record) {
   const m2 = normalizeDeviceCode(record.machine);
   const m1 = normalizeCode(record.machine);
@@ -510,7 +525,12 @@ async function handleApi(req, res, url) {
     if (!cfg.privateKey) return sendJson(res, 503, { error: '读不到授权私钥，无法生成停用清单' });
     const file = findPublishFile();
     if (!file) return sendJson(res, 404, { error: '没找到 docs/license/license-revoke.json，请从仓库目录启动工具或手动复制清单内容' });
-    const token = readManifest() || writeManifest();
+    const publishedSeq = readPublishedSeq();
+    if (publishedSeq >= store.seq) {
+      store.seq = publishedSeq + 1;
+      saveStore();
+    }
+    const token = writeManifest();
     if (!token) return sendJson(res, 500, { error: '生成停用清单失败' });
     try {
       fs.writeFileSync(file, `${JSON.stringify({ token }, null, 2)}\n`, 'utf8');
@@ -617,6 +637,18 @@ export async function startAdminServer(options = {}) {
       `读取失败，请先修好或备份后移走：${cfg.storeFile}\n${err instanceof Error ? err.message : err}`,
       { cause: err }
     );
+  }
+
+  // 线上发布文件可能已经被 CLI / 上一次发布推到更高 seq；管理工具必须从这里起步，
+  // 否则新生成的清单会被客户端当成“旧版本”忽略。
+  try {
+    const publishedSeq = readPublishedSeq();
+    if (publishedSeq > store.seq) {
+      store.seq = publishedSeq;
+      saveStore();
+    }
+  } catch {
+    /* 发布文件读不到不影响本机管理 */
   }
 
   // 启动时确保清单文件存在且不落后于管理数据（手工删过文件 / 换机器后也能恢复）
