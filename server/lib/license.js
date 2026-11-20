@@ -233,7 +233,8 @@ export async function refreshRevocation({ force = false } = {}) {
   revokeRefreshing = true;
   revokeLastAttempt = Date.now();
   try {
-    const res = await fetch(REVOKE_URL, {
+    const target = `${REVOKE_URL}${REVOKE_URL.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+    const res = await fetch(target, {
       headers: { 'Cache-Control': 'no-cache' },
       signal: AbortSignal.timeout(8000),
     });
