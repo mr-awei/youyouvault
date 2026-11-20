@@ -1,4 +1,4 @@
-﻿﻿import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ImageItem, TimelineSummary } from '../types';
 import type { JobItem } from '../api';

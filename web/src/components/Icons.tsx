@@ -214,6 +214,14 @@ export const IconLayers = strokeIcon(
   </>
 );
 
+/** 条码：高低不一的竖线 + 上下边线 */
+export const IconBarcode = strokeIcon(
+  <>
+    <path d="M4 6v12M7.5 6v12M11 6v8M14 6v12M17.5 6v8M20 6v12" />
+    <path d="M3 3h18M3 21h18" />
+  </>
+);
+
 export const IconWand = strokeIcon(
   <>
     <path d="M15 4V2m0 20v-2M9 4v2m0 14v2M5 9H3m18 0h-2M5 15H3m18 0h-2" />

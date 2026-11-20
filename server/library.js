@@ -796,6 +796,7 @@ export const KEEP_REASONS = {
  * @param {boolean} [params.skipPhashDupe] 跳过 pHash 查重
  * @param {number|null} [params.libGeneration] 启动任务时的库代数（防跨库串图）
  * @param {boolean} [params.skipQuality] 用户主动导入时跳过质量门槛
+ * @param {boolean} [params.skipAiFilter] 拍摄分组入库时跳过智能评分过滤
  * @returns {Promise<{ok:boolean, id?:number, image?:any, reason?:string, format?:string, duplicateOf?:number, clipCos?:number, score?:number, reasons?:string[]}>}
  */
 export async function ingest(params, settings = getSettings()) {
@@ -818,6 +819,8 @@ export async function ingest(params, settings = getSettings()) {
     // 「小于 30KB」「短边不到 800」对用户自己挑的图就是拦错人：
     // AI 生成站常常只把 512/768 的预览图放进 <img>，Eagle 照收，我们却判 lowres 丢掉了。
     skipQuality = false,
+    // 拍摄流程按条码分组后入库：每一张都是用户确认过的产品图，不能因为智能评分低就被丢掉
+    skipAiFilter = false,
   } = params;
 
   const minBytes = Number(settings.minFileSize) * 1024;
@@ -1040,7 +1043,7 @@ export async function ingest(params, settings = getSettings()) {
     undefined,
     ''
   );
-  if (settings.aiFilterEnabled !== false && score < Number(settings.scoreThreshold)) {
+  if (!skipAiFilter && settings.aiFilterEnabled !== false && score < Number(settings.scoreThreshold)) {
     db.prepare('DELETE FROM images WHERE id = ?').run(id);
     if (thumb) await cleanupQuietly(thumb, '缩略图');
     if (buffer || copyToStorage) await cleanupQuietly(finalPath, '回滚素材副本');

@@ -356,6 +356,17 @@ export function pruneGhostFolders({ dryRun = true, rootPath = getSettings().stor
 /* 磁盘目录同步产生的夹有 anchor_path；纯虚拟夹 anchor_path 为空。二者在树里共存，
  * 一张图可同时归属多个文件夹（image_folders 多对多），删除文件夹不删除图片。 */
 
+/** 在指定父夹下找同名子夹，没有就建一个纯虚拟夹。用于入库时按层级落位。 */
+export function ensureFolderUnderParent(parentId, name) {
+  const nm = String(name || '').trim();
+  if (!nm) return null;
+  const pid = parentId == null ? null : Number(parentId);
+  if (pid != null && !Number.isInteger(pid)) return null;
+  const row = db.prepare('SELECT id FROM folders WHERE name = ? AND parent_id IS ?').get(nm, pid);
+  if (row) return row.id;
+  return createVirtualFolder(nm, pid);
+}
+
 /** 新建虚拟文件夹，parentId 为 null 表示根级。返回新夹 id */
 export function createVirtualFolder(name, parentId = null) {
   const nm = String(name || '').trim();

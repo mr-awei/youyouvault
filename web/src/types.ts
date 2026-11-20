@@ -1154,6 +1154,7 @@ export type ViewMode = 'masonry' | 'grid' | 'list' | 'folder';
 export type View =
   | 'dashboard'
   | 'gallery'
+  | 'barcode'
   | 'timeline'
   | 'canvas'
   | 'favorites'

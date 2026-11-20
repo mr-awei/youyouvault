@@ -10,6 +10,8 @@
  */
 export * from './api/types';
 export * from './api/core';
+export * from './api/barcode';
+export * from './api/oms';
 
 import { resourcesAPI } from './api/resources';
 import { curateAPI } from './api/curate';
@@ -18,6 +20,8 @@ import { enhanceAPI } from './api/enhance';
 import { insightAPI } from './api/insight';
 import { smartAPI } from './api/smart';
 import { licenseAPI } from './api/license';
+import { barcodeAPI } from './api/barcode';
+import { omsAPI } from './api/oms';
 
 /** 全部接口的唯一出口：域模块的对象在这里拼成一个 */
 export const api = {
@@ -28,4 +32,6 @@ export const api = {
   ...insightAPI,
   ...smartAPI,
   ...licenseAPI,
+  ...barcodeAPI,
+  ...omsAPI,
 };

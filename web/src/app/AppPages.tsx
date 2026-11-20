@@ -21,6 +21,7 @@ const Tidy = lazy(() => import('../pages/Tidy'));
 const EnhancePage = lazy(() => import('../pages/Enhance'));
 const Search = lazy(() => import('../pages/Search'));
 const Smart = lazy(() => import('../pages/Smart'));
+const BarcodeSplit = lazy(() => import('../pages/BarcodeSplit'));
 const Tutorial = lazy(() => import('../pages/Tutorial'));
 // 无限画布：DOM + transform 实现，进页面才加载
 const CanvasBoard = lazy(() => import('../pages/CanvasBoard'));
@@ -229,6 +230,16 @@ export default function AppPages(props: Props) {
         )}
 
         {view === 'smart' && <Smart onToast={showToast} onOpenItem={openItem} onTagsChanged={reloadTags} />}
+
+        {view === 'barcode' && (
+          <BarcodeSplit
+            onToast={showToast}
+            folderId={folderId}
+            activeFolder={activeFolder}
+            activeLibName={activeLibName}
+            onLibraryChanged={onLibraryChanged}
+          />
+        )}
 
         {view === 'enhance' && <EnhancePage onToast={showToast} onLibraryChanged={onLibraryChanged} />}
 

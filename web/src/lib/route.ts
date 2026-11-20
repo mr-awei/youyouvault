@@ -8,6 +8,7 @@ import type { Filters } from '../types';
 export const VIEWS = [
   'dashboard',
   'gallery',
+  'barcode',
   'timeline',
   'canvas',
   'favorites',

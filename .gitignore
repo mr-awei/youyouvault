@@ -33,6 +33,7 @@ tsconfig.tsbuildinfo
 
 # 本地工具状态
 .codebuddy/
+.trae/
 .trae-html-share-packages/
 
 # 文档的本地备份

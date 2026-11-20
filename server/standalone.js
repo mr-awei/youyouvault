@@ -74,32 +74,44 @@ async function main() {
   // 否则 Vite 代理与文档里的 http://localhost:3001 就对不上了
   const wantPort = Number(process.env.TUKU_PORT) || (isDesktop ? 0 : PORT);
   let started;
-  try {
-    started = await startServer(wantPort, { desktop: isDesktop });
-  } catch (err) {
-    if (err?.code === 'EADDRINUSE') {
+  if (isDesktop) {
+    try {
+      started = await startServer(wantPort, { desktop: true });
+    } catch (err) {
+      if (err?.code !== 'EADDRINUSE') throw err;
       // 桌面端：端口被别的程序抢走时不能让整个服务退出（主进程重试几次就会进 dead，
       // 表现是「界面开着但所有接口 404」）。直接回退到系统分配的随机端口，
       // 把新端口放在 ready 消息里回传，主进程据此重载窗口。
-      if (isDesktop) {
-        console.warn(`[server] 端口 ${wantPort} 已被占用，改用系统分配的随机端口`);
-        try {
-          started = await startServer(0, { desktop: isDesktop });
-        } catch (err2) {
-          fatal('listen', err2);
-          return;
-        }
-      } else {
-        console.error(
-          `\n  端口 ${wantPort} 已被占用：可能已有一个图库实例在运行（或上次异常退出留下的残留进程）。\n` +
-            '  处理办法：结束已运行的 node 进程后重试；或换端口启动：\n' +
-            '    PowerShell:  $env:PORT=3002; npm start\n' +
-            '    CMD:         set PORT=3002&& npm start\n'
-        );
-        process.exit(1);
+      console.warn(`[server] 端口 ${wantPort} 已被占用，改用系统分配的随机端口`);
+      try {
+        started = await startServer(0, { desktop: true });
+      } catch (err2) {
+        fatal('listen', err2);
+        return;
       }
-    } else {
-      throw err;
+    }
+  } else {
+    // 开发时 Ctrl+C 后立刻 npm run dev，旧进程可能还没释放 3001：
+    // 先等几秒重试，避免「重启太快 → EADDRINUSE → 服务退出 → 界面全部 500」。
+    // 重试仍失败才按原来的方式提示并退出。
+    for (let attempt = 1; ; attempt++) {
+      try {
+        started = await startServer(wantPort, { desktop: false });
+        break;
+      } catch (err) {
+        if (err?.code !== 'EADDRINUSE') throw err;
+        if (attempt >= 10) {
+          console.error(
+            `\n  端口 ${wantPort} 已被占用：可能已有一个图库实例在运行（或上次异常退出留下的残留进程）。\n` +
+              '  处理办法：结束已运行的 node 进程后重试；或换端口启动：\n' +
+              '    PowerShell:  $env:PORT=3002; npm start\n' +
+              '    CMD:         set PORT=3002&& npm start\n'
+          );
+          process.exit(1);
+        }
+        console.warn(`[server] 端口 ${wantPort} 仍被占用，1 秒后重试（${attempt}/10）`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     }
   }
   const { server, port } = started;
