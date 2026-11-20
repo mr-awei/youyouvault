@@ -24,8 +24,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   formatCode,
+  formatDeviceCode,
   isValidPhone,
   normalizeCode,
+  normalizeDeviceCode,
   normalizePhone,
   signRevocationList,
 } from '../server/lib/license-core.js';
@@ -54,11 +56,12 @@ for (const p of phones) {
   }
 }
 const machines = values('machine').map((m) => {
-  if (normalizeCode(m).length !== 16) {
-    console.error('[revoke] 设备码应为 16 位十六进制：', m);
-    process.exit(1);
-  }
-  return formatCode(m);
+  const v2 = normalizeDeviceCode(m);
+  if (v2.length === 24) return v2;
+  const v1 = normalizeCode(m);
+  if (v1.length === 16) return v1;
+  console.error('[revoke] 设备码应为新版 TK2-...（24 位）或旧版 16 位十六进制：', m);
+  process.exit(1);
 });
 
 if (!phones.length && !machines.length) {
@@ -98,5 +101,8 @@ if (out) {
   console.log(json);
 }
 console.log('[revoke] 手机号：', phones.join(', ') || '（无）');
-console.log('[revoke] 设备码：', machines.join(', ') || '（无）');
+console.log(
+  '[revoke] 设备码：',
+  machines.map((m) => (m.length === 24 ? formatDeviceCode(m) : formatCode(m))).join(', ') || '（无）'
+);
 console.log('[revoke] seq：', seq);

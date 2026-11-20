@@ -58,3 +58,6 @@ docs/.verify-stats.json
 .tmp-*/
 .tmp-*.png
 .tmp-*.html
+
+# 授权管理工具的构建中间目录
+tools/license-admin/dist/

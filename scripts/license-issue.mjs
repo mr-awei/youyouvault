@@ -18,9 +18,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  formatCode,
+  formatDeviceCode,
   isValidPhone,
   normalizeCode,
+  normalizeDeviceCode,
   normalizePhone,
   signLicenseKey,
 } from '../server/lib/license-core.js';
@@ -56,14 +57,18 @@ if (!phone || !isValidPhone(phone)) {
 let machine = '';
 if (!anyMachine) {
   if (!input) {
-    console.error('[license] 缺少 --machine <设备码>（用户可在「设置 → 授权」里复制），或加 --any 表示不绑定设备');
+    console.error('[license] 缺少 --machine <设备码>（用户可在「设置 → 授权」里复制 TK2- 开头的新版设备码），或加 --any 表示不绑定设备');
     process.exit(1);
   }
-  if (normalizeCode(input).length !== 16) {
-    console.error('[license] 设备码应为 16 位十六进制（形如 A1B2-C3D4-E5F6-7890），实际收到：', input);
+  if (normalizeDeviceCode(input).length !== 24) {
+    if (normalizeCode(input).length === 16) {
+      console.error('[license] 这是旧版设备码。请让用户升级客户端后复制 TK2- 开头的新版设备码；旧授权码本身仍可继续使用。');
+    } else {
+      console.error('[license] 设备码应为 TK2-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX（24 位十六进制），实际收到：', input);
+    }
     process.exit(1);
   }
-  machine = formatCode(input);
+  machine = formatDeviceCode(input);
 }
 
 const addDays = (n) => {
@@ -101,7 +106,16 @@ if (!privateKey) {
 }
 
 const key = signLicenseKey(
-  { edition, machine, phone, account: phone, issuedAt: today(), expires, note },
+  {
+    edition,
+    machine,
+    machine2: machine,
+    phone,
+    account: phone,
+    issuedAt: today(),
+    expires,
+    note,
+  },
   privateKey
 );
 

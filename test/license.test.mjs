@@ -8,11 +8,15 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import test from 'node:test';
 import {
+  deviceCodeFromParts,
+  deviceMatches,
   formatCode,
+  formatDeviceCode,
   isValidPhone,
   machineCodeFromParts,
   machineMatches,
   normalizeCode,
+  normalizeDeviceCode,
   normalizePhone,
   signLicenseKey,
   signRevocationList,
@@ -185,4 +189,97 @@ test('远程停用清单：验签通过，篡改拒绝', () => {
   assert.equal(bad.ok, false);
   assert.match(bad.reason, /签名/);
   assert.equal(verifyRevocationList(token, { publicKeyPem: '' }).ok, false);
+});
+
+/* ------------------------------ v2 设备码 ------------------------------ */
+
+const hw = {
+  uuid: 'F1FEF541-32DD-7BD4-6F66-08BFB86CE53F',
+  board: 'BOARD-230520659400109',
+  bios: 'BIOS-SERIAL-01',
+  disk: 'E823_8FA6_BF53_0001',
+  tpm: 'TPM-EK-PUBLIC-KEY-HASH',
+  guid: 'f6f68d52-f5f7-4f70-98b6-1401a91ec12a',
+  cpu: 'BFEBFBFF000B0671',
+  cpuName: '13th Gen Intel Core i9',
+  mac: '64:49:7D:70:A6:7F',
+};
+
+test('v2 设备码：TK2 前缀、6 组、可格式化 / 归一化', () => {
+  const code = deviceCodeFromParts(hw);
+  assert.match(code, /^TK2(-[0-9A-F]{4}){6}$/);
+  assert.equal(normalizeDeviceCode(code).length, 24);
+  assert.equal(formatDeviceCode(normalizeDeviceCode(code)), code);
+  assert.equal(formatDeviceCode(normalizeDeviceCode(code).toLowerCase()), code);
+});
+
+test('v2 设备码：OEM 占位值与全零不参与计算', () => {
+  const a = deviceCodeFromParts({ ...hw, board: 'To be filled by O.E.M.', bios: 'System Serial Number' });
+  const b = deviceCodeFromParts({ ...hw, board: '', bios: '' });
+  assert.equal(a, b, '占位值应与缺省值算出同一结果');
+});
+
+test('v2 设备码：允许 2 组漂移，但必须命中强特征', () => {
+  const code = deviceCodeFromParts(hw);
+  // 换网卡 + 重装系统（MachineGuid 变化）：2 组漂移，强特征仍命中
+  const drift2 = deviceCodeFromParts({
+    ...hw,
+    guid: 'new-machine-guid-after-reinstall',
+    mac: 'AA:BB:CC:DD:EE:FF',
+  });
+  const r = deviceMatches(code, drift2);
+  assert.equal(r.ok, true);
+  assert.equal(r.matches, 4);
+  assert.equal(r.comparable, 6);
+
+  // 换主板 + 启动盘 + MachineGuid：3 组漂移
+  const drift3 = deviceCodeFromParts({
+    ...hw,
+    uuid: '99999999-8888-7777-6666-555555555555',
+    board: 'NEW-BOARD',
+    bios: 'NEW-BIOS',
+    disk: 'NEW-DISK',
+    guid: 'new-guid',
+  });
+  assert.equal(deviceMatches(code, drift3).ok, false);
+});
+
+test('v2 设备码：整机克隆 / 换一台电脑必须拒绝', () => {
+  const code = deviceCodeFromParts(hw);
+  const cloned = deviceCodeFromParts({
+    uuid: 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE',
+    board: 'OTHER-BOARD',
+    bios: 'OTHER-BIOS',
+    disk: 'OTHER-DISK',
+    tpm: 'OTHER-TPM',
+    guid: 'other-guid',
+    cpu: 'OTHER-CPU',
+    cpuName: 'Other CPU',
+    mac: '11:22:33:44:55:66',
+  });
+  const r = deviceMatches(code, cloned);
+  assert.equal(r.ok, false);
+  assert.equal(r.strongMatches, 0);
+});
+
+test('新授权码按 machine2（v2）校验；老授权码仍按 machine（v1）校验', () => {
+  const deviceCode = deviceCodeFromParts(hw);
+  const newKey = signLicenseKey(
+    { machine: deviceCode, machine2: deviceCode, phone: '13800000000', issuedAt: '2026-11-21' },
+    PRIV
+  );
+  assert.equal(verifyLicenseKey(newKey, { publicKeyPem: PUB, deviceCode }).ok, true);
+  const other = deviceCodeFromParts({
+    ...hw,
+    uuid: '11111111-2222-3333-4444-555555555555',
+    board: 'OTHER-BOARD',
+    disk: 'OTHER-DISK',
+    guid: 'other-guid',
+  });
+  const bad = verifyLicenseKey(newKey, { publicKeyPem: PUB, deviceCode: other });
+  assert.equal(bad.ok, false);
+  assert.match(bad.reason, /设备码/);
+
+  // 老授权：没有 machine2 时继续走 v1 容错
+  assert.equal(verify(issue()).ok, true);
 });

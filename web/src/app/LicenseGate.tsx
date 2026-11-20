@@ -51,7 +51,7 @@ export function LicenseProvider({ children }: { children: React.ReactNode }) {
           <div style={{ lineHeight: 1.8, fontSize: 13 }}>
             <div>{status.reason || '该账号已被远程停用，请联系管理员。'}</div>
             {status.account && <div className="hint">账号：{status.account}</div>}
-            <div className="hint">机器码：{status.machineCode}</div>
+            <div className="hint">设备码：{status.deviceCode || status.machineCode}</div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
             <button className="btn primary" onClick={() => void refresh(true)}>
@@ -96,7 +96,7 @@ export function ProGate({
       <div className="big">🔒</div>
       <h3>「{label}」需要专业版授权</h3>
       <div className="hint" style={{ maxWidth: 520, lineHeight: 1.8 }}>
-        当前是免费版。到「设置 → 授权」输入激活码，或把机器码 <code>{status.machineCode}</code>{' '}
+        当前是免费版。到「设置 → 授权」输入激活码，或把设备码 <code>{status.deviceCode || status.machineCode}</code>{' '}
         发给管理员购买授权。
         {status.reason ? ` ${status.reason}` : ''}
       </div>

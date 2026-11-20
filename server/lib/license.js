@@ -19,8 +19,10 @@ import {
   PRO_FEATURES,
   PRODUCT,
   daysLeft,
+  deviceCodeFromParts,
   machineCodeFromParts,
   normalizeCode,
+  normalizeDeviceCode,
   normalizePhone,
   verifyLicenseKey,
   verifyRevocationList,
@@ -45,18 +47,33 @@ const PUBLIC_KEY = (() => {
   }
 })();
 
-/** Windows 一次 PowerShell 取齐 4 项硬件特征：比 4 次 wmic 快，也不必处理 wmic 被移除的问题 */
+/** Windows 一次 PowerShell 取齐硬件特征：比多次 wmic 快，也不必处理 wmic 被移除的问题 */
 const PS_SCRIPT = [
   '$ErrorActionPreference="SilentlyContinue";',
   '$o=@{};',
   "$o.guid=(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Cryptography').MachineGuid;",
   '$o.cpu=(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty ProcessorId);',
+  '$o.cpuName=(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name);',
   '$o.board=(Get-CimInstance Win32_BaseBoard | Select-Object -First 1 -ExpandProperty SerialNumber);',
-  "$o.disk=(Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='C:'\" | Select-Object -First 1 -ExpandProperty VolumeSerialNumber);",
+  '$o.bios=(Get-CimInstance Win32_BIOS | Select-Object -First 1 -ExpandProperty SerialNumber);',
+  '$o.uuid=(Get-CimInstance Win32_ComputerSystemProduct | Select-Object -First 1 -ExpandProperty UUID);',
+  "$o.vol=(Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='C:'\" | Select-Object -First 1 -ExpandProperty VolumeSerialNumber);",
+  '$o.disk=(Get-Disk | Where-Object {$_.IsBoot} | Select-Object -First 1 -ExpandProperty SerialNumber);',
+  'if(-not $o.disk){$o.disk=(Get-CimInstance Win32_DiskDrive | Select-Object -First 1 -ExpandProperty SerialNumber)};',
+  '$o.mac=((Get-CimInstance Win32_NetworkAdapter -Filter "PhysicalAdapter=True AND NetEnabled=True").MACAddress | Sort-Object) -join ",";',
+  '$tpm=Get-TpmEndorsementKeyInfo -HashAlgorithm Sha256 -ErrorAction SilentlyContinue;',
+  'if($tpm){$h=$tpm.PublicKeyHash;if($h -is [byte[]]){$o.tpm=($h | ForEach-Object {$_.ToString("x2")}) -join ""}else{$o.tpm=[string]$h}};',
   '$o | ConvertTo-Json -Compress',
 ].join(' ');
 
-/** @type {string[] | null} */
+/**
+ * @typedef {{
+ *   legacy: string[],
+ *   v2: { uuid: string, board: string, bios: string, disk: string, tpm: string, guid: string, cpu: string, cpuName: string, mac: string }
+ * }} HardwareParts
+ */
+
+/** @type {HardwareParts | null} */
 let partsCache = null;
 
 /** 探测硬件特征；任何一项失败都留空，不影响其余项 */
@@ -68,10 +85,24 @@ function probeParts() {
         ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', PS_SCRIPT],
         { timeout: 20_000, windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
       );
-      const parsed = JSON.parse(String(out).trim() || '{}');
-      const parts = [parsed.guid, parsed.cpu, parsed.board, parsed.disk].map((v) => String(v ?? '').trim());
-      // 至少两项可用才算探测成功；只剩一项（或全空）时退回系统信息，免得机器码过于随机
-      if (parts.filter(Boolean).length >= 2) return parts;
+      const p = JSON.parse(String(out).trim() || '{}');
+      const s = (v) => String(v ?? '').trim();
+      const legacy = [p.guid, p.cpu, p.board, p.vol].map(s);
+      const v2 = {
+        uuid: s(p.uuid),
+        board: s(p.board),
+        bios: s(p.bios),
+        disk: s(p.disk),
+        tpm: s(p.tpm),
+        guid: s(p.guid),
+        cpu: s(p.cpu),
+        cpuName: s(p.cpuName),
+        mac: s(p.mac),
+      };
+      // 至少两项可用才算探测成功；只剩一项（或全空）时退回系统信息，免得设备码过于随机
+      if (legacy.filter(Boolean).length >= 2 || [v2.uuid, v2.board, v2.disk, v2.guid].filter(Boolean).length >= 2) {
+        return { legacy, v2 };
+      }
     } catch (err) {
       console.warn('[license] 硬件特征探测失败，改用系统信息：', err?.message || err);
     }
@@ -83,13 +114,27 @@ function probeParts() {
   } catch {
     user = '';
   }
-  return [os.hostname(), os.cpus()[0]?.model || '', `${os.platform()}-${os.arch()}`, user];
+  const cpu = os.cpus()[0]?.model || '';
+  return {
+    legacy: [os.hostname(), cpu, `${os.platform()}-${os.arch()}`, user],
+    v2: {
+      uuid: os.hostname(),
+      board: '',
+      bios: '',
+      disk: `${os.platform()}-${os.arch()}`,
+      tpm: '',
+      guid: `${os.hostname()}|${user}`,
+      cpu,
+      cpuName: cpu,
+      mac: '',
+    },
+  };
 }
 
 /** @param {boolean} [force] */
 function components(force = false) {
   if (force || !partsCache) partsCache = probeParts();
-  return partsCache;
+  return /** @type {HardwareParts} */ (partsCache);
 }
 
 /** @type {{ stamp: string, value: any } | null} */
@@ -193,13 +238,14 @@ export function licenseStatus({ refresh = false } = {}) {
   if (!refresh && statusCache && statusCache.stamp === stamp) return statusCache.value;
 
   const parts = components(refresh);
-  const machineCode = machineCodeFromParts(parts);
+  const machineCode = machineCodeFromParts(parts.legacy);
+  const deviceCode = deviceCodeFromParts(parts.v2);
   const raw = readKeyFile();
   /** @type {any} */
   let payload = null;
   let reason = '';
   if (raw) {
-    const result = verifyLicenseKey(raw, { publicKeyPem: PUBLIC_KEY, machineCode });
+    const result = verifyLicenseKey(raw, { publicKeyPem: PUBLIC_KEY, machineCode, deviceCode });
     if (result.ok) payload = result.payload;
     else reason = result.reason;
   } else {
@@ -218,13 +264,19 @@ export function licenseStatus({ refresh = false } = {}) {
     ? revoke.payload.revokedAccounts.map((a) => normalizePhone(a)).filter(Boolean)
     : [];
   const revokedMachines = Array.isArray(revoke?.payload?.revokedMachines)
-    ? revoke.payload.revokedMachines.map((m) => normalizeCode(m)).filter(Boolean)
+    ? revoke.payload.revokedMachines
+        .map((m) => {
+          const v2 = normalizeDeviceCode(m);
+          return v2.length === 24 ? v2 : normalizeCode(m);
+        })
+        .filter(Boolean)
     : [];
   const phoneKey = normalizePhone(phone);
   const revoked =
     !!payload &&
     ((phoneKey && (revokedPhones.includes(phoneKey) || revokedAccounts.includes(phoneKey))) ||
-      revokedMachines.includes(normalizeCode(machineCode)));
+      revokedMachines.includes(normalizeCode(machineCode)) ||
+      revokedMachines.includes(normalizeDeviceCode(deviceCode)));
   if (revoked) reason = '该手机号或设备已被远程停用，请联系管理员';
   // 仅开发环境：不写授权文件也能测 Pro 页面；安装包绝不能带这个环境变量
   const devPro = process.env.TUKU_DEV_PRO === '1';
@@ -237,6 +289,9 @@ export function licenseStatus({ refresh = false } = {}) {
     licensedByKey: !revoked && !!payload,
     devPro,
     machineCode,
+    /** v2 设备码：新授权与新签发都按它绑定 */
+    deviceCode,
+    deviceCodeVersion: 2,
     phone,
     account,
     revoked,
@@ -271,9 +326,11 @@ export function isRevoked() {
  * @param {string} key
  */
 export function activateLicense(key) {
+  const parts = components();
   const result = verifyLicenseKey(key, {
     publicKeyPem: PUBLIC_KEY,
-    machineCode: machineCodeFromParts(components()),
+    machineCode: machineCodeFromParts(parts.legacy),
+    deviceCode: deviceCodeFromParts(parts.v2),
   });
   if (!result.ok) return { ok: false, reason: result.reason };
   try {

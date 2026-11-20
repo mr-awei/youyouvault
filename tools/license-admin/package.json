@@ -1,0 +1,9 @@
+{
+  "name": "tuku-license-admin",
+  "productName": "图库授权管理",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "description": "图库授权签发、记录与停用管理工具（本机）"
+}

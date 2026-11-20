@@ -163,7 +163,8 @@ try {
     // 用测试私钥签一张绑定本机的授权，后续受控能力的冒烟都在专业版下跑
     const key = signLicenseKey(
       {
-        machine: lic.machineCode,
+        machine: lic.deviceCode,
+        machine2: lic.deviceCode,
         phone: '13800000000',
         account: '13800000000',
         expires: null,
@@ -180,7 +181,8 @@ try {
     const actBody = await act.json().catch(() => ({}));
     check(
       '有效激活码可激活本机并切换为专业版',
-      act.ok && actBody.licensed === true && actBody.edition === 'pro' && actBody.phone === '13800000000',
+      act.ok && actBody.licensed === true && actBody.edition === 'pro' && actBody.phone === '13800000000' &&
+        String(actBody.deviceCode || '').startsWith('TK2-'),
       `${act.status} ${JSON.stringify({ licensed: actBody.licensed, edition: actBody.edition, phone: actBody.phone, reason: actBody.error })}`
     );
     const lanAfter = await fetch(`${BASE}/api/lan/status`, { headers: { Authorization: `Bearer ${token}` } });

@@ -72,6 +72,7 @@ export function isValidPhone(value) {
  *
  * 分项而不是把 4 项混成一个哈希，是为了能「按项」容错：换硬盘只会让其中一组变，
  * 其余三组仍能对上。读不到的项用 0000 占位。
+ * 这是 v1 设备码：老授权码继续用它验证，新签发请用 deviceCodeFromParts（v2）。
  * @param {Array<string | undefined | null>} parts
  */
 export function machineCodeFromParts(parts) {
@@ -81,6 +82,134 @@ export function machineCodeFromParts(parts) {
       return raw ? sha16(raw).slice(0, 4).toUpperCase() : '0000';
     })
     .join('-');
+}
+
+/**
+ * v2 设备码：用更强的硬件特征、6 组，允许 2 组漂移。
+ *
+ * 相比 v1（MachineGuid / CPU ProcessorId / 主板序列 / C: 卷序列）：
+ * - SMBIOS UUID、主板 + BIOS 序列、启动盘物理序列号更难伪造，也不会因重装系统而全变；
+ * - TPM EK 在可用时作为高权重项（需要管理员权限；取不到就跳过）；
+ * - 6 组里最多变 2 组，且必须至少命中 1 个强特征（UUID / 主板 / 启动盘 / TPM）。
+ *
+ * 局限：纯离线方案无法彻底杜绝「整机克隆」或改代码绕过。真正的防白嫖仍需
+ * 在线激活 / 席位管理 / 定期校验；这里做的是把「拷一份 key 到别的电脑」挡住。
+ * @param {{
+ *   uuid?: string, board?: string, bios?: string, disk?: string,
+ *   tpm?: string, guid?: string, cpu?: string, cpuName?: string, mac?: string
+ * }} parts
+ */
+export function deviceCodeFromParts(parts = {}) {
+  const uuid = uuidPart(parts.uuid);
+  const boardBios = [serialPart(parts.board), serialPart(parts.bios)].filter(Boolean).join('|');
+  const disk = serialPart(parts.disk);
+  const tpm = usablePart(parts.tpm);
+  const guid = serialPart(parts.guid);
+  const cpuMac = [serialPart(parts.cpu), usablePart(parts.cpuName), macPart(parts.mac)]
+    .filter(Boolean)
+    .join('|');
+  return `TK2-${[group(uuid), group(boardBios), group(disk), group(tpm), group(guid), group(cpuMac)].join('-')}`;
+}
+
+const PLACEHOLDER_PARTS = new Set([
+  '',
+  'none',
+  'null',
+  'n/a',
+  'na',
+  'unknown',
+  'default string',
+  'system serial number',
+  'to be filled by o.e.m.',
+  'to be filled by oem',
+  'to be filled by o.e.m',
+  'not specified',
+  'not applicable',
+  'o.e.m.',
+  'oem',
+  '123456789',
+  '00000000-0000-0000-0000-000000000000',
+  'ffffffff-ffff-ffff-ffff-ffffffffffff',
+  '03000200-0400-0500-0006-000700080009',
+]);
+
+/** 过滤 OEM 占位值 / 全零；这些值当硬件序列号会导致大量机器撞码 */
+function usablePart(value) {
+  const s = String(value ?? '').trim();
+  if (!s) return '';
+  if (PLACEHOLDER_PARTS.has(s.toLowerCase())) return '';
+  if (/^0+$/.test(s.replace(/[-:.\s]/g, ''))) return '';
+  return s;
+}
+
+function uuidPart(value) {
+  const s = usablePart(value).replace(/^\{|\}$/g, '').toLowerCase();
+  return s.replace(/[^0-9a-f-]/g, '') === s ? s : '';
+}
+
+function serialPart(value) {
+  return usablePart(value).replace(/[.\s]+$/g, '');
+}
+
+function macPart(value) {
+  const list = String(value ?? '')
+    .split(',')
+    .map((v) => v.replace(/[^0-9a-f]/gi, '').toUpperCase())
+    .filter((v) => v.length >= 12 && v !== '000000000000');
+  return [...new Set(list)].sort().join(',');
+}
+
+function group(value) {
+  return value ? sha16(value).slice(0, 4).toUpperCase() : '0000';
+}
+
+/** 只保留 TK2 后面的 24 位十六进制；v1 的 16 位输入会原样返回 */
+export function normalizeDeviceCode(value) {
+  let raw = String(value ?? '').trim();
+  if (/^TK2[-\s]?/i.test(raw)) raw = raw.replace(/^TK2[-\s]?/i, '');
+  return raw.replace(/[^0-9a-f]/gi, '').toUpperCase();
+}
+
+export function formatDeviceCode(value) {
+  const hex = normalizeDeviceCode(value).slice(0, 24);
+  if (hex.length !== 24) return String(value ?? '').trim();
+  return `TK2-${hex.match(/.{1,4}/g).join('-')}`;
+}
+
+/**
+ * v2 设备码比对：6 组里允许漂移，且强特征至少命中 1 组。
+ * 当前读不到的组（0000）不参与计分。
+ * @param {string} licensed
+ * @param {string} current
+ */
+export function deviceMatches(licensed, current) {
+  const a = normalizeDeviceCode(licensed);
+  const b = normalizeDeviceCode(current);
+  if (a.length !== 24 || b.length !== 24) {
+    return { ok: false, matches: 0, comparable: 0, strongMatches: 0, strongComparable: 0, allowed: 0 };
+  }
+  const ga = a.match(/.{4}/g) || [];
+  const gb = b.match(/.{4}/g) || [];
+  let matches = 0;
+  let comparable = 0;
+  let strongMatches = 0;
+  let strongComparable = 0;
+  for (let i = 0; i < 6; i++) {
+    if (!gb[i] || gb[i] === '0000') continue;
+    comparable++;
+    const hit = ga[i] === gb[i];
+    if (hit) matches++;
+    if (i < 4) {
+      strongComparable++;
+      if (hit) strongMatches++;
+    }
+  }
+  if (comparable < 3) {
+    return { ok: false, matches, comparable, strongMatches, strongComparable, allowed: 0 };
+  }
+  const allowed = comparable >= 5 ? 2 : 1;
+  const ok = matches >= comparable - allowed && (strongComparable === 0 || strongMatches >= 1);
+  return { ok, matches, comparable, strongMatches, strongComparable, allowed };
 }
 
 /**
@@ -117,6 +246,7 @@ export function signLicenseKey(payload, privateKeyPem) {
     product: PRODUCT,
     edition: 'pro',
     machine: '',
+    machine2: '',
     account: '',
     phone: '',
     issuedAt: '',
@@ -160,13 +290,21 @@ export function parseLicenseKey(input) {
 }
 
 /**
- * 验签 + 产品 / 版本 / 有效期 / 机器绑定校验。
+ * 验签 + 产品 / 版本 / 有效期 / 设备绑定校验。
+ * - 新授权码带 machine2：按 v2 设备码（6 组、允许漂移、强特征约束）校验。
+ * - 老授权码只有 machine：继续按 v1 机器码校验，保证已售授权不受影响。
  * @param {string} key
- * @param {{ publicKeyPem?: string, machineCode?: string, now?: number, product?: string }} [opts]
+ * @param {{ publicKeyPem?: string, machineCode?: string, deviceCode?: string, now?: number, product?: string }} [opts]
  * @returns {{ ok: boolean, reason: string, payload?: any }}
  */
 export function verifyLicenseKey(key, opts = {}) {
-  const { publicKeyPem = '', machineCode = '', now = Date.now(), product = PRODUCT } = opts;
+  const {
+    publicKeyPem = '',
+    machineCode = '',
+    deviceCode = '',
+    now = Date.now(),
+    product = PRODUCT,
+  } = opts;
   if (!publicKeyPem) return { ok: false, reason: '未内置授权公钥' };
   const parsed = parseLicenseKey(key);
   if (!parsed) return { ok: false, reason: '激活码格式不正确' };
@@ -191,7 +329,20 @@ export function verifyLicenseKey(key, opts = {}) {
     if (now > end) return { ok: false, reason: `授权已于 ${p.expires} 过期` };
   }
 
-  // machine 为空 = 不绑定机器（内部 / 团队授权），不做硬件比对
+  // 新版设备码：6 组 + 强特征约束
+  if (p.machine2) {
+    if (!deviceCode) return { ok: false, reason: '无法读取当前设备码' };
+    const r = deviceMatches(String(p.machine2), deviceCode);
+    if (!r.ok) {
+      return {
+        ok: false,
+        reason: `设备码与当前设备不符（匹配 ${r.matches}/${r.comparable} 组，换过主要硬件需要重新签发）`,
+      };
+    }
+    return { ok: true, reason: '', payload: p };
+  }
+
+  // 兼容老授权：machine 为空 = 不绑定机器（内部 / 团队授权）
   if (p.machine) {
     if (!machineMatches(String(p.machine), machineCode).ok) {
       return { ok: false, reason: '激活码与当前机器不符（换过硬件的话需要重新签发）' };

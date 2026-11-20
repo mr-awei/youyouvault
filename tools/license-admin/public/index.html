@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
+    />
     <title>图库 · 授权管理</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -49,8 +53,8 @@
             </div>
             <div class="field">
               <label for="machines">设备码 <span class="req">必填</span></label>
-              <textarea id="machines" class="input mono" rows="4" placeholder="每行一个设备码，例如：&#10;A1B2-C3D4-E5F6-7890&#10;B2C3-D4E5-F6A7-8901"></textarea>
-              <div class="hint">支持每行一个，或用逗号 / 空格分隔；带不带横线都可以。设备码在用户软件的「设置 → 授权」里复制。</div>
+              <textarea id="machines" class="input mono" rows="4" placeholder="每行一个新版设备码，例如：&#10;TK2-A1B2-C3D4-E5F6-7890-ABCD-EF01&#10;TK2-B2C3-D4E5-F6A7-8901-BCDE-F012"></textarea>
+              <div class="hint">支持每行一个，或用逗号 / 空格分隔；带不带横线都可以。设备码在用户软件的「设置 → 授权」里复制（TK2- 开头）。旧版 16 位设备码只用于已售授权，不再新签。</div>
             </div>
             <div class="grid-2 tight">
               <div class="field">
@@ -90,8 +94,8 @@
           <h3>规则说明</h3>
           <ul>
             <li><strong>手机号 ↔ 设备</strong>：多对多。一个手机号可以签多台设备；同一台设备也可以签给多个手机号（各自一份激活码）。</li>
-            <li><strong>设备码</strong>：由 MachineGuid、CPU ProcessorId、主板序列号、系统盘卷序列号各取 SHA-256 前 4 位组成。</li>
-            <li><strong>会变的情况</strong>：换主板 / CPU / 系统盘、重装或克隆系统、系统盘重新格式化、虚拟机迁移。4 段允许变 1 段，变 2 段需重新签发。</li>
+            <li><strong>设备码</strong>：由 SMBIOS UUID、主板 + BIOS 序列号、启动盘物理序列号、TPM（可用时）、MachineGuid、CPU + 网卡共 6 组特征计算；比旧的 4 项更难伪造。</li>
+            <li><strong>会变的情况</strong>：换主板 / 启动盘 / 网卡、重装或克隆系统、虚拟机迁移。6 组允许变 2 组，且必须至少命中一个强特征（UUID / 主板 / 启动盘 / TPM）。</li>
             <li><strong>取消授权</strong>：签发记录只是台账；真正让客户端失效要把手机号或设备加入停用清单，并让客户端能访问到清单地址。</li>
           </ul>
         </div>
@@ -132,7 +136,7 @@
             <h2>停用设备</h2>
             <p class="hint">只锁定这一台设备，同手机号下的其它设备不受影响。</p>
             <div class="row">
-              <input id="revokeMachine" class="input mono" placeholder="A1B2-C3D4-E5F6-7890" autocomplete="off" />
+              <input id="revokeMachine" class="input mono" placeholder="TK2-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autocomplete="off" />
               <button id="revokeMachineBtn" class="btn danger" type="button">停用设备</button>
             </div>
             <div id="revokedMachineList" class="chips"></div>

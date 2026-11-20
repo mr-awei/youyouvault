@@ -557,8 +557,11 @@ export interface LicenseStatus {
   licensed: boolean;
   /** 本机是否真的有验签通过的授权文件（区别于 devPro 临时授权） */
   licensedByKey?: boolean;
-  /** 本机机器码（XXXX-XXXX-XXXX-XXXX），购买时发给作者 */
+  /** 本机旧版机器码（v1，仅用于校验已售旧授权） */
   machineCode: string;
+  /** 本机新版设备码（v2，TK2-...）：购买 / 签发时发给作者 */
+  deviceCode?: string;
+  deviceCodeVersion?: number;
   /** 授权绑定的手机号；远程停用按这个手机号匹配 */
   phone?: string;
   /** 兼容旧字段：与 phone 相同 */

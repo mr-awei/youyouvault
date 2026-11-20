@@ -90,6 +90,10 @@
   }
 
   const statusLabel = { active: '有效', expired: '已过期', revoked: '已停用' };
+  const fmtDevice = (value) => {
+    const v = String(value ?? '').toUpperCase();
+    return /^[0-9A-F]{24}$/.test(v) ? `TK2-${v.match(/.{4}/g).join('-')}` : v;
+  };
 
   function render() {
     if (!state) return;
@@ -154,7 +158,7 @@
                 : '';
           return `<tr>
             <td><div class="phone">${esc(x.phone)}</div>${x.note ? `<div class="hint">${esc(x.note)}</div>` : ''}</td>
-            <td class="mono">${esc(x.machine)}</td>
+            <td class="mono">${esc(x.machine)}${x.deviceVersion === 1 ? '<div class="hint">旧版 16 位</div>' : ''}</td>
             <td><span class="badge ${esc(x.status)}">${esc(statusLabel[x.status] || x.status)}</span></td>
             <td>${esc(x.issuedAt)}</td>
             <td>${expiry}${left ? `<div class="hint">${esc(left)}</div>` : ''}</td>
@@ -193,7 +197,7 @@
       ? machines
           .map(
             (m) =>
-              `<span class="chip">${esc(m)}<button data-action="unrevoke-machine" data-values="${esc(m)}" title="解除停用">✕</button></span>`
+              `<span class="chip">${esc(fmtDevice(m))}<button data-action="unrevoke-machine" data-values="${esc(m)}" title="解除停用">✕</button></span>`
           )
           .join('')
       : '<span class="hint">暂无停用设备</span>';

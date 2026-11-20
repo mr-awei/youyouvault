@@ -48,7 +48,7 @@ export default function LicenseCard({ onToast }: Props) {
 
   const copyMachine = async () => {
     try {
-      await navigator.clipboard.writeText(status?.machineCode || '');
+      await navigator.clipboard.writeText(status?.deviceCode || status?.machineCode || '');
       onToast(i18n.t('k7176f299'));
     } catch {
       onToast(i18n.t('k3987c43b'), 'error');
@@ -107,6 +107,7 @@ export default function LicenseCard({ onToast }: Props) {
 
   const realLicensed = status.licensedByKey === true && !status.revoked;
   const phone = status.phone || status.account || '';
+  const deviceCode = status.deviceCode || status.machineCode;
   const badge = realLicensed
     ? i18n.t('k3f086416')
     : status.licensed
@@ -116,13 +117,13 @@ export default function LicenseCard({ onToast }: Props) {
   return (
     <Card title={i18n.t('ke3c2d3c8')} desc={i18n.t('k97ac2c53')} badge={<span className="settings-badge">{badge}</span>}>
       <div className="field">
-        <label>{i18n.t('k91c2c3fb')}</label>
+        <label>设备码</label>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             className="input"
             style={{ flex: 1, fontFamily: 'ui-monospace, monospace' }}
             readOnly
-            value={status.machineCode}
+            value={deviceCode}
             onFocus={(e) => e.currentTarget.select()}
           />
           <button className="btn sm ghost" onClick={() => void copyMachine()}>
@@ -134,18 +135,20 @@ export default function LicenseCard({ onToast }: Props) {
         <details className="hint" style={{ marginTop: 8, lineHeight: 1.9 }}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>设备码是怎么算出来的？什么情况会变？</summary>
           <div style={{ marginTop: 6 }}>
-            设备码由本机 4 项硬件特征各取 SHA-256 的前 4 位拼成，格式为 <code>XXXX-XXXX-XXXX-XXXX</code>：
+            设备码由 6 组本机特征各取 SHA-256 的前 4 位拼成，格式为 <code>TK2-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX</code>：
             <ol style={{ margin: '4px 0 6px', paddingLeft: 20 }}>
-              <li>Windows 系统 MachineGuid</li>
-              <li>CPU ProcessorId</li>
-              <li>主板序列号</li>
-              <li>系统盘（C:）卷序列号</li>
+              <li>SMBIOS UUID（整机唯一标识）</li>
+              <li>主板序列号 + BIOS 序列号</li>
+              <li>启动盘（系统盘）物理序列号</li>
+              <li>TPM 背书密钥（有 TPM 且可读取时；否则跳过）</li>
+              <li>Windows MachineGuid</li>
+              <li>CPU ProcessorId / 型号 + 物理网卡 MAC</li>
             </ol>
             <div>
-              <strong>会变化的情况：</strong>更换主板、CPU 或系统盘；重装系统 / 克隆系统（MachineGuid 变化）；系统盘重新格式化或改盘符；虚拟机迁移、批量刷写硬件序列号。
+              <strong>会变化的情况：</strong>更换主板、启动盘或网卡；重装 / 克隆系统（MachineGuid 变化）；虚拟机迁移；批量刷写硬件序列号。
             </div>
             <div style={{ marginTop: 4 }}>
-              <strong>容错规则：</strong>4 段里允许 1 段变化（换单件硬件通常仍可用）；变化 2 段及以上需要重新签发。设备码只在本机计算，不会上传，也不是硬件序列号本身。
+              <strong>容错规则：</strong>6 组里允许变 2 组，并且必须至少命中 1 个强特征（UUID / 主板 / 启动盘 / TPM）。重装系统、换单块硬盘或网卡通常仍可用；换主板等主要硬件需要重新签发。设备码只在本机计算，不上传原始序列号。
             </div>
           </div>
         </details>
