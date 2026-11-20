@@ -447,6 +447,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         .filter((r): r is { sku: string; name: string; platform: string; category: string } => !!r)
     : [];
 
+  const shootDate = date || new Date().toISOString().slice(0, 10);
+  const outputDateDir =
+    applied?.dateDir ||
+    (rootDir.trim()
+      ? `${rootDir.trim().replace(/[\\/]+$/, '')}${rootDir.includes('\\') ? '\\' : '/'}${shootDate}`
+      : '');
+
   const downloadReport = async () => {
     if (!reportRows.length) {
       onToast('没有可导出的 SKU', 'error');
@@ -732,15 +739,6 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                     : ''}
                   {uploadProgress ? ` · 正在上传 OMS ${uploadProgress.done}/${uploadProgress.total}` : ''}
                 </span>
-                <button className="btn sm" onClick={downloadReport}>
-                  生成 Excel
-                </button>
-                <button
-                  className="btn sm"
-                  onClick={() => downloadFile(omsProductFolderShotUrl(applied.dateDir))}
-                >
-                  下载文件夹截图
-                </button>
                 <button className="btn sm" onClick={() => openFolder(applied.dateDir)}>
                   {i18n.t('kc49c4607')}
                 </button>
@@ -859,6 +857,21 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 />
                 {i18n.t('k23b26af3')}
               </label>
+              <button className="btn sm" onClick={downloadReport}>
+                生成 Excel
+              </button>
+              <button
+                className="btn sm"
+                onClick={() => {
+                  if (!outputDateDir) {
+                    onToast('请先选择输出根目录', 'error');
+                    return;
+                  }
+                  downloadFile(omsProductFolderShotUrl(outputDateDir));
+                }}
+              >
+                下载文件夹截图
+              </button>
               {applied && (
                 <>
                   <span className="hint" style={{ marginLeft: 'auto' }}>
