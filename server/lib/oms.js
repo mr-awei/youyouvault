@@ -289,16 +289,20 @@ class OmsClient {
   async findDesignProductName(mainSku) {
     const sku = String(mainSku || '').trim();
     if (!sku) return '';
-    try {
-      const json = await this.request('/oms-admin/visual/designProcess/list', {
-        method: 'POST',
-        data: { pageNum: 1, pageSize: 50, mainSkuId: sku, shootStatus: SHOOT_STATUS_PENDING },
-      });
-      const row = (Array.isArray(json?.rows) ? json.rows : []).find((r) => r?.productName);
-      return row?.productName ? String(row.productName) : '';
-    } catch {
-      return '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const json = await this.request('/oms-admin/visual/designProcess/list', {
+          method: 'POST',
+          data: { pageNum: 1, pageSize: 50, mainSkuId: sku, shootStatus: SHOOT_STATUS_PENDING },
+        });
+        const row = (Array.isArray(json?.rows) ? json.rows : []).find((r) => r?.productName);
+        if (row?.productName) return String(row.productName);
+      } catch {
+        /* 产品名只是补充，失败重试一次后放弃 */
+      }
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 300));
     }
+    return '';
   }
 
   /** 按 5 位主 SKU 查完整编码；产品名从旧接口尽力补，失败不影响编码 */
@@ -332,7 +336,7 @@ class OmsClient {
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(2, list.length) }, worker));
     return results;
   }
 }
