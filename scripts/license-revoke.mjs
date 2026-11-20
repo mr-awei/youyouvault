@@ -4,8 +4,8 @@
  *
  * 用法：
  *   node scripts/license-revoke.mjs --phone 13800000000 --seq 1
- *   node scripts/license-revoke.mjs --machine A1B2-C3D4-E5F6-7890 --seq 2
- *   node scripts/license-revoke.mjs --phone 13800000000 --machine A1B2-C3D4-E5F6-7890
+ *   node scripts/license-revoke.mjs --machine TK2-... --seq 2
+ *   node scripts/license-revoke.mjs --empty --seq 1   # 生成空清单（未停用任何账号）
  *
  * 说明：
  * - --phone 会停用该手机号下的所有设备；--machine 只停用单台设备。
@@ -64,8 +64,9 @@ const machines = values('machine').map((m) => {
   process.exit(1);
 });
 
-if (!phones.length && !machines.length) {
-  console.error('[revoke] 至少提供一个 --phone 或 --machine');
+const empty = process.argv.includes('--empty');
+if (!empty && !phones.length && !machines.length) {
+  console.error('[revoke] 至少提供一个 --phone 或 --machine（要生成空清单请加 --empty）');
   process.exit(1);
 }
 

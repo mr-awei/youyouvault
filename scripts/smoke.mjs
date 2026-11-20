@@ -73,6 +73,8 @@ const server = spawn(process.execPath, ['server/index.js'], {
     TUKU_API_SCOPE_TOKENS: JSON.stringify({ 'smoke-readonly-token-1234': ['read'] }),
     // 授权公钥由冒烟临时生成：私钥只在本次进程里，用来签一张绑定本机的授权
     TUKU_LICENSE_PUBLIC_KEY: LICENSE_PUB,
+    // 冒烟不测远程停用清单，避免 CI 依赖外网
+    TUKU_LICENSE_REVOKE_DISABLE: '1',
     NO_COLOR: '1',
   },
   stdio: ['ignore', 'pipe', 'pipe'],

@@ -12,6 +12,8 @@
  *   ← { type: 'shutdown' }                  父进程要求优雅退出
  *   ← { type: 'ping' }                      → { type:'pong' }
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { settingsBus } from './lib/settings-bus.js';
 
 const isDesktop = process.env.TUKU_DESKTOP === '1';
@@ -64,11 +66,24 @@ process.on('uncaughtException', (err) => fatal('uncaughtException', err));
 process.on('unhandledRejection', (err) => fatal('unhandledRejection', err));
 
 async function main() {
-  const [{ startServer }, { API_TOKEN, STORAGE_DIR, PORT }, { getSettings }] = await Promise.all([
+  const [{ startServer }, { API_TOKEN, STORAGE_DIR, PORT, DATA_DIR }, { getSettings }] = await Promise.all([
     import('./app.js'),
     import('./config.js'),
     import('./db.js'),
   ]);
+
+  // 启动前先拉一次签名停用清单：
+  // - 已安装真实授权：阻塞等待，连不上就进入“已临时禁用”，避免离线绕开停用；
+  // - 免费版：不阻塞启动，只在后台检查。
+  // 开发 / CI 用 TUKU_LICENSE_REVOKE_DISABLE=1 跳过，安装包不会带这个变量。
+  try {
+    const { startRevocationWatch } = await import('./lib/license.js');
+    const watch = startRevocationWatch();
+    if (fs.existsSync(path.join(DATA_DIR, 'license.key'))) await watch;
+    else void watch;
+  } catch (err) {
+    console.error('[license] 启动停用检查失败', err?.message || err);
+  }
 
   // 桌面端用随机端口（避免多实例/残留进程抢 3001）；独立运行（npm start / dev）沿用配置端口，
   // 否则 Vite 代理与文档里的 http://localhost:3001 就对不上了

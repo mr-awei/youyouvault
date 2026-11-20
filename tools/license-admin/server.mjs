@@ -43,6 +43,8 @@ const PUBLIC_DIR = path.join(TOOL_DIR, 'public');
 const DEFAULT_PORT = Number(process.env.TUKU_LICENSE_ADMIN_PORT || 3199);
 const HOST = '127.0.0.1';
 const MAX_BODY = 1024 * 1024;
+const PUBLISH_URL =
+  'https://gitee.com/mr-awei/youyouvault/raw/main/docs/license/license-revoke.json';
 
 /** @type {{ dataDir: string, storeFile: string, manifestFile: string, privateKey: string, publicKey: string, token: string, port: number }} */
 let cfg = {
@@ -164,6 +166,29 @@ function isExpired(expires) {
   return Number.isFinite(end) && Date.now() > end;
 }
 
+/** 找到仓库里的发布文件 docs/license/license-revoke.json（开发态或 exe 附近） */
+function findPublishFile() {
+  const candidates = [path.join(ROOT, 'docs', 'license', 'license-revoke.json')];
+  for (const root of [process.env.PORTABLE_EXECUTABLE_DIR, process.cwd(), path.dirname(process.execPath)]) {
+    if (!root) continue;
+    let dir = root;
+    for (let i = 0; i < 5; i++) {
+      candidates.push(path.join(dir, 'docs', 'license', 'license-revoke.json'));
+      const next = path.dirname(dir);
+      if (next === dir) break;
+      dir = next;
+    }
+  }
+  for (const file of [...new Set(candidates)]) {
+    try {
+      if (fs.statSync(file).isFile()) return file;
+    } catch {
+      /* 继续找 */
+    }
+  }
+  return '';
+}
+
 function decorate(record) {
   const m2 = normalizeDeviceCode(record.machine);
   const m1 = normalizeCode(record.machine);
@@ -193,6 +218,8 @@ function state() {
       storeFile: cfg.storeFile,
       manifestFile: cfg.manifestFile,
       manifestUrl: `http://${HOST}:${cfg.port}/license-revoke.json`,
+      publishFile: findPublishFile(),
+      publishUrl: PUBLISH_URL,
     },
     summary: {
       records: licenses.length,
@@ -477,6 +504,20 @@ async function handleApi(req, res, url) {
     }
     if (added) saveStore();
     return sendJson(res, 200, { ok: true, added, skipped, files: files.size, state: state() });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/publish') {
+    if (!cfg.privateKey) return sendJson(res, 503, { error: '读不到授权私钥，无法生成停用清单' });
+    const file = findPublishFile();
+    if (!file) return sendJson(res, 404, { error: '没找到 docs/license/license-revoke.json，请从仓库目录启动工具或手动复制清单内容' });
+    const token = readManifest() || writeManifest();
+    if (!token) return sendJson(res, 500, { error: '生成停用清单失败' });
+    try {
+      fs.writeFileSync(file, `${JSON.stringify({ token }, null, 2)}\n`, 'utf8');
+    } catch (err) {
+      return sendJson(res, 500, { error: `写入失败：${err instanceof Error ? err.message : err}` });
+    }
+    return sendJson(res, 200, { ok: true, file, url: PUBLISH_URL, token });
   }
 
   return sendJson(res, 404, { error: '接口不存在' });

@@ -204,6 +204,8 @@ async function startServer() {
       TUKU_DEFAULT_STORAGE_DIR: path.join(tmpRoot, 'app', 'storage'),
       // 基准只压查询路径：CLIP 开着会让入库/检索多打一层模型，结论不稳定
       TUKU_CLIP: 'off',
+      // 基准不测远程停用清单，避免依赖外网
+      TUKU_LICENSE_REVOKE_DISABLE: '1',
       NO_COLOR: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],

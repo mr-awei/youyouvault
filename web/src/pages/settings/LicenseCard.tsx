@@ -159,9 +159,11 @@ export default function LicenseCard({ onToast }: Props) {
           <label>授权手机号</label>
           <div style={{ fontFamily: 'ui-monospace, monospace' }}>{phone}</div>
           <div className="hint">
-            {status.revokeCheckedAt
-              ? `最近检查停用状态：${new Date(status.revokeCheckedAt).toLocaleString()}`
-              : status.revokeError || '尚未拉取远程停用清单'}
+            {status.revokeError
+              ? status.revokeError
+              : status.revokeCheckedAt
+                ? `最近检查停用状态：${new Date(status.revokeCheckedAt).toLocaleString()}`
+                : '尚未拉取远程停用清单'}
           </div>
         </div>
       )}

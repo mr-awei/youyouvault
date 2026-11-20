@@ -568,6 +568,12 @@ export interface LicenseStatus {
   account?: string;
   /** 手机号/设备已被远程停用 */
   revoked?: boolean;
+  /** 连不上停用清单 / 验签失败，失败关闭 */
+  checkFailed?: boolean;
+  /** revoked 或 checkFailed 任一为真：数据接口整体锁定 */
+  blocked?: boolean;
+  revokeRequired?: boolean;
+  revokeUrl?: string;
   /** 开发环境临时 Pro（TUKU_DEV_PRO=1），安装包不会带 */
   devPro?: boolean;
   revokedAt?: string;

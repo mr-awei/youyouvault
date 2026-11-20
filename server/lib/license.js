@@ -30,8 +30,33 @@ import {
 
 const LICENSE_FILE = path.join(DATA_DIR, 'license.key');
 const REVOKE_FILE = path.join(DATA_DIR, 'license-revoke.json');
-const REVOKE_URL = String(process.env.TUKU_LICENSE_REVOKE_URL || '').trim();
-const REVOKE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * 默认停用清单：放在 Gitee 仓库深处的 docs/license/license-revoke.json。
+ * 生产默认**必须**能拉到它；只在开发 / CI 用 TUKU_LICENSE_REVOKE_DISABLE=1 关闭检查。
+ * 需要自建时用 TUKU_LICENSE_REVOKE_URL 覆盖。
+ */
+const DEFAULT_REVOKE_URL =
+  'https://gitee.com/mr-awei/youyouvault/raw/main/docs/license/license-revoke.json';
+const REVOKE_DISABLED = /^(1|true|on)$/i.test(String(process.env.TUKU_LICENSE_REVOKE_DISABLE || ''));
+const REVOKE_URL = REVOKE_DISABLED
+  ? ''
+  : String(process.env.TUKU_LICENSE_REVOKE_URL || DEFAULT_REVOKE_URL).trim();
+/** 每 30 分钟检查一次；失败后不再拿本地缓存当“正常” */
+const REVOKE_MAX_AGE_MS = 30 * 60 * 1000;
+
+/**
+ * 最近一次停用检查结果。
+ * ok=true 表示这次真的连上了并验签通过；ok=false 表示网络 / 验签失败。
+ * 初始 ok=true 只是为了让未启动 watcher 的测试环境不被误锁；正式启动时
+ * standalone.js 会先 await startRevocationWatch()。
+ */
+const revokeCheck = {
+  ok: true,
+  at: 0,
+  error: REVOKE_DISABLED ? '已关闭停用检查（开发 / 测试）' : '',
+};
+let revokeLastAttempt = 0;
 
 /**
  * 授权公钥：优先环境变量（CI / 内部构建），否则读随包文件。
@@ -180,16 +205,33 @@ function revokeStamp() {
 }
 
 let revokeRefreshing = false;
+/** @type {NodeJS.Timeout | null} */
+let revokeTimer = null;
 
-/** 拉取并验签远程停用清单；失败保留旧缓存 */
+function setRevokeCheck(ok, error = '') {
+  revokeCheck.ok = ok;
+  revokeCheck.at = Date.now();
+  revokeCheck.error = error;
+  statusCache = null;
+}
+
+/**
+ * 拉取并验签远程停用清单。
+ * 失败会把 revokeCheck.ok 置 false；已安装授权的客户端随后会被禁用，
+ * 直到下一次成功连上且清单里没有命中它。
+ */
 export async function refreshRevocation({ force = false } = {}) {
-  if (!REVOKE_URL) return { ok: false, skipped: true, reason: '未配置远程停用地址' };
+  if (REVOKE_DISABLED || !REVOKE_URL) {
+    setRevokeCheck(true, REVOKE_DISABLED ? '已关闭停用检查（开发 / 测试）' : '未配置远程停用地址');
+    return { ok: true, skipped: true, reason: revokeCheck.error };
+  }
   const cached = readRevokeCache();
-  if (!force && cached && Date.now() - cached.fetchedAt < REVOKE_MAX_AGE_MS) {
+  if (!force && cached && Date.now() - cached.fetchedAt < REVOKE_MAX_AGE_MS && revokeCheck.ok) {
     return { ok: true, cached: true, payload: cached.payload };
   }
   if (revokeRefreshing) return { ok: false, busy: true, reason: '正在刷新停用清单' };
   revokeRefreshing = true;
+  revokeLastAttempt = Date.now();
   try {
     const res = await fetch(REVOKE_URL, {
       headers: { 'Cache-Control': 'no-cache' },
@@ -199,8 +241,10 @@ export async function refreshRevocation({ force = false } = {}) {
     const text = await res.text();
     const verified = verifyRevocationList(text, { publicKeyPem: PUBLIC_KEY });
     if (!verified.ok || !verified.payload) throw new Error(verified.reason || '停用清单验签失败');
+    setRevokeCheck(true);
     if (cached && Number(verified.payload.seq || 0) < Number(cached.payload.seq || 0)) {
-      return { ok: true, ignored: true, reason: '远程清单版本更旧，保留本地缓存' };
+      // 远程清单比本地缓存旧：网络已恢复，但不允许用旧清单“洗掉”已有停用记录
+      return { ok: true, ignored: true, reason: '远程清单版本更旧，保留本地缓存', payload: cached.payload };
     }
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(
@@ -208,20 +252,49 @@ export async function refreshRevocation({ force = false } = {}) {
       JSON.stringify({ token: text.trim(), fetchedAt: Date.now() }, null, 2),
       { encoding: 'utf8', mode: 0o600 }
     );
-    statusCache = null;
     return { ok: true, payload: verified.payload };
   } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+    const reason = err instanceof Error ? err.message : String(err);
+    setRevokeCheck(false, reason);
+    return { ok: false, reason };
   } finally {
     revokeRefreshing = false;
   }
 }
 
 function maybeRefreshRevocation() {
-  if (!REVOKE_URL) return;
+  if (REVOKE_DISABLED || !REVOKE_URL || revokeRefreshing) return;
+  // 失败后最多每分钟重试一次，网络恢复就能尽快解锁
+  if (!revokeCheck.ok) {
+    if (Date.now() - revokeLastAttempt > 60_000) void refreshRevocation({ force: true });
+    return;
+  }
   const cached = readRevokeCache();
-  if (cached && Date.now() - cached.fetchedAt < REVOKE_MAX_AGE_MS) return;
-  void refreshRevocation({ force: true });
+  if (!cached || Date.now() - cached.fetchedAt >= REVOKE_MAX_AGE_MS) {
+    void refreshRevocation({ force: true });
+  }
+}
+
+/**
+ * 启动时先做一次阻塞检查，然后每 30 分钟检查一次。
+ * 由 standalone.js 在 listen 之前调用；测试 / CI 用 TUKU_LICENSE_REVOKE_DISABLE=1 跳过。
+ */
+export async function startRevocationWatch() {
+  if (REVOKE_DISABLED || !REVOKE_URL) {
+    setRevokeCheck(true, REVOKE_DISABLED ? '已关闭停用检查（开发 / 测试）' : '未配置远程停用地址');
+  } else {
+    await refreshRevocation({ force: true });
+  }
+  if (!revokeTimer) {
+    revokeTimer = setInterval(() => void refreshRevocation({ force: true }), REVOKE_MAX_AGE_MS);
+    revokeTimer.unref?.();
+  }
+  return { ...revokeCheck };
+}
+
+export function stopRevocationWatch() {
+  if (revokeTimer) clearInterval(revokeTimer);
+  revokeTimer = null;
 }
 
 /**
@@ -234,7 +307,7 @@ export function licenseStatus({ refresh = false } = {}) {
     partsCache = null;
     statusCache = null;
   }
-  const stamp = `${fileStamp()}|${revokeStamp()}`;
+  const stamp = `${fileStamp()}|${revokeStamp()}|${revokeCheck.ok ? '1' : '0'}|${revokeCheck.at}`;
   if (!refresh && statusCache && statusCache.stamp === stamp) return statusCache.value;
 
   const parts = components(refresh);
@@ -277,14 +350,23 @@ export function licenseStatus({ refresh = false } = {}) {
     ((phoneKey && (revokedPhones.includes(phoneKey) || revokedAccounts.includes(phoneKey))) ||
       revokedMachines.includes(normalizeCode(machineCode)) ||
       revokedMachines.includes(normalizeDeviceCode(deviceCode)));
-  if (revoked) reason = '该手机号或设备已被远程停用，请联系管理员';
   // 仅开发环境：不写授权文件也能测 Pro 页面；安装包绝不能带这个环境变量
   const devPro = process.env.TUKU_DEV_PRO === '1';
 
+  // 失败关闭：已安装真实授权的机器必须每 30 分钟成功连上清单；
+  // 连不上就临时禁用，直到下一次连上且清单里没有命中它。
+  const failClosed = !!payload && !REVOKE_DISABLED;
+  const checkFailed = failClosed && !revokeCheck.ok;
+  const blocked = revoked || checkFailed;
+  if (revoked) reason = '该手机号或设备已被远程停用，请联系管理员';
+  else if (checkFailed) {
+    reason = `无法连接授权服务器，软件已临时禁用${revokeCheck.error ? `（${revokeCheck.error}）` : ''}；网络恢复后会自动重试。`;
+  }
+
   const value = {
     product: PRODUCT,
-    edition: !revoked && (payload || devPro) ? String(payload?.edition || 'pro') : 'free',
-    licensed: !revoked && (!!payload || devPro),
+    edition: !blocked && (payload || devPro) ? String(payload?.edition || 'pro') : 'free',
+    licensed: !blocked && (!!payload || devPro),
     /** 本机是否真的有验签通过的授权文件（区别于只是开发模式临时 Pro） */
     licensedByKey: !revoked && !!payload,
     devPro,
@@ -295,15 +377,29 @@ export function licenseStatus({ refresh = false } = {}) {
     phone,
     account,
     revoked,
+    /** 是否因为连不上停用清单而临时禁用 */
+    checkFailed,
+    /** revoked 或 checkFailed 任一为真时，数据接口全锁 */
+    blocked,
+    revokeRequired: failClosed,
+    revokeUrl: REVOKE_URL || '',
     revokedAt: revoked ? String(revoke?.payload?.issuedAt || '') : '',
-    revokeCheckedAt: revoke?.fetchedAt ? new Date(revoke.fetchedAt).toISOString() : '',
-    revokeError: REVOKE_URL ? '' : '未配置远程停用地址',
+    revokeCheckedAt: revokeCheck.at
+      ? new Date(revokeCheck.at).toISOString()
+      : revoke?.fetchedAt
+        ? new Date(revoke.fetchedAt).toISOString()
+        : '',
+    revokeError: REVOKE_DISABLED
+      ? '已关闭停用检查（开发 / 测试）'
+      : !revokeCheck.ok
+        ? revokeCheck.error
+        : '',
     issuedAt: payload?.issuedAt ? String(payload.issuedAt) : '',
     expires: payload?.expires ? String(payload.expires) : null,
     daysLeft: payload ? daysLeft(payload.expires) : null,
     note: payload?.note ? String(payload.note) : '',
     reason,
-    // 购买页地址由构建方注入；留空时设置页只显示「把机器码发给作者」
+    // 购买页地址由构建方注入；留空时设置页只显示「把设备码发给作者」
     buyUrl: process.env.TUKU_BUY_URL || '',
     features: PRO_FEATURES,
   };
@@ -319,6 +415,11 @@ export function isPro() {
 /** 账号/机器是否被远程停用 */
 export function isRevoked() {
   return licenseStatus().revoked;
+}
+
+/** 数据接口是否应整体锁定（明确停用，或连不上停用清单的失败关闭） */
+export function isBlocked() {
+  return licenseStatus().blocked;
 }
 
 /**

@@ -154,11 +154,19 @@
           </p>
           <div class="kv"><span>清单文件</span><code id="manifestPath"></code></div>
           <div class="kv"><span>本机地址</span><code id="manifestUrl"></code></div>
+          <div class="kv"><span>发布文件</span><code id="publishPath"></code></div>
+          <div class="kv"><span>Gitee 地址</span><code id="publishUrl"></code></div>
           <textarea id="manifestText" class="input mono" rows="5" readonly></textarea>
           <div class="row">
+            <button id="publishFile" class="btn primary" type="button">写入发布文件</button>
             <button id="copyManifest" class="btn" type="button">复制清单内容</button>
-            <button id="copyManifestUrl" class="btn ghost" type="button">复制地址</button>
+            <button id="copyManifestUrl" class="btn ghost" type="button">复制本机地址</button>
+            <button id="copyPublishUrl" class="btn ghost" type="button">复制 Gitee 地址</button>
             <button id="downloadManifest" class="btn ghost" type="button">下载 JSON</button>
+          </div>
+          <div class="hint">
+            「写入发布文件」只改本机仓库的 <code>docs/license/license-revoke.json</code>，还需要
+            <code>git commit &amp;&amp; git push</code>；客户端每 30 分钟拉取一次，断网时会临时禁用。
           </div>
         </div>
       </section>

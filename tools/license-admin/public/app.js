@@ -208,9 +208,12 @@
     $('manifestSeq').textContent = `seq ${state.seq}`;
     $('manifestPath').textContent = state.admin.manifestFile;
     $('manifestUrl').textContent = state.admin.manifestUrl;
+    $('publishPath').textContent = state.admin.publishFile || '（未找到仓库发布文件）';
+    $('publishUrl').textContent = state.admin.publishUrl || '';
     $('manifestText').value = tokenText || '（还没有停用记录；添加手机号或设备后自动生成签名清单）';
     $('copyManifest').disabled = !tokenText;
     $('downloadManifest').disabled = !tokenText;
+    $('publishFile').disabled = !tokenText || !state.admin.publishFile;
   }
 
   function renderIssueResult(created) {
@@ -375,6 +378,17 @@
   });
   $('copyManifestUrl').addEventListener('click', () => {
     if (state?.admin?.manifestUrl) void copy(state.admin.manifestUrl);
+  });
+  $('copyPublishUrl').addEventListener('click', () => {
+    if (state?.admin?.publishUrl) void copy(state.admin.publishUrl);
+  });
+  $('publishFile').addEventListener('click', async () => {
+    try {
+      const data = await api('/api/publish', { method: 'POST', body: '{}' });
+      toast(`已写入 ${data.file}，请 git commit && git push`);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   });
   $('downloadManifest').addEventListener('click', () => {
     if (state?.manifest?.token) {

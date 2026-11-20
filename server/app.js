@@ -56,7 +56,7 @@ import { register as registerDocs } from './routes/docs.js';
 import { register as registerNightBatch } from './routes/night-batch.js';
 import { register as registerLicense } from './routes/license.js';
 import { register as registerDiagnostics } from './routes/diagnostics.js';
-import { isRevoked, requirePro } from './lib/license.js';
+import { licenseStatus, requirePro } from './lib/license.js';
 import { registerBusyProbe, startNightBatchSchedule } from './lib/night-batch.js';
 import { modelsSnapshot } from './lib/model-registry.js';
 import { markInterruptedJobs, pruneJobs } from './jobs.js';
@@ -371,10 +371,17 @@ export function buildApp({ desktop = false } = {}) {
     ) {
       return next();
     }
-    if (isRevoked()) {
+    const st = licenseStatus();
+    if (st.revoked) {
       return res.status(403).json({
-        error: '账号已被远程停用，请联系管理员',
+        error: '该手机号或设备已被远程停用，请联系管理员',
         code: 'account_revoked',
+      });
+    }
+    if (st.blocked) {
+      return res.status(403).json({
+        error: st.reason || '无法连接授权服务器，软件已临时禁用',
+        code: 'license_check_failed',
       });
     }
     next();
