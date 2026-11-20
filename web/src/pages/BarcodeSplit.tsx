@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   api,
-  BASE,
   barcodeThumbUrl,
   copyText,
   downloadFile,
-  getApiToken,
   isDesktop,
   omsProductFolderShotUrl,
   openFolder,
@@ -57,6 +55,13 @@ const FULL_CODE_RE = /^\d{4,6}(?:-[A-Z0-9]{2,}){2,}$/i;
 
 function isFullCode(code: string) {
   return FULL_CODE_RE.test(String(code || '').trim());
+}
+
+/** 三段式 SKU：第二段以 Y01 开头算 eBay，其余非 eBay；非三段式留空 */
+function platformOf(code: string) {
+  const m = String(code || '').trim().match(/^\d{4,6}-([A-Z0-9]+)-[A-Z0-9]+$/i);
+  if (!m) return '';
+  return /^Y01/i.test(m[1]) ? 'eBay' : '非eBay';
 }
 
 /**
@@ -362,6 +367,32 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     return { uploadedTotal, mismatch };
   };
 
+  /** 页面必须处理完的报错/警告；为空才允许点保存/入库/上传 */
+  const flowIssues: string[] = [];
+  if (scan) {
+    scan.groups.forEach((g, i) => {
+      const edit = edits[i];
+      if (edit?.skip) return;
+      const code = (edit?.code ?? g.code ?? '').trim();
+      const full = isFullCode(code);
+      if (!code) flowIssues.push(`#${i + 1} 没有编码`);
+      else if (!full) flowIssues.push(`#${i + 1} 未选完整编码（当前 ${code}）`);
+      if (!String(edit?.productName || '').trim()) flowIssues.push(`#${i + 1} 产品名为空`);
+      if (!g.files.length) flowIssues.push(`#${i + 1} 没有产品图`);
+      for (const w of g.warnings) {
+        if (w.code === 'empty' || w.code === 'consecutive') {
+          flowIssues.push(`#${i + 1} ${w.text}`);
+        }
+      }
+      if (!full && (edit?.omsState === 'empty' || edit?.omsState === 'error')) {
+        flowIssues.push(`#${i + 1} OMS 没查到完整编码 / 查询失败`);
+      }
+      if (!full && edit?.omsState === 'multiple') {
+        flowIssues.push(`#${i + 1} 有多个候选未选择完整编码`);
+      }
+    });
+  }
+
   const buildGroups = () =>
     scan
       ? scan.groups.map((g, i) => {
@@ -379,6 +410,10 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 第 1 步：只保存/复制到文件夹，完成后停下等人工确认 */
   const runSave = async () => {
     if (!scan) return;
+    if (flowIssues.length) {
+      onToast('页面还有报错/警告，先处理完再继续', 'error');
+      return;
+    }
     if (!rootDir.trim()) {
       onToast(i18n.t('k9b498a6d'), 'error');
       return;
@@ -409,13 +444,17 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
-  /** 第 2 步：把已保存的文件夹登记进图库；完成后停下等人工确认 */
+  /** 第 2 步：把文件夹登记进图库；测试阶段允许跳过保存，直接补前置 */
   const runImport = async () => {
-    if (!scan || !applied) {
-      onToast('请先完成保存', 'error');
+    if (!scan) return;
+    if (flowIssues.length) {
+      onToast('页面还有报错/警告，先处理完再继续', 'error');
       return;
     }
-    if (!rootDir.trim()) return;
+    if (!rootDir.trim()) {
+      onToast(i18n.t('k9b498a6d'), 'error');
+      return;
+    }
     const groups = buildGroups();
     setApplyMode('import');
     try {
@@ -426,8 +465,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         groups,
         importToLibrary: true,
         parentFolderId: folderId,
-        // 第 1 步已经清过旧文件，这里不再动磁盘
-        cleanStale: false,
+        // 已保存过就不再动磁盘；直接跳过保存时按当前勾选执行清理
+        cleanStale: applied ? false : cleanStale,
       });
       setApplied(result);
       setUploads({});
@@ -440,15 +479,35 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
-  /** 第 3 步：核对 OMS 名称并自动上传；名称不一致的 SKU 会停下 */
+  /** 第 3 步：核对 OMS 名称并自动上传；测试阶段允许跳过前两步自动补前置 */
   const runUpload = async () => {
-    if (!applied?.importedToLibrary) {
-      onToast('请先完成入库', 'error');
+    if (!scan) return;
+    if (flowIssues.length) {
+      onToast('页面还有报错/警告，先处理完再继续', 'error');
+      return;
+    }
+    if (!rootDir.trim()) {
+      onToast(i18n.t('k9b498a6d'), 'error');
       return;
     }
     setApplyMode('upload');
     try {
-      const up = await uploadAppliedGroups(applied);
+      let base = applied;
+      if (!base?.importedToLibrary) {
+        base = await api.barcodeApply({
+          dir: scan.dir,
+          root: rootDir.trim(),
+          date,
+          groups: buildGroups(),
+          importToLibrary: true,
+          parentFolderId: folderId,
+          cleanStale: applied ? false : cleanStale,
+        });
+        setApplied(base);
+        setUploads({});
+        onLibraryChanged();
+      }
+      const up = await uploadAppliedGroups(base);
       onToast(
         up.mismatch
           ? `上传 ${up.uploadedTotal} 张；有 ${up.mismatch} 个 SKU 名称不一致，已停止等待核对`
@@ -481,16 +540,10 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           if (edit?.skip) return null;
           const code = (edit?.code || g.code || '').trim();
           if (!code) return null;
-          const shoot = edit?.omsRows?.[0]?.shootStatus || '';
-          const platform = /NOT_EBAY/i.test(shoot)
-            ? '非eBay'
-            : /EBAY/i.test(shoot)
-              ? 'eBay'
-              : '';
           return {
             sku: code,
             name: edit?.productName || '',
-            platform,
+            platform: platformOf(code),
             category: '产品/视频拍摄',
           };
         })
@@ -504,38 +557,99 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       ? `${rootDir.trim().replace(/[\\/]+$/, '')}${rootDir.includes('\\') ? '\\' : '/'}${shootDate}`
       : '');
 
-  const downloadReport = async () => {
+  /** 复制成可直接粘贴进 Excel 的表格：日期/时长/进度/工作成果跨行合并 */
+  const copyReportTable = async () => {
     if (!reportRows.length) {
-      onToast('没有可导出的 SKU', 'error');
+      onToast('没有可复制的 SKU', 'error');
       return;
     }
-    try {
-      const token = await getApiToken();
-      const res = await fetch(`${BASE}/api/oms/product/report`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ date: date || new Date().toISOString().slice(0, 10), rows: reportRows }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text.slice(0, 300) || `导出失败（HTTP ${res.status}）`);
+    const header = [
+      '日期',
+      '今日完成工作',
+      '运营',
+      'SKU',
+      '品名',
+      '平台',
+      '类别',
+      '拍摄时长/h',
+      '包装/安装/拆卸/h',
+      '任务总工作时长/h',
+      '进度',
+      '工作成果',
+      '主管/组长/带教',
+    ];
+    const mainCount = reportRows.length;
+    const aoa: string[][] = [header];
+    reportRows.forEach((r, i) => {
+      aoa.push([
+        i === 0 ? shootDate : '',
+        i === 0 ? `产品拍摄*${mainCount}` : '',
+        '',
+        r.sku,
+        r.name,
+        r.platform,
+        r.category,
+        i === 0 ? '待填' : '',
+        i === 0 ? '待填' : '',
+        i === 0 ? '待填' : '',
+        i === 0 ? '100%' : '',
+        i === 0 ? '文件夹截图' : '',
+        '',
+      ]);
+    });
+    aoa.push(['', '图片上传', '', '', '', '', '其它', '', '', '待填', '100%', '文件夹截图', '']);
+
+    const esc = (s: string) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const rowsHtml: string[] = [
+      `<tr>${header.map((h) => `<th>${esc(h)}</th>`).join('')}</tr>`,
+    ];
+    reportRows.forEach((r, i) => {
+      let cells = '';
+      if (i === 0) {
+        cells += `<td rowspan="${mainCount}">${esc(shootDate)}</td>`;
+        cells += `<td rowspan="${mainCount}">${esc(`产品拍摄*${mainCount}`)}</td>`;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `工作日报-${date || new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      onToast('Excel 已生成，工作时长留了「待填」等你补');
-    } catch (err) {
-      onToast((err as Error).message, 'error');
+      cells += `<td></td><td>${esc(r.sku)}</td><td>${esc(r.name)}</td><td>${esc(r.platform)}</td><td>${esc(r.category)}</td>`;
+      if (i === 0) {
+        cells += `<td rowspan="${mainCount}">待填</td>`;
+        cells += `<td rowspan="${mainCount}">待填</td>`;
+        cells += `<td rowspan="${mainCount}">待填</td>`;
+        cells += `<td rowspan="${mainCount}">100%</td>`;
+        cells += `<td rowspan="${mainCount}">文件夹截图</td>`;
+      }
+      cells += '<td></td>';
+      rowsHtml.push(`<tr>${cells}</tr>`);
+    });
+    rowsHtml.push(
+      '<tr><td></td><td>图片上传</td><td></td><td></td><td></td><td></td><td>其它</td><td></td><td></td><td>待填</td><td>100%</td><td>文件夹截图</td><td></td></tr>'
+    );
+    const html = `<html><body><table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:'Microsoft YaHei',Arial,sans-serif;font-size:12px">${rowsHtml.join('')}</table></body></html>`;
+    const tsv = aoa.map((r) => r.join('\t')).join('\n');
+    try {
+      const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
+      if (navigator.clipboard?.write && typeof CI === 'function') {
+        await navigator.clipboard.write([
+          new CI({
+            'text/plain': new Blob([tsv], { type: 'text/plain' }),
+            'text/html': new Blob([html], { type: 'text/html' }),
+          }),
+        ]);
+        onToast('表格已复制，直接粘贴到 Excel（日期/时长/进度已合并）');
+        return;
+      }
+    } catch {
+      /* 富文本剪贴板不可用，退回纯文本 */
     }
+    const ok = await copyText(tsv);
+    onToast(
+      ok ? '已复制为纯文本；粘贴后手动合并日期/时长/进度列' : '复制失败，请重试',
+      ok ? 'info' : 'error'
+    );
   };
 
   const scanLabel = scanning
@@ -880,25 +994,44 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               backdropFilter: 'blur(12px)',
             }}
           >
+            {flowIssues.length > 0 && (
+              <div
+                style={{
+                  marginBottom: 8,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: '1px solid var(--danger, #d9534f)',
+                  background: 'rgba(217, 83, 79, 0.12)',
+                  color: 'var(--danger, #d9534f)',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  lineHeight: 1.7,
+                }}
+              >
+                有 {flowIssues.length} 个问题必须先处理，处理完才能继续：
+                {flowIssues.slice(0, 4).join('；')}
+                {flowIssues.length > 4 ? ` 等 ${flowIssues.length} 项` : ''}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 className="btn primary"
                 onClick={runSave}
-                disabled={applying || !scan.groups.length}
+                disabled={applying || flowIssues.length > 0 || !scan.groups.length}
               >
                 <IconFolder /> {applyMode === 'copy' ? '保存中…' : '1. 保存'}
               </button>
               <button
                 className="btn sm"
                 onClick={runImport}
-                disabled={applying || !applied}
+                disabled={applying || flowIssues.length > 0 || !scan.groups.length}
               >
                 {applyMode === 'import' ? '入库中…' : '2. 入库'}
               </button>
               <button
                 className="btn sm"
                 onClick={runUpload}
-                disabled={applying || !applied?.importedToLibrary}
+                disabled={applying || flowIssues.length > 0 || !scan.groups.length}
               >
                 {applyMode === 'upload' ? '上传中…' : '3. 上传'}
               </button>
@@ -914,8 +1047,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 />
                 {i18n.t('k23b26af3')}
               </label>
-              <button className="btn sm" onClick={downloadReport}>
-                生成 Excel
+              <button className="btn sm" onClick={copyReportTable}>
+                复制表格
               </button>
               <button
                 className="btn sm"
@@ -954,11 +1087,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {i18n.t('k948019e4')}
             </div>
             <div className="hint" style={{ marginTop: 4 }}>
-              {!applied
-                ? '1 保存 → 2 入库 → 3 上传。每一步完成后都会停下，等你确认再点下一步。'
-                : !applied.importedToLibrary
-                  ? '保存完成。确认文件夹内容后，点「2. 入库」。'
-                  : '入库完成。确认图库内容后，点「3. 上传」；名称一致自动上传，不一致停下等你核对。'}
+              {flowIssues.length > 0
+                ? '先处理上面的报错/警告，处理完才能点保存/入库/上传。'
+                : !applied
+                  ? '1 保存 → 2 入库 → 3 上传。测试阶段无报错时可点任意一步，缺的前置会自动补上。'
+                  : !applied.importedToLibrary
+                    ? '保存完成。确认文件夹内容后，点「2. 入库」；也可以直接点「3. 上传」自动补入库。'
+                    : '入库完成。确认图库内容后，点「3. 上传」；名称一致自动上传，不一致停下等你核对。'}
             </div>
           </div>
         </>
@@ -1118,6 +1253,11 @@ function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, on
               onChange={(e) => onChange({ ...edit, productName: e.target.value })}
               placeholder={i18n.t('kc7b5bb11')}
             />
+            {!String(edit.productName || '').trim() && (
+              <span className="hint" style={{ color: 'var(--danger, #d9534f)', fontWeight: 600 }}>
+                产品名为空，保存/上传会停止
+              </span>
+            )}
           </div>
 
           {group.candidates.length > 0 && (
