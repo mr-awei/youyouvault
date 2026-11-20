@@ -70,11 +70,17 @@ function restore() {
 
 function runBuild() {
   return new Promise((resolve, reject) => {
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const child = spawn(npm, ['run', 'dist', '--', '--publish', 'never'], {
+    const args = ['run', 'dist', '--', '--publish', 'never'];
+    // Windows 下 npm 是 .cmd，Node 18.20+ 禁止无 shell 直接 spawn（EINVAL）。
+    // 优先用 node 直接执行 npm-cli.js，找不到再退回 shell。
+    const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+    const useCli = fs.existsSync(npmCli);
+    const cmd = useCli ? process.execPath : process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const child = spawn(cmd, useCli ? [npmCli, ...args] : args, {
       cwd: ROOT,
       stdio: 'inherit',
       env: process.env,
+      shell: useCli ? false : true,
     });
     child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`打包失败，退出码 ${code}`))));
     child.on('error', reject);
