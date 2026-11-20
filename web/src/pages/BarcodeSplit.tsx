@@ -89,7 +89,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [edits, setEdits] = useState<GroupEdit[]>([]);
   const [scanning, setScanning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [applyMode, setApplyMode] = useState<'copy' | 'import' | null>(null);
+  const [applyMode, setApplyMode] = useState<'copy' | 'import' | 'upload' | null>(null);
   const applying = applyMode !== null;
   const [cleanStale, setCleanStale] = useState(true);
   const [applied, setApplied] = useState<BarcodeApplyResponse | null>(null);
@@ -262,6 +262,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
     setScanning(true);
     setApplied(null);
+    setUploads({});
+    setUploadProgress(null);
     try {
       const result = await api.barcodeScan(srcDir.trim());
       setScan(result);
@@ -360,51 +362,99 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     return { uploadedTotal, mismatch };
   };
 
-  const runApply = async (importToLibrary: boolean) => {
+  const buildGroups = () =>
+    scan
+      ? scan.groups.map((g, i) => {
+          const code = (edits[i]?.code ?? g.code).trim();
+          return {
+            code,
+            files: g.files,
+            skip: !!edits[i]?.skip,
+            productName: edits[i]?.productName || '',
+            mainSku: edits[i]?.mainSku || code.match(/^(\d{4,6})/)?.[1] || '',
+          };
+        })
+      : [];
+
+  /** 第 1 步：只保存/复制到文件夹，完成后停下等人工确认 */
+  const runSave = async () => {
     if (!scan) return;
     if (!rootDir.trim()) {
       onToast(i18n.t('k9b498a6d'), 'error');
       return;
     }
-    const groups = scan.groups.map((g, i) => {
-      const code = (edits[i]?.code ?? g.code).trim();
-      return {
-        code,
-        files: g.files,
-        skip: !!edits[i]?.skip,
-        productName: edits[i]?.productName || '',
-        mainSku: edits[i]?.mainSku || code.match(/^(\d{4,6})/)?.[1] || '',
-      };
-    });
-    const usable = groups.filter((g) => !g.skip && g.code.trim());
-    if (!usable.length) {
+    const groups = buildGroups();
+    if (!groups.filter((g) => !g.skip && g.code.trim()).length) {
       onToast(i18n.t('k27d4b20c'), 'error');
       return;
     }
-    setApplyMode(importToLibrary ? 'import' : 'copy');
+    setApplyMode('copy');
     try {
       const result = await api.barcodeApply({
         dir: scan.dir,
         root: rootDir.trim(),
         date,
         groups,
-        importToLibrary,
-        parentFolderId: importToLibrary ? folderId : undefined,
+        importToLibrary: false,
         cleanStale,
       });
       setApplied(result);
-      if (importToLibrary) {
-        onLibraryChanged();
-        const up = await uploadAppliedGroups(result);
-        onToast(
-          up.mismatch
-            ? `已复制 ${result.totalCopied} 张，入库 ${result.importedTotal ?? 0} 张，上传 ${up.uploadedTotal} 张；有 ${up.mismatch} 个 SKU 名称不一致，已停止上传`
-            : `已复制 ${result.totalCopied} 张，入库 ${result.importedTotal ?? 0} 张，上传 ${up.uploadedTotal} 张`,
-          up.mismatch ? 'error' : 'info'
-        );
-      } else {
-        onToast(i18n.t('k2827af98', { p0: result.totalCopied, p1: result.dateDir }));
-      }
+      setUploads({});
+      onToast(i18n.t('k2827af98', { p0: result.totalCopied, p1: result.dateDir }));
+      onToast('保存完成：请确认文件夹内容，再点「入库」', 'info');
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setApplyMode(null);
+    }
+  };
+
+  /** 第 2 步：把已保存的文件夹登记进图库；完成后停下等人工确认 */
+  const runImport = async () => {
+    if (!scan || !applied) {
+      onToast('请先完成保存', 'error');
+      return;
+    }
+    if (!rootDir.trim()) return;
+    const groups = buildGroups();
+    setApplyMode('import');
+    try {
+      const result = await api.barcodeApply({
+        dir: scan.dir,
+        root: rootDir.trim(),
+        date,
+        groups,
+        importToLibrary: true,
+        parentFolderId: folderId,
+        // 第 1 步已经清过旧文件，这里不再动磁盘
+        cleanStale: false,
+      });
+      setApplied(result);
+      setUploads({});
+      onLibraryChanged();
+      onToast(`入库完成：${result.importedTotal ?? 0} 张；请确认图库内容，再点「上传」`, 'info');
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setApplyMode(null);
+    }
+  };
+
+  /** 第 3 步：核对 OMS 名称并自动上传；名称不一致的 SKU 会停下 */
+  const runUpload = async () => {
+    if (!applied?.importedToLibrary) {
+      onToast('请先完成入库', 'error');
+      return;
+    }
+    setApplyMode('upload');
+    try {
+      const up = await uploadAppliedGroups(applied);
+      onToast(
+        up.mismatch
+          ? `上传 ${up.uploadedTotal} 张；有 ${up.mismatch} 个 SKU 名称不一致，已停止等待核对`
+          : `已上传 ${up.uploadedTotal} 张到 OMS`,
+        up.mismatch ? 'error' : 'info'
+      );
     } catch (err) {
       onToast((err as Error).message, 'error');
     } finally {
@@ -833,17 +883,24 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 className="btn primary"
-                onClick={() => runApply(true)}
+                onClick={runSave}
                 disabled={applying || !scan.groups.length}
               >
-                <IconFolder /> {applyMode === 'import' ? '保存/上传中…' : '保存 / 入库 / 上传'}
+                <IconFolder /> {applyMode === 'copy' ? '保存中…' : '1. 保存'}
               </button>
               <button
                 className="btn sm"
-                onClick={() => runApply(false)}
-                disabled={applying || !scan.groups.length}
+                onClick={runImport}
+                disabled={applying || !applied}
               >
-                {applyMode === 'copy' ? i18n.t('k79dc4b09') : i18n.t('k0b75fbd1')}
+                {applyMode === 'import' ? '入库中…' : '2. 入库'}
+              </button>
+              <button
+                className="btn sm"
+                onClick={runUpload}
+                disabled={applying || !applied?.importedToLibrary}
+              >
+                {applyMode === 'upload' ? '上传中…' : '3. 上传'}
               </button>
               <label
                 className="hint"
@@ -897,7 +954,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {i18n.t('k948019e4')}
             </div>
             <div className="hint" style={{ marginTop: 4 }}>
-              保存后会核对 OMS 产品图库名称：一致自动上传，不一致停止并等你核对；不需要再单独点上传。
+              {!applied
+                ? '1 保存 → 2 入库 → 3 上传。每一步完成后都会停下，等你确认再点下一步。'
+                : !applied.importedToLibrary
+                  ? '保存完成。确认文件夹内容后，点「2. 入库」。'
+                  : '入库完成。确认图库内容后，点「3. 上传」；名称一致自动上传，不一致停下等你核对。'}
             </div>
           </div>
         </>
