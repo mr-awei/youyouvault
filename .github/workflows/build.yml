@@ -116,7 +116,9 @@ jobs:
               $env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
             }
             Write-Host "electron-builder attempt $i (mirror=$($i -ge 2))"
-            npm run dist -- --publish never *> build-out.txt
+            # 正式渠道必须出混淆包：dist:secure 先压缩 electron/ + server/，
+            # 再对授权核心做字符串加密与控制流混淆，最后自动还原源码。
+            npm run dist:secure *> build-out.txt
             if ($LASTEXITCODE -eq 0) { exit 0 }
             Write-Host "attempt $i failed with $LASTEXITCODE"
             Start-Sleep -Seconds 15
