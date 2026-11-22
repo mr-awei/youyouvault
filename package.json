@@ -94,7 +94,7 @@
     "vite": "^6.0.7"
   },
   "build": {
-    "appId": "com.tuku.gallery",
+    "appId": "com.youyou.tuku.visual",
     "productName": "youyoutuku",
     "directories": {
       "output": "release-build",
@@ -177,7 +177,7 @@
             "heic"
           ],
           "name": "图片",
-          "description": "用图库打开图片",
+          "description": "用优优图库打开图片",
           "role": "Viewer"
         },
         {
@@ -189,7 +189,7 @@
             "avi"
           ],
           "name": "视频",
-          "description": "用图库打开视频",
+          "description": "用优优图库打开视频",
           "role": "Viewer"
         },
         {
@@ -201,7 +201,7 @@
             "m4a"
           ],
           "name": "音频",
-          "description": "用图库打开音频",
+          "description": "用优优图库打开音频",
           "role": "Viewer"
         }
       ],
@@ -234,7 +234,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "图库",
+      "shortcutName": "优优图库",
+      "uninstallDisplayName": "优优图库",
       "artifactName": "TuKu-Setup-${version}.exe"
     }
   }

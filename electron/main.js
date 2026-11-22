@@ -19,7 +19,6 @@
  *   seed.js        首装示例图
  */
 import { app, Menu, BrowserWindow, dialog, session } from 'electron';
-import fs from 'node:fs';
 import path from 'node:path';
 import { flushLogs, initLogger } from './logger.js';
 import { getSettingsSnapshot as getSettings } from './settings-cache.js';
@@ -50,20 +49,9 @@ export { APP_ICON, APP_NAME } from './main/constants.js';
 
 app.setName(APP_DIR_NAME);
 
-// 老版本的 userData / 缓存目录叫 TuKu，改名 youyoutuku 后要把旧数据搬过来，
-// 否则升级后图库索引和设置看起来「丢了」。只在安装版做，且新目录不存在时执行一次。
-if (app.isPackaged && !process.env.PORTABLE_EXECUTABLE_DIR) {
-  try {
-    const appData = app.getPath('appData');
-    const nextDir = path.join(appData, APP_DIR_NAME);
-    const oldDir = path.join(appData, 'TuKu');
-    if (nextDir !== oldDir && !fs.existsSync(nextDir) && fs.existsSync(oldDir)) {
-      fs.renameSync(oldDir, nextDir);
-    }
-  } catch (err) {
-    console.warn('[desktop] 旧数据目录迁移失败，继续使用新目录：', err?.message || err);
-  }
-}
+// 注意：不要自动把 %APPDATA%\TuKu 改名迁移到 youyoutuku。
+// 本软件与原始图库（TuKu）会在同一台机器上并存，那个目录属于原软件的数据；
+// 改名会直接把原软件的配置 / 图库索引搬走，表现为原软件「设置丢失」。
 
 // 绿色版（electron-builder portable 目标）会把 exe 解到临时目录运行，若仍用默认
 // userData，绿色版与安装版会共用同一个库目录与设置：一边升级 schema、另一边还在写，
@@ -81,7 +69,7 @@ if (process.env.PORTABLE_EXECUTABLE_DIR) {
 //
 // 但开发模式要单独一个 id：dev 跑的是 electron.exe，若与安装版共用 AUMID，任务栏会把
 // 两者并进同一个按钮组，图标沿用已安装 exe 的那枚（旧图标），窗口自己的 icon 怎么设都不显示。
-app.setAppUserModelId(app.isPackaged ? 'com.tuku.gallery' : 'com.tuku.gallery.dev');
+app.setAppUserModelId(app.isPackaged ? 'com.youyou.tuku.visual' : 'com.youyou.tuku.visual.dev');
 
 /* ------------------------- 崩溃捕获与日志落盘（最先初始化） ------------------------- */
 initCrashReporting();

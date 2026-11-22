@@ -47,7 +47,8 @@ Windows 桌面端（Electron）＋ 本地服务（Node）＋ Web UI，同一套�
 
 从 [Releases](https://github.com/mr-awei/youyouvault/releases/latest) 下载 `TuKu-Setup-<version>.exe`（Windows 10/11，NSIS 安装包）。
 
-- 安装版会接管常见图片 / 视频 / 音频的「打开方式」，双击图片即可用图库打开
+- 安装版会接管常见图片 / 视频 / 音频的「打开方式」，双击图片即可用优优图库打开
+- 桌面 / 开始菜单快捷方式名为「**优优图库**」；本软件有独立的应用 ID（`com.youyou.tuku.visual`）与独立的数据目录（`%APPDATA%\youyoutuku`），可以与原始图库（TuKu）**并存安装**，不会覆盖原软件的安装、快捷方式或数据
 - 首次启动选择一个素材文件夹建库，**原文件不动**
 - 更新在后台静默检查与下载，下载完成后才提示：**立即安装并重启** / **下次打开时安装**
 - AI 能力按需下载模型（语义搜索、超分运行库），不下也能用其余全部功能
