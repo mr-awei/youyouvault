@@ -19,7 +19,9 @@ import { build } from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TOOL = path.join(ROOT, 'tools', 'license-admin');
-const OUT_DIR = path.join(ROOT, 'release-build', 'license-admin');
+const OUT_DIR = process.env.TUKU_LICENSE_ADMIN_OUT
+  ? path.resolve(ROOT, process.env.TUKU_LICENSE_ADMIN_OUT)
+  : path.join(ROOT, 'release-build', 'license-admin');
 const BUILD_DIR = path.join(os.tmpdir(), 'tuku-license-admin-build');
 const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const electronVersion = JSON.parse(

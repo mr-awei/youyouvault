@@ -282,6 +282,8 @@ function findModelDir() {
   const candidates = [
     process.env.TUKU_MODEL_DIR || '',
     path.join(ROOT, 'data', 'models'),
+    path.join(process.env.APPDATA || '', 'youyoutuku', 'data', 'models'),
+    // 兼容改名前的安装
     path.join(process.env.APPDATA || '', 'TuKu', 'data', 'models'),
   ].filter(Boolean);
   for (const dir of candidates) {

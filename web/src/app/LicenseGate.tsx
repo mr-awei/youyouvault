@@ -25,14 +25,14 @@ export function LicenseProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void refresh();
-    // 正常 30 分钟一次；被禁用 / 连不上时 1 分钟重试一次，恢复后自动解锁
-    const every = status?.blocked ? 60 * 1000 : 30 * 60 * 1000;
+    // 正常 30 分钟一次；被停用或联网校验失败时 1 分钟重试，恢复后自动回到专业版
+    const every = status?.blocked || status?.checkFailed ? 60 * 1000 : 30 * 60 * 1000;
     const timer = setInterval(() => void refresh(Boolean(status?.blocked)), every);
     return () => clearInterval(timer);
-  }, [refresh, status?.blocked]);
+  }, [refresh, status?.blocked, status?.checkFailed]);
 
+  // 只有明确被远程停用才整屏禁用；联网校验失败 / 授权到期都只是退回免费版
   if (status?.blocked) {
-    const checkFailed = status.checkFailed && !status.revoked;
     return (
       <div
         style={{
@@ -50,24 +50,13 @@ export function LicenseProvider({ children }: { children: React.ReactNode }) {
           className="card"
           style={{ maxWidth: 560, width: '100%', borderColor: 'var(--danger, #d9534f)' }}
         >
-          <h2 style={{ margin: '0 0 8px', color: 'var(--danger, #d9534f)' }}>
-            {checkFailed ? '授权检查失败，软件已临时禁用' : '软件已停用'}
-          </h2>
+          <h2 style={{ margin: '0 0 8px', color: 'var(--danger, #d9534f)' }}>软件已停用</h2>
           <div style={{ lineHeight: 1.8, fontSize: 13 }}>
-            <div>
-              {checkFailed
-                ? status.reason || '无法连接授权服务器。请检查网络后重试。'
-                : status.reason || '该手机号或设备已被远程停用，请联系管理员。'}
-            </div>
+            <div>{status.reason || '该手机号或设备已被远程停用，请联系管理员。'}</div>
             {status.phone && <div className="hint">手机号：{status.phone}</div>}
             <div className="hint">设备码：{status.deviceCode || status.machineCode}</div>
             {status.revokeCheckedAt && (
               <div className="hint">最近检查：{new Date(status.revokeCheckedAt).toLocaleString()}</div>
-            )}
-            {checkFailed && (
-              <div className="hint">
-                启动时和每 30 分钟都会检查；网络恢复并确认未被停用后会自动解除，也可以点下面的按钮立即重试。
-              </div>
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>

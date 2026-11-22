@@ -1,7 +1,7 @@
 {
   "name": "tuku-gallery",
-  "productName": "TuKu",
-  "version": "1.4.1",
+  "productName": "youyoutuku",
+  "version": "1.5.0",
   "private": true,
   "description": "通用本地图片管理工具 — pHash 去重 / 暗色图片库",
   "author": "图库",
@@ -16,7 +16,7 @@
     "node": ">=22.5.0"
   },
   "scripts": {
-    "dev": "concurrently -n server,web,app -c magenta,cyan,green \"node server/index.js\" \"vite\" \"electron . --dev-url=http://localhost:5173\"",
+    "dev": "concurrently -k -n server,web,app -c magenta,cyan,green \"node server/index.js\" \"vite\" \"node scripts/wait-api.mjs && electron . --dev-url=http://localhost:5173\"",
     "dev:web": "concurrently -n server,web -c magenta,cyan \"node server/index.js\" \"vite\"",
     "dev:server": "node server/index.js",
     "build": "vite build",
@@ -86,6 +86,7 @@
     "electron": "^44.4.5",
     "electron-builder": "^26.0.12",
     "eslint": "^10.14.0",
+    "javascript-obfuscator": "^5.10.1",
     "mammoth": "^1.13.0",
     "three": "^0.187.0",
     "typescript": "^5.7.2",
@@ -94,7 +95,7 @@
   },
   "build": {
     "appId": "com.tuku.gallery",
-    "productName": "TuKu",
+    "productName": "youyoutuku",
     "directories": {
       "output": "release-build",
       "buildResources": "build"
@@ -148,7 +149,7 @@
       {
         "provider": "github",
         "owner": "mr-awei",
-        "repo": "gallery"
+        "repo": "youyouvault"
       }
     ],
     "win": {

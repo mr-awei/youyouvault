@@ -380,8 +380,8 @@ export function buildApp({ desktop = false } = {}) {
     }
     if (st.blocked) {
       return res.status(403).json({
-        error: st.reason || '无法连接授权服务器，软件已临时禁用',
-        code: 'license_check_failed',
+        error: st.reason || '软件已停用',
+        code: 'account_revoked',
       });
     }
     next();

@@ -448,7 +448,7 @@ export function createHotfix({
  * 先试它等于每次检查都白等 20 秒。Gitee 镜像可能晚几分钟，但旧清单会因为 seq 不涨被拒，
  * 于是自然落到下一个地址 —— 顺序不影响正确性，只影响速度。
  * 两处都必须验签才算数，所以镜像挂了最多是「这次没更新」。
- * @param {{ owner?: string, repo?: string, gitee?: string }} opts gitee 形如 'mr-awei/gallery'
+ * @param {{ owner?: string, repo?: string, gitee?: string }} opts gitee 形如 'mr-awei/youyouvault'
  */
 export function defaultFeedUrls({ owner = 'mr-awei', repo = 'gallery', gitee = '' } = {}) {
   const urls = [];

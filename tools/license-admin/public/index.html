@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="system">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,11 +12,16 @@
   </head>
   <body>
     <header class="top">
-      <div>
+      <div class="brand">
         <h1>图库 · 授权管理</h1>
-        <p class="sub">手机号 + 设备码签发；一个手机号可绑多台设备，一台设备也可绑多个手机号</p>
+        <p class="sub">手机号 + 设备码一对一；同一台设备多人使用，各自独立授权码</p>
       </div>
       <div class="top-actions">
+        <div id="themeSwitch" class="seg" role="group" aria-label="主题">
+          <button type="button" data-theme-value="light">明亮</button>
+          <button type="button" data-theme-value="dark">黑暗</button>
+          <button type="button" data-theme-value="system">跟随系统</button>
+        </div>
         <span id="keyState" class="pill">读取中…</span>
         <button id="reload" class="btn ghost" type="button">刷新</button>
       </div>
@@ -37,29 +42,31 @@
       <section id="stats" class="stats"></section>
 
       <nav class="tabs" role="tablist">
-        <button class="tab active" data-tab="issue" type="button">签发授权</button>
-        <button class="tab" data-tab="list" type="button">授权记录</button>
-        <button class="tab" data-tab="revoke" type="button">停用清单</button>
+        <button class="tab active" data-tab="issue" type="button">授权</button>
+        <button class="tab" data-tab="active" type="button">已授权</button>
+        <button class="tab" data-tab="revoked" type="button">已停用</button>
       </nav>
 
       <section id="tab-issue" class="panel">
         <div class="grid-2">
-          <form id="issueForm" class="card">
-            <h2>签发 / 续期</h2>
-            <div class="field">
-              <label for="phone">手机号 <span class="req">必填</span></label>
-              <input id="phone" class="input" placeholder="13800000000" autocomplete="off" />
-              <div class="hint">远程停用按手机号匹配；同一个手机号可多次签发给不同设备。</div>
+          <form id="singleForm" class="card">
+            <div class="card-head">
+              <h2>单个授权</h2>
+              <span class="hint">一个手机号 + 一台设备</span>
             </div>
             <div class="field">
-              <label for="machines">设备码 <span class="req">必填</span></label>
-              <textarea id="machines" class="input mono" rows="4" placeholder="每行一个新版设备码，例如：&#10;TK2-A1B2-C3D4-E5F6-7890-ABCD-EF01&#10;TK2-B2C3-D4E5-F6A7-8901-BCDE-F012"></textarea>
-              <div class="hint">支持每行一个，或用逗号 / 空格分隔；带不带横线都可以。设备码在用户软件的「设置 → 授权」里复制（TK2- 开头）。旧版 16 位设备码只用于已售授权，不再新签。</div>
+              <label for="singlePhone">手机号</label>
+              <input id="singlePhone" class="input" placeholder="13800000000" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="singleMachine">设备码</label>
+              <input id="singleMachine" class="input mono" placeholder="TK2-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autocomplete="off" />
+              <div class="hint">在用户软件「设置 → 授权」里复制，TK2- 开头。</div>
             </div>
             <div class="grid-2 tight">
               <div class="field">
-                <label for="days">有效期</label>
-                <select id="days" class="input">
+                <label for="singleDays">有效期</label>
+                <select id="singleDays" class="input">
                   <option value="30">30 天</option>
                   <option value="90">90 天</option>
                   <option value="180">180 天</option>
@@ -69,88 +76,139 @@
                   <option value="custom">自定义到期日</option>
                 </select>
               </div>
-              <div class="field" id="expiresField" hidden>
-                <label for="expires">到期日</label>
-                <input id="expires" class="input" type="date" />
+              <div class="field" id="singleExpiresField" hidden>
+                <label for="singleExpires">到期日</label>
+                <input id="singleExpires" class="input" type="date" />
               </div>
             </div>
             <div class="field">
-              <label for="note">备注（可选）</label>
-              <input id="note" class="input" placeholder="订单号 / 购买渠道 / 对接人" autocomplete="off" />
+              <label for="singleNote">备注（可选）</label>
+              <input id="singleNote" class="input" placeholder="订单号 / 购买渠道 / 对接人" autocomplete="off" />
             </div>
-            <div class="row">
-              <button class="btn primary" type="submit" id="issueBtn">签发授权码</button>
-              <span class="hint">同一手机号 + 同一设备码再次签发会覆盖旧码并更新有效期</span>
-            </div>
+            <button id="issueBtn" class="btn primary block" type="submit">生成授权码</button>
           </form>
 
-          <div class="card">
+          <form id="batchForm" class="card">
+            <div class="card-head">
+              <h2>批量授权</h2>
+              <span class="hint">每行一对，不能交叉</span>
+            </div>
+            <div class="field">
+              <label for="batchPairs">手机号 + 设备码</label>
+              <textarea
+                id="batchPairs"
+                class="input mono"
+                rows="7"
+                placeholder="每行一条，手机号在前、设备码在后：&#10;13800000000 TK2-A1B2-C3D4-E5F6-7890-ABCD-EF01&#10;13900001111,TK2-B2C3-D4E5-F6A7-8901-BCDE-F012"
+              ></textarea>
+              <div class="hint">空格、逗号或 Tab 分隔。每行只授权该行的手机号 + 设备码组合。</div>
+            </div>
+            <div class="grid-2 tight">
+              <div class="field">
+                <label for="batchDays">有效期</label>
+                <select id="batchDays" class="input">
+                  <option value="30">30 天</option>
+                  <option value="90">90 天</option>
+                  <option value="180">180 天</option>
+                  <option value="365" selected>1 年</option>
+                  <option value="730">2 年</option>
+                  <option value="0">永久</option>
+                  <option value="custom">自定义到期日</option>
+                </select>
+              </div>
+              <div class="field" id="batchExpiresField" hidden>
+                <label for="batchExpires">到期日</label>
+                <input id="batchExpires" class="input" type="date" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="batchNote">备注（可选）</label>
+              <input id="batchNote" class="input" placeholder="整批共用的备注" autocomplete="off" />
+            </div>
+            <button id="batchIssueBtn" class="btn primary block" type="submit">批量生成授权码</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
             <h2>签发结果</h2>
-            <div id="issueResult" class="result empty">签发后在这里显示激活码，可逐个复制或整批下载。</div>
+            <div class="row">
+              <button id="copyCreated" class="btn sm" type="button" disabled>复制全部</button>
+              <button id="downloadCreated" class="btn sm ghost" type="button" disabled>下载 TXT</button>
+            </div>
           </div>
+          <div id="issueResult" class="result empty">签发后在这里显示授权码。</div>
         </div>
 
         <div class="card tip">
-          <h3>规则说明</h3>
+          <h3>授权规则</h3>
           <ul>
-            <li><strong>手机号 ↔ 设备</strong>：多对多。一个手机号可以签多台设备；同一台设备也可以签给多个手机号（各自一份激活码）。</li>
-            <li><strong>设备码</strong>：由 SMBIOS UUID、主板 + BIOS 序列号、启动盘物理序列号、TPM（可用时）、MachineGuid、CPU + 网卡共 6 组特征计算；比旧的 4 项更难伪造。</li>
-            <li><strong>会变的情况</strong>：换主板 / 启动盘 / 网卡、重装或克隆系统、虚拟机迁移。6 组允许变 2 组，且必须至少命中一个强特征（UUID / 主板 / 启动盘 / TPM）。</li>
-            <li><strong>取消授权</strong>：签发记录只是台账；真正让客户端失效要把手机号或设备加入停用清单，并让客户端能访问到清单地址。</li>
+            <li>每个授权码固定绑定一个手机号 + 一台设备，不能跨手机号复用。</li>
+            <li>同一台设备多人使用时，每个手机号分别签发自己的授权码；取消其中一条不影响其他人。</li>
+            <li>取消授权会写入停用清单，客户端联网刷新后生效；恢复授权后同样需要客户端刷新。</li>
           </ul>
         </div>
       </section>
 
-      <section id="tab-list" class="panel" hidden>
+      <section id="tab-active" class="panel" hidden>
         <div class="card">
-          <div class="row between">
-            <h2>授权记录</h2>
+          <div class="toolbar">
             <div class="row">
-              <input id="search" class="input search" placeholder="搜索手机号 / 设备码 / 备注" />
-              <button
-                id="importLegacy"
-                class="btn ghost"
-                type="button"
-                title="扫描 licenses/ 下以前用命令行导出的 .key / .txt 激活码"
-              >
+              <h2>已授权</h2>
+              <span id="activeCount" class="pill"></span>
+            </div>
+            <div class="row">
+              <input id="activeSearch" class="input search" placeholder="搜索手机号 / 设备码 / 备注" />
+              <button id="importLegacy" class="btn ghost" type="button" title="扫描 licenses/ 下以前导出的 .key / .txt 激活码">
                 导入旧激活码
               </button>
+              <button id="cancelSelected" class="btn danger" type="button" disabled>取消选中授权</button>
             </div>
           </div>
-          <div id="listTable" class="table-wrap"></div>
+          <div class="inline-form">
+            <input id="revokePhone" class="input" placeholder="输入手机号，停用其全部授权码" autocomplete="off" />
+            <button id="revokePhoneBtn" class="btn danger" type="button">停用手机号</button>
+            <span class="hint">该手机号生成的所有授权码都会失效，可在「已停用」页恢复。</span>
+          </div>
+          <div id="activeTable" class="table-wrap"></div>
         </div>
       </section>
 
-      <section id="tab-revoke" class="panel" hidden>
-        <div class="grid-2">
-          <div class="card">
-            <h2>停用手机号</h2>
-            <p class="hint">该手机号名下的所有设备一起锁定。适用于离职、违约、整账号退款。</p>
+      <section id="tab-revoked" class="panel" hidden>
+        <div class="card">
+          <div class="toolbar">
             <div class="row">
-              <input id="revokePhone" class="input" placeholder="13800000000" autocomplete="off" />
-              <button id="revokePhoneBtn" class="btn danger" type="button">停用手机号</button>
+              <h2>已停用</h2>
+              <span id="revokedCount" class="pill"></span>
             </div>
+            <div class="row">
+              <input id="revokedSearch" class="input search" placeholder="搜索手机号 / 设备码 / 备注" />
+              <button id="restoreSelected" class="btn primary" type="button" disabled>恢复选中授权</button>
+            </div>
+          </div>
+          <div id="revokedTable" class="table-wrap"></div>
+        </div>
+
+        <div id="legacyRevokes" class="card" hidden>
+          <h2>按手机号 / 设备停用</h2>
+          <p class="hint">兼容以前生成的停用记录；恢复其中一项会影响该手机号或该设备下的所有授权。</p>
+          <div class="field">
+            <label>手机号</label>
             <div id="revokedPhoneList" class="chips"></div>
           </div>
-          <div class="card">
-            <h2>停用设备</h2>
-            <p class="hint">只锁定这一台设备，同手机号下的其它设备不受影响。</p>
-            <div class="row">
-              <input id="revokeMachine" class="input mono" placeholder="TK2-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autocomplete="off" />
-              <button id="revokeMachineBtn" class="btn danger" type="button">停用设备</button>
-            </div>
+          <div class="field">
+            <label>设备码</label>
             <div id="revokedMachineList" class="chips"></div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="row between">
-            <h2>签名停用清单</h2>
+        <details class="card">
+          <summary>
+            <span>停用清单与发布</span>
             <span id="manifestSeq" class="pill"></span>
-          </div>
+          </summary>
           <p class="hint">
-            客户端启动 / 手动刷新授权时会拉取并用内置公钥验签。把清单放到任意静态 HTTPS 地址，再让软件设置
-            <code>TUKU_LICENSE_REVOKE_URL</code> 指向它即可。本工具也临时提供本机地址，便于测试。
+            客户端启动 / 刷新授权时拉取并用内置公钥验签。发布文件写入后还需要 <code>git commit &amp;&amp; git push</code>。
           </p>
           <div class="kv"><span>清单文件</span><code id="manifestPath"></code></div>
           <div class="kv"><span>本机地址</span><code id="manifestUrl"></code></div>
@@ -164,11 +222,7 @@
             <button id="copyPublishUrl" class="btn ghost" type="button">复制 Gitee 地址</button>
             <button id="downloadManifest" class="btn ghost" type="button">下载 JSON</button>
           </div>
-          <div class="hint">
-            「写入发布文件」只改本机仓库的 <code>docs/license/license-revoke.json</code>，还需要
-            <code>git commit &amp;&amp; git push</code>；客户端每 30 分钟拉取一次，断网时会临时禁用。
-          </div>
-        </div>
+        </details>
       </section>
     </main>
 

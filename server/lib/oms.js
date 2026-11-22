@@ -41,24 +41,31 @@ export function normalizeBaseUrl(input) {
 /**
  * 从 OMS 返回的多行里挑出可用于建文件夹的完整编码。
  * 同一条 salesSku 可能重复出现（同 SKU 多道工序），先按编码去重。
+ * 偶尔一个单元格塞了多个编码（换行 / 空格 / 逗号分隔），要拆开——否则会拼成一个
+ * 不存在的文件夹名。
  */
 export function uniqueSalesSkus(rows) {
   const seen = new Set();
   const out = [];
   for (const row of Array.isArray(rows) ? rows : []) {
-    const sku = String(row?.salesSku || '').trim();
-    if (!sku || seen.has(sku)) continue;
-    seen.add(sku);
-    out.push({
-      /** 行 id（视觉拍摄列表的质检/送拍行） */
-      id: row?.id != null ? String(row.id) : row?.shootingItemId != null ? String(row.shootingItemId) : '',
-      salesSku: sku,
-      productName: String(row?.productName || ''),
-      // 视觉拍摄页把采购单/送拍单放在 poNo / documentNo
-      billNo: String(row?.documentNo || row?.poNo || row?.billNo || ''),
-      shootStatus: String(row?.shootingType || row?.shootStatus || ''),
-      status: String(row?.status || ''),
-    });
+    const parts = String(row?.salesSku || '')
+      .split(/[\s,，;；]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const sku of parts) {
+      if (seen.has(sku)) continue;
+      seen.add(sku);
+      out.push({
+        /** 行 id（视觉拍摄列表的质检/送拍行） */
+        id: row?.id != null ? String(row.id) : row?.shootingItemId != null ? String(row.shootingItemId) : '',
+        salesSku: sku,
+        productName: String(row?.productName || ''),
+        // 视觉拍摄页把采购单/送拍单放在 poNo / documentNo
+        billNo: String(row?.documentNo || row?.poNo || row?.billNo || ''),
+        shootStatus: String(row?.shootingType || row?.shootStatus || ''),
+        status: String(row?.status || ''),
+      });
+    }
   }
   return out;
 }

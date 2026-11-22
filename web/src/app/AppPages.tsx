@@ -95,6 +95,8 @@ type Props = {
   startTour: () => void;
   /** 库内写操作后统一对账（列表 + 统计 + 跟着后台扫描） */
   onLibraryChanged: () => void;
+  /** 设置页打开时直接落到哪一节（头像菜单的「关于软件 / 授权」入口） */
+  settingsSection?: 'general' | 'about' | 'license';
 };
 
 /**
@@ -112,7 +114,7 @@ export default function AppPages(props: Props) {
     refreshGallery, undoFromGrid, relocateMissing, purgeMissing, addToPlaylist, addToFolder,
     reorderInFolder, markAllSeen, dropTagOnImage, ungroupStackAt, stackSelection, stackDropOnImage,
     enterFolder, dropImagesOnFolderAt, openRoot, openFromFolderGroup, showUnfiled,
-    startTour, onLibraryChanged,
+    startTour, onLibraryChanged, settingsSection,
   } = props;
 
   return (
@@ -283,6 +285,7 @@ export default function AppPages(props: Props) {
               onStartTour={startTour}
               onOpenTutorial={() => setView('tutorial')}
               onLibraryChanged={onLibraryChanged}
+              initialSection={settingsSection}
             />
           </Suspense>
         )}

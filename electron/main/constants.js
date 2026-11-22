@@ -15,10 +15,11 @@ export const APP_ROOT_DIR = path.resolve(__dirname, '..', '..');
 export const START_HIDDEN = process.argv.includes('--hidden');
 
 export const APP_NAME = '图库';
-// 磁盘上的目录名一律 ASCII：安装目录、AppData 数据目录都会跟着它走。
+// 磁盘上的目录名一律 ASCII：安装目录、AppData 数据目录、缓存目录都会跟着它走。
 // 中文目录还有实打实的坑——node:sqlite 在中文路径下关闭后句柄不释放，
 // 删库目录会卡住（见 server/libraries.js 里库目录也用 ASCII 名）。
-export const APP_DIR_NAME = 'TuKu';
+// 目录名固定用 youyoutuku（老版本是 TuKu，升级时 main.js 会做一次迁移）。
+export const APP_DIR_NAME = 'youyoutuku';
 export const APP_ICON = path.join(APP_ROOT_DIR, 'build', 'icon.ico');
 
 /** 开发用：让桌面窗口加载 Vite 开发服务器（前端热更新），API 走 npm run dev 起的 3001。

@@ -30,7 +30,7 @@ const baseManifest = () => ({
   notes: '修导出首帧闪回',
   createdAt: '2026-11-16T00:00:00.000Z',
   files: [file('web/index.html'), file('server/lib/fonts.js')],
-  urls: ['https://github.com/mr-awei/gallery/releases/download/hotfix/pack-3.zip'],
+  urls: ['https://github.com/mr-awei/youyouvault/releases/download/hotfix/pack-3.zip'],
 });
 
 const ctx = { shellVersion: '1.2.20', schemaVersion: SCHEMA_VERSION, lastSeq: 2 };

@@ -176,6 +176,24 @@ export function formatDeviceCode(value) {
   return `TK2-${hex.match(/.{1,4}/g).join('-')}`;
 }
 
+/** 停用清单 / 台账里统一使用的设备码：优先 24 位 v2，其次 16 位 v1 */
+export function normalizeMachineKey(value) {
+  const v2 = normalizeDeviceCode(value);
+  if (v2.length === 24) return v2;
+  const v1 = normalizeCode(value);
+  return v1.length === 16 ? v1 : '';
+}
+
+/**
+ * 单条授权 = 一个手机号 + 一台设备。
+ * 同一台设备多人使用时，每个手机号各自一条；停用其中一条不会影响其他人。
+ */
+export function licensePairKey(phone, machine) {
+  const p = normalizePhone(phone);
+  const m = normalizeMachineKey(machine);
+  return p && m ? `${p}|${m}` : '';
+}
+
 /**
  * v2 设备码比对：6 组里允许漂移，且强特征至少命中 1 组。
  * 当前读不到的组（0000）不参与计分。
@@ -269,6 +287,8 @@ export function signLicenseKey(payload, privateKeyPem) {
 export function parseLicenseKey(input) {
   let raw = String(input ?? '').trim();
   if (!raw) return null;
+  // 先挡住超长输入，避免恶意内容把 base64 / JSON 解析拖死
+  if (raw.length > 8192) return null;
   if (raw.startsWith('{')) {
     try {
       raw = String(JSON.parse(raw)?.key || '').trim();
@@ -276,10 +296,12 @@ export function parseLicenseKey(input) {
       return null;
     }
   }
+  if (raw.length > 8192) return null;
   const parts = raw.split('.');
   if (parts.length !== 3 || parts[0] !== PREFIX) return null;
   try {
     const json = Buffer.from(parts[1], 'base64url').toString('utf8');
+    if (json.length > 4096) return null;
     const sig = Buffer.from(parts[2], 'base64url');
     const payload = JSON.parse(json);
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
@@ -308,6 +330,8 @@ export function verifyLicenseKey(key, opts = {}) {
   if (!publicKeyPem) return { ok: false, reason: '未内置授权公钥' };
   const parsed = parseLicenseKey(key);
   if (!parsed) return { ok: false, reason: '激活码格式不正确' };
+  // Ed25519 签名固定 64 字节；长度不对直接拒绝，不进入 OpenSSL 验签
+  if (parsed.sig.length !== 64) return { ok: false, reason: '激活码签名长度不正确' };
 
   const valid = (() => {
     try {
@@ -354,7 +378,11 @@ export function verifyLicenseKey(key, opts = {}) {
 
 /**
  * 远程停用清单：作者私钥签名，客户端用同一把公钥验签。
- * payload: { v:1, product:'tuku', seq, issuedAt, revokedAccounts:[], revokedMachines:[] }
+ * payload: {
+ *   v:1, product:'tuku', seq, issuedAt,
+ *   revokedPhones:[], revokedAccounts:[], revokedMachines:[],
+ *   revokedPairs:['手机号|设备码'] // 只停用「某个手机号 + 某台设备」这一条授权
+ * }
  */
 export function signRevocationList(payload, privateKeyPem) {
   const body = {
@@ -365,6 +393,7 @@ export function signRevocationList(payload, privateKeyPem) {
     revokedPhones: [],
     revokedAccounts: [],
     revokedMachines: [],
+    revokedPairs: [],
     ...payload,
   };
   const json = JSON.stringify(body);
@@ -376,6 +405,7 @@ export function signRevocationList(payload, privateKeyPem) {
 export function parseRevocationList(input) {
   let raw = String(input ?? '').trim();
   if (!raw) return null;
+  if (raw.length > 1024 * 1024) return null;
   if (raw.startsWith('{')) {
     try {
       raw = String(JSON.parse(raw)?.token || '').trim();
@@ -383,10 +413,12 @@ export function parseRevocationList(input) {
       return null;
     }
   }
+  if (raw.length > 1024 * 1024) return null;
   const parts = raw.split('.');
   if (parts.length !== 3 || parts[0] !== REVOKE_PREFIX) return null;
   try {
     const json = Buffer.from(parts[1], 'base64url').toString('utf8');
+    if (json.length > 1024 * 1024) return null;
     const sig = Buffer.from(parts[2], 'base64url');
     const payload = JSON.parse(json);
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
@@ -400,6 +432,7 @@ export function verifyRevocationList(token, { publicKeyPem = '' } = {}) {
   if (!publicKeyPem) return { ok: false, reason: '未内置授权公钥' };
   const parsed = parseRevocationList(token);
   if (!parsed) return { ok: false, reason: '停用清单格式不正确' };
+  if (parsed.sig.length !== 64) return { ok: false, reason: '停用清单签名长度不正确' };
   const valid = (() => {
     try {
       return crypto.verify(null, Buffer.from(parsed.json, 'utf8'), publicKeyPem, parsed.sig);

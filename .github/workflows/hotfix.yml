@@ -25,7 +25,7 @@ jobs:
     # 放在 job 级才能被下面 step 的 if 读到（step 自己的 env 在 if 里不可见）
     env:
       GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-      GITEE_REPO: ${{ secrets.GITEE_REPO || 'mr-awei/gallery' }}
+      GITEE_REPO: ${{ secrets.GITEE_REPO || 'mr-awei/youyouvault' }}
     steps:
       - uses: actions/checkout@v4
 

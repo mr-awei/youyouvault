@@ -35,10 +35,15 @@ function resolveApiToken() {
   if (process.env.TUKU_USER_DATA) candidates.push(path.join(process.env.TUKU_USER_DATA, '.api-token'));
   const home = os.homedir();
   if (process.platform === 'win32') {
-    candidates.push(path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), '图库', '.api-token'));
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    candidates.push(path.join(appData, 'youyoutuku', '.api-token'));
+    // 兼容改名前的目录
+    candidates.push(path.join(appData, 'TuKu', '.api-token'), path.join(appData, '图库', '.api-token'));
   } else if (process.platform === 'darwin') {
+    candidates.push(path.join(home, 'Library', 'Application Support', 'youyoutuku', '.api-token'));
     candidates.push(path.join(home, 'Library', 'Application Support', '图库', '.api-token'));
   } else {
+    candidates.push(path.join(home, '.config', 'youyoutuku', '.api-token'));
     candidates.push(path.join(home, '.config', '图库', '.api-token'));
   }
   candidates.push(fileURLToPath(new URL('../.api-token', import.meta.url)));

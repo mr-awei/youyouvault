@@ -11,7 +11,9 @@
  *
  * 数据关系：
  * - 一次签发 = 一个手机号 + 一个新版设备码（TK2-...）；同一手机号可签多台设备。
- * - 停用手机号 = 该手机号下所有设备一起锁定；停用设备 = 只锁定这一台。
+ * - 同一台设备多人使用时，每个手机号各有独立授权码；取消其中一条不影响其他人。
+ * - 停用手机号 = 该手机号下所有设备一起锁定；停用设备 = 只锁定这一台；
+ *   取消某条授权 = 只停用「手机号 + 设备码」这一对。
  * - 新版授权码同时写 machine / machine2（都指向 v2 设备码），老客户端会安全拒绝，
  *   老授权码（只有 machine v1）继续按旧规则验证。
  */
@@ -27,8 +29,10 @@ import {
   formatCode,
   formatDeviceCode,
   isValidPhone,
+  licensePairKey,
   normalizeCode,
   normalizeDeviceCode,
+  normalizeMachineKey,
   normalizePhone,
   parseLicenseKey,
   signLicenseKey,
@@ -84,12 +88,13 @@ const addDays = (days) => {
 
 function emptyStore() {
   return {
-    version: 1,
+    version: 2,
     seq: 0,
     updatedAt: '',
     licenses: [],
     revokedPhones: [],
     revokedMachines: [],
+    revokedPairs: [],
   };
 }
 
@@ -109,6 +114,18 @@ function loadStore() {
           .map((m) => {
             const v2 = normalizeDeviceCode(m);
             return v2.length === 24 ? v2 : normalizeCode(m);
+          })
+          .filter(Boolean)
+      : [],
+    revokedPairs: Array.isArray(data.revokedPairs)
+      ? data.revokedPairs
+          .map((pair) => {
+            if (typeof pair === 'string') {
+              const [p, ...rest] = pair.split('|');
+              return licensePairKey(p, rest.join('|'));
+            }
+            if (pair && typeof pair === 'object') return licensePairKey(pair.phone, pair.machine);
+            return '';
           })
           .filter(Boolean)
       : [],
@@ -132,6 +149,7 @@ function manifestToken() {
       revokedPhones: store.revokedPhones,
       revokedAccounts: store.revokedPhones, // 兼容旧客户端
       revokedMachines: store.revokedMachines,
+      revokedPairs: store.revokedPairs,
     },
     cfg.privateKey
   );
@@ -205,17 +223,21 @@ function readPublishedSeq() {
 }
 
 function decorate(record) {
-  const m2 = normalizeDeviceCode(record.machine);
-  const m1 = normalizeCode(record.machine);
-  const revoked =
-    store.revokedPhones.includes(normalizePhone(record.phone)) ||
-    (m2.length === 24 && store.revokedMachines.includes(m2)) ||
-    (m2.length !== 24 && m1.length === 16 && store.revokedMachines.includes(m1));
+  const machineKey = normalizeMachineKey(record.machine);
+  const phoneKey = normalizePhone(record.phone);
+  const pairKey = licensePairKey(phoneKey, machineKey);
+  const phoneRevoked = store.revokedPhones.includes(phoneKey);
+  const machineRevoked = !!machineKey && store.revokedMachines.includes(machineKey);
+  const pairRevoked = !!pairKey && store.revokedPairs.includes(pairKey);
+  const revoked = phoneRevoked || machineRevoked || pairRevoked;
   const expired = !revoked && isExpired(record.expires);
   return {
     ...record,
-    deviceVersion: m2.length === 24 ? 2 : 1,
+    phone: phoneKey || record.phone,
+    machine: machineKey.length === 24 ? formatDeviceCode(machineKey) : record.machine,
+    deviceVersion: machineKey.length === 24 ? 2 : 1,
     status: revoked ? 'revoked' : expired ? 'expired' : 'active',
+    revokedBy: phoneRevoked ? 'phone' : machineRevoked ? 'machine' : pairRevoked ? 'pair' : '',
     daysLeft: daysLeft(record.expires),
   };
 }
@@ -245,9 +267,14 @@ function state() {
       revoked: licenses.filter((l) => l.status === 'revoked').length,
       revokedPhones: store.revokedPhones.length,
       revokedMachines: store.revokedMachines.length,
+      revokedPairs: store.revokedPairs.length,
     },
     licenses,
-    revocations: { phones: store.revokedPhones, machines: store.revokedMachines },
+    revocations: {
+      phones: store.revokedPhones,
+      machines: store.revokedMachines,
+      pairs: store.revokedPairs,
+    },
     seq: store.seq,
     manifest: { token: readManifest() },
   };
@@ -274,7 +301,9 @@ function issueOne({ phone, machine, edition, issuedAt, expires, note }) {
     const checked = verifyLicenseKey(key, { publicKeyPem: cfg.publicKey, deviceCode });
     if (!checked.ok) throw new Error(`自检失败：${checked.reason}`);
   }
-  const existing = store.licenses.find((x) => x.phone === phone && x.machine === deviceCode);
+  const existing = store.licenses.find(
+    (x) => normalizePhone(x.phone) === phone && normalizeMachineKey(x.machine) === normalizeDeviceCode(deviceCode)
+  );
   const record = {
     id: existing?.id || crypto.randomUUID(),
     phone,
@@ -290,6 +319,70 @@ function issueOne({ phone, machine, edition, issuedAt, expires, note }) {
   if (existing) Object.assign(existing, record);
   else store.licenses.push(record);
   return record;
+}
+
+function readValidity(body) {
+  const expiresArg = String(body.expires || '').trim();
+  const daysArg = body.days;
+  if (expiresArg) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expiresArg) || !Number.isFinite(Date.parse(expiresArg))) {
+      return { error: '到期日格式应为 YYYY-MM-DD' };
+    }
+    return { expires: expiresArg };
+  }
+  if (daysArg !== undefined && daysArg !== null && daysArg !== '' && Number(daysArg) !== 0) {
+    const n = Number(daysArg);
+    if (!Number.isFinite(n) || n < 1) return { error: '有效天数应为 ≥1 的数字，0 表示永久' };
+    return { expires: addDays(n) };
+  }
+  return { expires: null };
+}
+
+/** 从「手机号 + 设备码」一行里拆出两段；设备码可带 TK2- 或直接 24 位 */
+function parsePairLine(line) {
+  const raw = String(line ?? '').trim();
+  if (!raw) return null;
+  const match = raw.match(/(?:TK2[-\s]?)?(?:[0-9A-Fa-f]{4}[-\s]?){5}[0-9A-Fa-f]{4}/);
+  if (!match) return null;
+  return {
+    phone: normalizePhone(raw.replace(match[0], ' ')),
+    machine: normalizeDeviceCode(match[0]),
+  };
+}
+
+/** 批量授权必须显式成对：一行 / 一个对象只能有一个手机号和一个设备码 */
+function normalizeIssuePairs(body) {
+  const source = Array.isArray(body.pairs) ? body.pairs : [];
+  if (source.length > 500) return { error: '一次最多批量授权 500 条' };
+  const pairs = [];
+  for (let i = 0; i < source.length; i++) {
+    const item = source[i];
+    const parsed =
+      typeof item === 'string'
+        ? parsePairLine(item)
+        : item && typeof item === 'object'
+          ? { phone: normalizePhone(item.phone), machine: normalizeDeviceCode(item.machine) }
+          : null;
+    if (!parsed) return { error: `第 ${i + 1} 行格式不正确，应为「手机号 + 设备码」` };
+    if (!isValidPhone(parsed.phone)) return { error: `第 ${i + 1} 行手机号格式不正确` };
+    if (parsed.machine.length !== 24) {
+      return {
+        error:
+          parsed.machine.length === 16
+            ? `第 ${i + 1} 行是旧版设备码，已不能用于新签发`
+            : `第 ${i + 1} 行设备码应为 TK2-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX（24 位十六进制）`,
+      };
+    }
+    pairs.push({ phone: parsed.phone, machine: parsed.machine });
+  }
+  // 完全相同的「手机号 + 设备码」在本次请求里只签一次
+  const unique = [...new Map(pairs.map((p) => [licensePairKey(p.phone, p.machine), p])).values()];
+  return { pairs: unique };
+}
+
+function selectedRecords(body) {
+  const ids = new Set((Array.isArray(body.ids) ? body.ids : []).map(String));
+  return store.licenses.filter((x) => ids.has(x.id));
 }
 
 /* ------------------------------ HTTP 工具 ------------------------------ */
@@ -357,44 +450,93 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     const phone = normalizePhone(body.phone);
     if (!isValidPhone(phone)) return sendJson(res, 400, { error: '手机号格式不正确（5–20 位数字，可带 +）' });
-
-    const raw = body.machines ?? body.machine;
-    const list = (Array.isArray(raw) ? raw : [raw])
-      .flatMap((v) => String(v ?? '').split(/[\s,，;；]+/))
-      .map((v) => normalizeDeviceCode(v))
-      .filter(Boolean);
-    const machines = [...new Set(list)];
-    if (!machines.length) return sendJson(res, 400, { error: '至少填写一个设备码' });
-    const bad = machines.find((m) => m.length !== 24);
-    if (bad) {
+    const machine = normalizeDeviceCode(body.machine ?? body.machines);
+    if (machine.length !== 24) {
       return sendJson(res, 400, {
         error:
-          bad.length === 16
+          machine.length === 16
             ? '这是旧版设备码，已不能用于新签发。请用户升级客户端后复制 TK2- 开头的新版设备码。'
-            : `设备码应为 TK2-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX（24 位十六进制）：${bad}`,
+            : `设备码应为 TK2-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX（24 位十六进制）：${machine}`,
       });
     }
+    const validity = readValidity(body);
+    if (validity.error) return sendJson(res, 400, { error: validity.error });
+
+    const edition = String(body.edition || 'pro').trim() || 'pro';
+    const note = String(body.note || '').slice(0, 200);
+    const created = [issueOne({ phone, machine, edition, issuedAt: today(), expires: validity.expires, note })];
+    saveStore();
+    return sendJson(res, 200, { ok: true, created, state: state() });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/issue-batch') {
+    if (!cfg.privateKey) return sendJson(res, 503, { error: '读不到授权私钥，无法签发' });
+    const body = await readJson(req);
+    const normalized = normalizeIssuePairs(body);
+    if (normalized.error) return sendJson(res, 400, { error: normalized.error });
+    if (!normalized.pairs.length) return sendJson(res, 400, { error: '至少填写一条「手机号 + 设备码」' });
+    const validity = readValidity(body);
+    if (validity.error) return sendJson(res, 400, { error: validity.error });
 
     const edition = String(body.edition || 'pro').trim() || 'pro';
     const note = String(body.note || '').slice(0, 200);
     const issuedAt = today();
-    const expiresArg = String(body.expires || '').trim();
-    const daysArg = body.days;
-    let expires = null;
-    if (expiresArg) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(expiresArg) || !Number.isFinite(Date.parse(expiresArg))) {
-        return sendJson(res, 400, { error: '到期日格式应为 YYYY-MM-DD' });
-      }
-      expires = expiresArg;
-    } else if (daysArg !== undefined && daysArg !== null && daysArg !== '' && Number(daysArg) !== 0) {
-      const n = Number(daysArg);
-      if (!Number.isFinite(n) || n < 1) return sendJson(res, 400, { error: '有效天数应为 ≥1 的数字，0 表示永久' });
-      expires = addDays(n);
-    }
-
-    const created = machines.map((m) => issueOne({ phone, machine: m, edition, issuedAt, expires, note }));
+    const created = normalized.pairs.map((pair) =>
+      issueOne({ phone: pair.phone, machine: pair.machine, edition, issuedAt, expires: validity.expires, note })
+    );
     saveStore();
     return sendJson(res, 200, { ok: true, created, state: state() });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/cancel') {
+    if (!cfg.privateKey) return sendJson(res, 503, { error: '读不到授权私钥，无法更新停用清单' });
+    const body = await readJson(req);
+    const records = selectedRecords(body);
+    if (!records.length) return sendJson(res, 400, { error: '没有选中要取消的授权' });
+    const pairs = new Set(store.revokedPairs);
+    let changed = false;
+    for (const record of records) {
+      const key = licensePairKey(record.phone, record.machine);
+      if (key && !pairs.has(key)) {
+        pairs.add(key);
+        changed = true;
+      }
+    }
+    if (changed) {
+      store.revokedPairs = [...pairs];
+      store.seq += 1;
+      saveStore();
+      writeManifest();
+    }
+    return sendJson(res, 200, { ok: true, changed, count: records.length, state: state() });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/restore') {
+    if (!cfg.privateKey) return sendJson(res, 503, { error: '读不到授权私钥，无法更新停用清单' });
+    const body = await readJson(req);
+    const records = selectedRecords(body);
+    if (!records.length) return sendJson(res, 400, { error: '没有选中要恢复的授权' });
+    const pairs = new Set(store.revokedPairs);
+    const phones = new Set(store.revokedPhones);
+    const machines = new Set(store.revokedMachines);
+    let changed = false;
+    for (const record of records) {
+      const pairKey = licensePairKey(record.phone, record.machine);
+      if (pairKey && pairs.delete(pairKey)) changed = true;
+      const phone = normalizePhone(record.phone);
+      if (phone && phones.delete(phone)) changed = true;
+      const machine = normalizeMachineKey(record.machine);
+      if (machine && machines.delete(machine)) changed = true;
+    }
+    if (changed) {
+      store.revokedPairs = [...pairs];
+      store.revokedPhones = [...phones];
+      store.revokedMachines = [...machines];
+      store.seq += 1;
+      saveStore();
+      writeManifest();
+    }
+    return sendJson(res, 200, { ok: true, changed, count: records.length, state: state() });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/revoke') {
@@ -652,7 +794,10 @@ export async function startAdminServer(options = {}) {
   }
 
   // 启动时确保清单文件存在且不落后于管理数据（手工删过文件 / 换机器后也能恢复）
-  if (cfg.privateKey && (store.seq > 0 || store.revokedPhones.length || store.revokedMachines.length)) {
+  if (
+    cfg.privateKey &&
+    (store.seq > 0 || store.revokedPhones.length || store.revokedMachines.length || store.revokedPairs.length)
+  ) {
     try {
       writeManifest();
     } catch (err) {

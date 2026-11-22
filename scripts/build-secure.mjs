@@ -15,10 +15,35 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { transform } from 'esbuild';
+import JavaScriptObfuscator from 'javascript-obfuscator';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TARGETS = ['electron', 'server'];
 const BACKUP_ROOT = path.join(ROOT, '.obfuscate-backup');
+/** 授权验签相关的文件额外做字符串加密、控制流混淆，抬高静态分析成本 */
+const SENSITIVE = new Set(['server/lib/license.js', 'server/lib/license-core.js']);
+
+const OBFUSCATOR_OPTIONS = {
+  target: 'node',
+  sourceType: 'module',
+  compact: true,
+  simplify: true,
+  identifierNamesGenerator: 'hexadecimal',
+  renameGlobals: false,
+  stringArray: true,
+  stringArrayThreshold: 0.9,
+  stringArrayEncoding: ['base64'],
+  stringArrayRotate: true,
+  stringArrayShuffle: true,
+  splitStrings: true,
+  splitStringsChunkLength: 12,
+  selfDefending: true,
+  controlFlowFlattening: true,
+  controlFlowFlatteningThreshold: 0.35,
+  deadCodeInjection: false,
+  debugProtection: false,
+  unicodeEscapeSequence: false,
+};
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const backupDir = path.join(BACKUP_ROOT, stamp);
@@ -41,6 +66,7 @@ async function obfuscate() {
     if (!fs.existsSync(src)) continue;
     fs.cpSync(src, path.join(backupDir, target), { recursive: true });
     for (const file of walk(src)) {
+      const rel = path.relative(ROOT, file).replace(/\\/g, '/');
       const code = fs.readFileSync(file, 'utf8');
       const result = await transform(code, {
         loader: 'js',
@@ -48,9 +74,13 @@ async function obfuscate() {
         target: 'node22',
         minify: true,
         legalComments: 'none',
-        sourcefile: path.relative(ROOT, file),
+        sourcefile: rel,
       });
-      fs.writeFileSync(file, result.code, 'utf8');
+      let output = result.code;
+      if (SENSITIVE.has(rel)) {
+        output = JavaScriptObfuscator.obfuscate(output, OBFUSCATOR_OPTIONS).getObfuscatedCode();
+      }
+      fs.writeFileSync(file, output, 'utf8');
       count++;
     }
   }

@@ -38,11 +38,19 @@ export type SettingsForm = ReturnType<typeof useSettingsForm>;
 export function useSettingsForm({
   onToast,
   onLibraryChanged,
+  initialSection,
 }: {
   onToast: (msg: string, kind?: 'info' | 'error') => void;
   onLibraryChanged: () => void;
+  /** 从右上角头像菜单进来时可直接落到「关于软件 / 授权」 */
+  initialSection?: SectionKey;
 }) {
-  const [section, setSection] = useState<SectionKey>('general');
+  const [section, setSection] = useState<SectionKey>(initialSection ?? 'general');
+
+  // 已经在设置页时，从右上角头像再点「关于软件 / 授权」也要能切过去
+  useEffect(() => {
+    if (initialSection) setSection(initialSection);
+  }, [initialSection]);
   const [settings, setSettings] = useState<SettingsType | null>(null);
   // 脏标记：改动只在「保存设置」时落盘，离开页面 / 关窗口前必须提醒，否则静默丢掉
   const [dirty, setDirty] = useState(false);

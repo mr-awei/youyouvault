@@ -557,6 +557,8 @@ export interface LicenseStatus {
   licensed: boolean;
   /** 本机是否真的有验签通过的授权文件（区别于 devPro 临时授权） */
   licensedByKey?: boolean;
+  /** 客户端验签器健康检查是否通过；false 时按免费版运行 */
+  verifierHealthy?: boolean;
   /** 本机旧版机器码（v1，仅用于校验已售旧授权） */
   machineCode: string;
   /** 本机新版设备码（v2，TK2-...）：购买 / 签发时发给作者 */
@@ -568,14 +570,22 @@ export interface LicenseStatus {
   account?: string;
   /** 手机号/设备已被远程停用 */
   revoked?: boolean;
-  /** 连不上停用清单 / 验签失败，失败关闭 */
+  /** 连不上停用清单 / 验签失败：按免费版运行，但不禁用软件 */
   checkFailed?: boolean;
-  /** revoked 或 checkFailed 任一为真：数据接口整体锁定 */
+  /** 只有明确被远程停用才为真：数据接口整体锁定 */
   blocked?: boolean;
   revokeRequired?: boolean;
   revokeUrl?: string;
-  /** 开发环境临时 Pro（TUKU_DEV_PRO=1），安装包不会带 */
+  /** 开发环境（源码运行 / 未打包）默认拥有专业版能力 */
   devPro?: boolean;
+  /** 新设备 7 天试用中（能力与专业版一致） */
+  trial?: boolean;
+  /** 试用剩余天数 */
+  trialDaysLeft?: number;
+  /** 试用结束时间（ISO） */
+  trialEndsAt?: string;
+  /** 7 天试用已结束且未激活 */
+  trialExpired?: boolean;
   revokedAt?: string;
   revokeCheckedAt?: string;
   revokeError?: string;

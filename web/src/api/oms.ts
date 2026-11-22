@@ -2,7 +2,7 @@
  * OMS 拍摄系统：账号配置 + 按 5 位主 SKU 查「待拍摄」的完整编码。
  * 账号密码由服务端保管，这里只拿状态，不回读密码。
  */
-import { request } from './core';
+import { BASE, getApiToken, request } from './core';
 
 export interface OmsStatus {
   configured: boolean;
@@ -116,4 +116,34 @@ export const omsAPI = {
       body: JSON.stringify(payload),
       timeoutMs: UPLOAD_TIMEOUT_MS,
     }),
+
+  /**
+   * 生成工作日报 xlsx（POST 返回二进制）。
+   * 不走 request()：那里统一按 JSON 解析，这里要拿 Blob 交给下载。
+   */
+  omsProductReport: async (payload: {
+    date: string;
+    rows: { sku: string; name: string; platform: string; category?: string }[];
+  }): Promise<Blob> => {
+    const token = await getApiToken();
+    const res = await fetch(`${BASE}/api/oms/product/report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let message = `生成 Excel 失败（${res.status}）`;
+      try {
+        const data = await res.json();
+        if (data?.error) message = String(data.error);
+      } catch {
+        /* 非 JSON 错误体，保留状态码文案 */
+      }
+      throw new Error(message);
+    }
+    return res.blob();
+  },
 };

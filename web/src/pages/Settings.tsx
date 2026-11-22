@@ -176,6 +176,7 @@ export default function Settings({
   onStartTour,
   onOpenTutorial,
   onLibraryChanged,
+  initialSection,
 }: {
   /** 第二个参数用于区分失败提示（红色、停留更久） */
   onToast: (msg: string, kind?: 'info' | 'error') => void;
@@ -184,9 +185,11 @@ export default function Settings({
   /** 打开「使用教程」页（按功能搜索） */
   onOpenTutorial: () => void;
   onLibraryChanged: () => void;
+  /** 右上角头像菜单可直接打开「关于软件 / 授权」 */
+  initialSection?: SectionKey;
 }) {
   // 状态、加载与全部写操作都在 useSettingsForm 里；这里只解构渲染真正用到的字段。
-  const form = useSettingsForm({ onToast, onLibraryChanged });
+  const form = useSettingsForm({ onToast, onLibraryChanged, initialSection });
   const {
     section, setSection, settings, dirty, save, patch,
     importing, setTourHint, runImport, clearAll,

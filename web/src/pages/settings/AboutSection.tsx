@@ -23,7 +23,7 @@ const EMPTY_STATE: UpdateState = {
 };
 
 /** 官方仓库兜底：app-info 没拿到时（浏览器预览）也要能拼出发布页地址 */
-const FALLBACK_REPO = 'mr-awei/gallery';
+const FALLBACK_REPO = 'mr-awei/youyouvault';
 
 /** 展示名固定写这里：app.getName() 在开发态返回 package.json 的 name（tuku-gallery），不能直接给用户看 */
 const APP_NAME = i18n.t('k2e57064f');

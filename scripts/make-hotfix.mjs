@@ -20,9 +20,9 @@ import { SCHEMA_VERSION } from '../server/db/schema-version.js';
 
 const root = path.resolve(import.meta.dirname, '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const REPO = process.env.HOTFIX_REPO || 'mr-awei/gallery';
-/** Gitee 镜像仓库（形如 'mr-awei/gallery'）；设成空串就不写 Gitee 下载地址 */
-const GITEE = process.env.HOTFIX_GITEE ?? 'mr-awei/gallery';
+const REPO = process.env.HOTFIX_REPO || 'mr-awei/youyouvault';
+/** Gitee 镜像仓库（形如 'mr-awei/youyouvault'）；设成空串就不写 Gitee 下载地址 */
+const GITEE = process.env.HOTFIX_GITEE ?? 'mr-awei/youyouvault';
 const OUT_DIR = path.join(root, 'release-build', 'hotfix');
 
 /** 哪些目录进包（from 是工作区路径，to 是包内路径） */

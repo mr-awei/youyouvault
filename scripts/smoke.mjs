@@ -66,6 +66,13 @@ const server = spawn(process.execPath, ['server/index.js'], {
     TUKU_USER_DATA: path.join(tmpUser, '.app'),
     TUKU_DATA_DIR: path.join(tmpUser, '.app', 'data'),
     TUKU_DEFAULT_STORAGE_DIR: path.join(tmpUser, '.app', 'storage'),
+    // 冒烟按“未打包 + 严格授权”跑：关闭开发态自动 Pro 与 7 天试用，
+    // 这样既能用环境变量喂测试公钥，又能验证免费版被挡。
+    TUKU_PACKAGED: '',
+    TUKU_STRICT_LICENSE: '1',
+    TUKU_TRIAL_DISABLE: '1',
+    // 指向仓库 models/，避免开发态启动时把模型目录搬进临时用户目录
+    TUKU_MODEL_DIR: path.join(ROOT, 'models'),
     // 关掉 CLIP：不然入库查重要看「模型加载完没」——CI 上模型就绪了会把噪点图判成重复，
     // 本地没加载又通过，同一份代码两种结论。这里只测接口行为，不需要深度特征。
     TUKU_CLIP: 'off',

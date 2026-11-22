@@ -37,8 +37,21 @@ DECODE_HINTS.set(DecodeHintType.POSSIBLE_FORMATS, [
   BarcodeFormat.UPC_A,
 ]);
 
-/** 送货单上一定有的字样；黄色产品包装不会有这些词 */
-const LABEL_TEXT_RE = /拍照送货|送货单|主\s*SKU|主SKU|PO\s*\d{8,}/i;
+/**
+ * 标签上一定有的字样；黄色产品包装不会有这些词。
+ * 两种现场标签：
+ *   - 白底送货单：拍照送货 / 送货单 / 主 SKU / PO 号
+ *   - 黄色贴纸：SKU / PO / 中文名称 / 平台 / 座位（SKU 直接印完整编码，没有条码）
+ */
+const LABEL_TEXT_RE = /拍照送货|送货单|主\s*SKU|主SKU|中文名称|座位|PO\s*\d{8,}/i;
+
+/** 完整编码（45661-Y01Y0001-QD08）本身就是强标签特征：条码可能拍不到，但编码会印在贴纸上 */
+const FULL_CODE_RE = /\d{4,6}(?:-[A-Z0-9]{2,}){2,}/;
+
+/** 4 位年份不是主 SKU：黄色贴纸上的日期会被 OCR 读成独立数字 */
+function isYear(value) {
+  return /^(19|20)\d{2}$/.test(String(value || ''));
+}
 
 /** 自然排序：MG_2 排在 MG_10 前面，中文目录名也按拼音稳定比较 */
 const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' });
@@ -86,7 +99,8 @@ export function parseBarcodeText(raw, barcodeText = '') {
   const codeMatch = text.match(codeRe) || compact.match(codeRe);
   const skuMatch = text.match(skuRe) || compact.match(skuRe);
   const poMatch = text.match(poRe) || compact.match(poRe);
-  const numerics = [...text.matchAll(numericRe)].map((m) => m[1]);
+  // 年份（2026）不能当成主 SKU，否则会拿日期去后台查
+  const numerics = [...text.matchAll(numericRe)].map((m) => m[1]).filter((n) => !isYear(n));
 
   const candidates = [];
   const add = (v) => {
@@ -426,7 +440,10 @@ export async function scanDir(dir, { lang = '' } = {}) {
   await mapLimit(candidates, 2, async (e) => {
     try {
       const parsed = await readLabelPhoto(e.abs, lang);
-      const labelHint = LABEL_TEXT_RE.test(parsed.rawText);
+      // OCR 常把空格/全角读乱，先归一化再判标签特征
+      const normalized = toHalfWidth(parsed.rawText).toUpperCase().replace(/\s+/g, ' ');
+      const labelHint =
+        LABEL_TEXT_RE.test(normalized) || FULL_CODE_RE.test(normalized.replace(/\s+/g, ''));
       const decoded = !!parsed.barcodeText;
       // 黄色包装盒 / 黄色产品也会过黄筛，但它们没有「拍照送货单 / 主SKU / PO」
       // 字样，也解不出一维码。这类图片要退回产品图，不能让它们开新组。

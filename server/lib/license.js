@@ -14,12 +14,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { APP_ROOT, DATA_DIR } from '../config.js';
+import { APP_ROOT, DATA_DIR, IS_PACKAGED } from '../config.js';
 import {
   PRO_FEATURES,
   PRODUCT,
   daysLeft,
   deviceCodeFromParts,
+  licensePairKey,
   machineCodeFromParts,
   normalizeCode,
   normalizeDeviceCode,
@@ -38,7 +39,15 @@ const REVOKE_FILE = path.join(DATA_DIR, 'license-revoke.json');
  */
 const DEFAULT_REVOKE_URL =
   'https://gitee.com/mr-awei/youyouvault/raw/main/docs/license/license-revoke.json';
-const REVOKE_DISABLED = /^(1|true|on)$/i.test(String(process.env.TUKU_LICENSE_REVOKE_DISABLE || ''));
+/**
+ * 打包后不再接受这些“测试开关”环境变量，避免用户通过改环境变量绕过授权。
+ * 未打包的开发 / 冒烟测试仍可用；TUKU_STRICT_LICENSE=1 只用于让开发态按正式
+ * 授权规则跑测试（它会关闭开发态自动 Pro，不会放宽校验）。
+ */
+const STRICT_LICENSE = !IS_PACKAGED && /^(1|true|on)$/i.test(String(process.env.TUKU_STRICT_LICENSE || ''));
+const TRIAL_DISABLED = !IS_PACKAGED && /^(1|true|on)$/i.test(String(process.env.TUKU_TRIAL_DISABLE || ''));
+const REVOKE_DISABLED =
+  !IS_PACKAGED && /^(1|true|on)$/i.test(String(process.env.TUKU_LICENSE_REVOKE_DISABLE || ''));
 const REVOKE_URL = REVOKE_DISABLED
   ? ''
   : String(process.env.TUKU_LICENSE_REVOKE_URL || DEFAULT_REVOKE_URL).trim();
@@ -59,17 +68,33 @@ const revokeCheck = {
 let revokeLastAttempt = 0;
 
 /**
- * 授权公钥：优先环境变量（CI / 内部构建），否则读随包文件。
+ * 授权公钥：优先环境变量（仅开发 / 冒烟测试），打包后只认随包文件。
  * 公钥不是秘密，进仓库没关系；私钥在作者本机与 CI secret 里，绝不入包。
+ * 打包后忽略环境变量，防止用户替换成自己的公钥后伪造授权码。
  */
 const PUBLIC_KEY = (() => {
-  if (process.env.TUKU_LICENSE_PUBLIC_KEY) return process.env.TUKU_LICENSE_PUBLIC_KEY;
+  if (!IS_PACKAGED && process.env.TUKU_LICENSE_PUBLIC_KEY) return process.env.TUKU_LICENSE_PUBLIC_KEY;
   try {
     return fs.readFileSync(path.join(APP_ROOT, 'server', 'license-public.pem'), 'utf8');
   } catch (err) {
     console.warn('[license] 未找到 server/license-public.pem，专业版能力将保持关闭：', err?.message || err);
     return '';
   }
+})();
+
+/**
+ * 验签器健康检查（防止把 verifyLicenseKey 改成「永远返回 true」这类低级破解）。
+ * 用一段格式正确但签名错误的授权码做负向探针：正常实现必须返回 false。
+ * 探针失败时整个授权模块按“不可信”处理，直接退回免费版。
+ */
+const VERIFIER_HEALTHY = (() => {
+  if (!PUBLIC_KEY) return false;
+  const bogus = `TUKU1.${Buffer.from('{"v":1,"product":"tuku","edition":"pro"}').toString('base64url')}.${'A'.repeat(86)}`;
+  const result = verifyLicenseKey(bogus, {
+    publicKeyPem: PUBLIC_KEY,
+    deviceCode: 'TK2-0000-0000-0000-0000-0000-0000',
+  });
+  return result.ok === false;
 })();
 
 /** Windows 一次 PowerShell 取齐硬件特征：比多次 wmic 快，也不必处理 wmic 被移除的问题 */
@@ -298,6 +323,44 @@ export function stopRevocationWatch() {
   revokeTimer = null;
 }
 
+/** 新设备试用天数：首次安装起算 */
+const TRIAL_DAYS = 7;
+const INSTALL_FILE = path.join(DATA_DIR, 'install.json');
+
+/**
+ * 首次安装时间（用于 7 天试用）。
+ * 只写一次；文件损坏或写不进去时按本次启动时间算，至少不会阻断使用。
+ */
+function readTrialInfo() {
+  if (TRIAL_DISABLED) return { createdAt: '', endsAt: '', active: false, daysLeft: 0 };
+  let createdAt = '';
+  try {
+    const data = JSON.parse(fs.readFileSync(INSTALL_FILE, 'utf8'));
+    createdAt = String(data?.createdAt || '');
+  } catch {
+    /* 首次启动或文件损坏：下面补写 */
+  }
+  if (!createdAt) {
+    createdAt = new Date().toISOString();
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(INSTALL_FILE, JSON.stringify({ createdAt }, null, 2), 'utf8');
+    } catch {
+      /* 数据目录只读时退化为按本次启动计时 */
+    }
+  }
+  const start = Date.parse(createdAt);
+  const valid = Number.isFinite(start);
+  const trialMs = TRIAL_DAYS * 24 * 60 * 60 * 1000;
+  const leftMs = valid ? trialMs - (Date.now() - start) : 0;
+  return {
+    createdAt,
+    endsAt: valid ? new Date(start + trialMs).toISOString() : '',
+    active: leftMs > 0,
+    daysLeft: Math.max(0, Math.ceil(leftMs / (24 * 60 * 60 * 1000))),
+  };
+}
+
 /**
  * 当前授权状态。refresh=true 时重新探测硬件（换过硬件后可手动刷新）。
  * @param {{ refresh?: boolean }} [opts]
@@ -318,7 +381,9 @@ export function licenseStatus({ refresh = false } = {}) {
   /** @type {any} */
   let payload = null;
   let reason = '';
-  if (raw) {
+  if (!VERIFIER_HEALTHY) {
+    reason = '授权校验模块异常，已退回免费版';
+  } else if (raw) {
     const result = verifyLicenseKey(raw, { publicKeyPem: PUBLIC_KEY, machineCode, deviceCode });
     if (result.ok) payload = result.payload;
     else reason = result.reason;
@@ -345,32 +410,67 @@ export function licenseStatus({ refresh = false } = {}) {
         })
         .filter(Boolean)
     : [];
+  // 按「手机号 + 设备码」精确停用：同一台设备上的其他手机号不受影响。
+  // 同时兼容字符串 `手机号|设备码` 与 { phone, machine } 两种写法。
+  const revokedPairs = Array.isArray(revoke?.payload?.revokedPairs)
+    ? revoke.payload.revokedPairs
+        .map((pair) => {
+          if (typeof pair === 'string') {
+            const [p, ...rest] = pair.split('|');
+            return licensePairKey(p, rest.join('|'));
+          }
+          if (pair && typeof pair === 'object') return licensePairKey(pair.phone, pair.machine);
+          return '';
+        })
+        .filter(Boolean)
+    : [];
   const phoneKey = normalizePhone(phone);
+  const pairRevoked =
+    !!payload &&
+    !!phoneKey &&
+    (revokedPairs.includes(licensePairKey(phoneKey, deviceCode)) ||
+      revokedPairs.includes(licensePairKey(phoneKey, machineCode)));
   const revoked =
     !!payload &&
     ((phoneKey && (revokedPhones.includes(phoneKey) || revokedAccounts.includes(phoneKey))) ||
+      pairRevoked ||
       revokedMachines.includes(normalizeCode(machineCode)) ||
       revokedMachines.includes(normalizeDeviceCode(deviceCode)));
-  // 仅开发环境：不写授权文件也能测 Pro 页面；安装包绝不能带这个环境变量
-  const devPro = process.env.TUKU_DEV_PRO === '1';
+  // 开发环境（源码运行 / npm run dev / Electron 未打包）默认拥有全部专业版能力；
+  // 打包后的安装包必须靠真实授权。任何环境变量都不能在打包版打开 Pro。
+  const devPro = !IS_PACKAGED && !STRICT_LICENSE;
 
-  // 失败关闭：已安装真实授权的机器必须每 30 分钟成功连上清单；
-  // 连不上就临时禁用，直到下一次连上且清单里没有命中它。
+  // 每台设备首次安装给 7 天完整专业版试用
+  const trial = readTrialInfo();
+
+  // 联网校验失败不再整体禁用软件：退回免费版，网络恢复后自动回到专业版。
+  // 只有「明确被远程停用」才整体禁用。
   const failClosed = !!payload && !REVOKE_DISABLED;
   const checkFailed = failClosed && !revokeCheck.ok;
-  const blocked = revoked || checkFailed;
+  const blocked = revoked;
+  const proActive = VERIFIER_HEALTHY && (devPro || trial.active || (!blocked && !checkFailed && !!payload));
   if (revoked) reason = '该手机号或设备已被远程停用，请联系管理员';
   else if (checkFailed) {
-    reason = `无法连接授权服务器，软件已临时禁用${revokeCheck.error ? `（${revokeCheck.error}）` : ''}；网络恢复后会自动重试。`;
+    reason = `无法连接授权服务器，已暂时退回免费版${revokeCheck.error ? `（${revokeCheck.error}）` : ''}；网络恢复后会自动恢复专业版。`;
+  } else if (!payload && VERIFIER_HEALTHY) {
+    if (devPro) reason = '开发环境：专业版功能已开启';
+    else if (trial.active) reason = `试用中，还剩 ${trial.daysLeft} 天`;
+    else reason = `${TRIAL_DAYS} 天试用已结束，输入激活码继续使用专业版`;
   }
 
   const value = {
     product: PRODUCT,
-    edition: !blocked && (payload || devPro) ? String(payload?.edition || 'pro') : 'free',
-    licensed: !blocked && (!!payload || devPro),
-    /** 本机是否真的有验签通过的授权文件（区别于只是开发模式临时 Pro） */
-    licensedByKey: !revoked && !!payload,
+    edition: proActive ? String(payload?.edition || 'pro') : 'free',
+    licensed: proActive,
+    /** 本机是否真的有验签通过的授权文件（区别于开发模式的临时专业版） */
+    licensedByKey: VERIFIER_HEALTHY && !revoked && !!payload,
+    verifierHealthy: VERIFIER_HEALTHY,
     devPro,
+    /** 新设备 7 天试用：试用期内与专业版能力一致 */
+    trial: !devPro && trial.active && !payload,
+    trialDaysLeft: trial.active ? trial.daysLeft : 0,
+    trialEndsAt: trial.endsAt,
+    trialExpired: !devPro && !trial.active && !payload,
     machineCode,
     /** v2 设备码：新授权与新签发都按它绑定 */
     deviceCode,
@@ -378,9 +478,9 @@ export function licenseStatus({ refresh = false } = {}) {
     phone,
     account,
     revoked,
-    /** 是否因为连不上停用清单而临时禁用 */
+    /** 连不上停用清单：当前按免费版运行，但软件功能不禁用 */
     checkFailed,
-    /** revoked 或 checkFailed 任一为真时，数据接口全锁 */
+    /** 只有明确被远程停用时才整体锁定数据接口 */
     blocked,
     revokeRequired: failClosed,
     revokeUrl: REVOKE_URL || '',
@@ -418,7 +518,7 @@ export function isRevoked() {
   return licenseStatus().revoked;
 }
 
-/** 数据接口是否应整体锁定（明确停用，或连不上停用清单的失败关闭） */
+/** 数据接口是否应整体锁定：只有明确被远程停用才锁；联网失败/到期都退回免费版 */
 export function isBlocked() {
   return licenseStatus().blocked;
 }
@@ -428,8 +528,12 @@ export function isBlocked() {
  * @param {string} key
  */
 export function activateLicense(key) {
+  if (!VERIFIER_HEALTHY) return { ok: false, reason: '授权校验模块异常，无法激活' };
+  const raw = String(key ?? '').trim();
+  if (!raw) return { ok: false, reason: '请填写激活码' };
+  if (raw.length > 8192) return { ok: false, reason: '激活码长度不正确' };
   const parts = components();
-  const result = verifyLicenseKey(key, {
+  const result = verifyLicenseKey(raw, {
     publicKeyPem: PUBLIC_KEY,
     machineCode: machineCodeFromParts(parts.legacy),
     deviceCode: deviceCodeFromParts(parts.v2),
@@ -438,7 +542,7 @@ export function activateLicense(key) {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     const tmp = `${LICENSE_FILE}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, String(key).trim(), { mode: 0o600 });
+    fs.writeFileSync(tmp, raw, { mode: 0o600 });
     fs.renameSync(tmp, LICENSE_FILE);
     statusCache = null;
     return { ok: true, reason: '' };

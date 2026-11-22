@@ -1,5 +1,6 @@
-/* 授权管理工具前端：无构建步骤，直接和本地 Express 管理接口通信。 */
+/* 授权管理工具前端：无构建步骤，直接和本地管理接口通信。 */
 (() => {
+  const THEME_KEY = 'tuku-admin-theme';
   const params = new URLSearchParams(location.search);
   let token = params.get('token') || sessionStorage.getItem('tuku-admin-token') || '';
   if (params.get('token')) {
@@ -8,7 +9,9 @@
   }
 
   let state = null;
-  let filter = '';
+  let created = [];
+  let activeFilter = '';
+  let revokedFilter = '';
 
   const $ = (id) => document.getElementById(id);
   const esc = (value) =>
@@ -89,7 +92,21 @@
     }
   }
 
+  /* ------------------------------ 主题 ------------------------------ */
+
+  function applyTheme(value) {
+    const theme = ['light', 'dark', 'system'].includes(value) ? value : 'system';
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+    document.querySelectorAll('#themeSwitch button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.themeValue === theme);
+    });
+  }
+
+  /* ------------------------------ 渲染 ------------------------------ */
+
   const statusLabel = { active: '有效', expired: '已过期', revoked: '已停用' };
+  const revokedByLabel = { pair: '已取消授权', phone: '手机号停用', machine: '设备停用' };
   const fmtDevice = (value) => {
     const v = String(value ?? '').toUpperCase();
     return /^[0-9A-F]{24}$/.test(v) ? `TK2-${v.match(/.{4}/g).join('-')}` : v;
@@ -103,12 +120,11 @@
     $('keyState').className = `pill ${state.keyReady ? 'ok' : 'bad'}`;
 
     $('stats').innerHTML = [
-      ['授权记录', s.records, '台设备'],
-      ['手机号', s.phones, '个账号'],
       ['有效', s.active, '条'],
+      ['已停用', s.revoked, '条'],
       ['7 天内到期', s.expiring7, '条'],
-      ['已停用', s.revoked, '条记录'],
-      ['过期', s.expired, '条'],
+      ['手机号', s.phones, '个'],
+      ['授权记录', s.records, '条'],
     ]
       .map(
         ([label, num, suffix]) =>
@@ -117,90 +133,111 @@
       .join('');
 
     $('issueBtn').disabled = !state.keyReady;
-    $('revokePhoneBtn').disabled = !state.keyReady;
-    $('revokeMachineBtn').disabled = !state.keyReady;
+    $('batchIssueBtn').disabled = !state.keyReady;
+    $('activeCount').textContent = `${s.active} 有效${s.expired ? ` · ${s.expired} 过期` : ''}`;
+    $('revokedCount').textContent = `${s.revoked} 条`;
 
-    renderTable();
-    renderRevocations();
+    renderActiveTable();
+    renderRevokedTable();
+    renderLegacyRevokes();
     renderManifest();
+    updateSelectionButtons();
   }
 
-  function renderTable() {
-    const box = $('listTable');
-    if (!state?.licenses?.length) {
-      box.innerHTML = '<div class="empty-row">还没有授权记录。到「签发授权」填手机号和设备码。</div>';
-      return;
-    }
-    const q = filter.trim().toLowerCase();
-    const rows = state.licenses.filter((x) =>
-      !q ? true : [x.phone, x.machine, x.note].some((v) => String(v ?? '').toLowerCase().includes(q))
-    );
+  function matches(row, query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return [row.phone, row.machine, row.note].some((v) => String(v ?? '').toLowerCase().includes(q));
+  }
+
+  function expiryCell(row) {
+    const expiry = row.expires ? esc(row.expires) : '永久';
+    const left = row.status === 'expired' ? '已过期' : row.daysLeft != null ? `剩 ${row.daysLeft} 天` : '';
+    return `<td class="nowrap">${expiry}${left ? `<div class="hint">${esc(left)}</div>` : ''}</td>`;
+  }
+
+  function renderActiveTable() {
+    const box = $('activeTable');
+    const rows = (state?.licenses || []).filter((x) => x.status !== 'revoked' && matches(x, activeFilter));
     if (!rows.length) {
-      box.innerHTML = '<div class="empty-row">没有匹配的记录。</div>';
+      box.innerHTML = `<div class="empty-row">${state?.licenses?.length ? '没有匹配的授权。' : '还没有授权记录，先到「授权」页签发。'}</div>`;
       return;
     }
-    const revokedPhones = new Set(state.revocations.phones);
-    const revokedMachines = new Set(state.revocations.machines);
     box.innerHTML = `<table>
       <thead><tr>
+        <th class="col-check"><input type="checkbox" data-select-all="active" aria-label="全选" /></th>
         <th>手机号 / 备注</th><th>设备码</th><th>状态</th><th>签发</th><th>到期</th><th>操作</th>
       </tr></thead>
       <tbody>${rows
-        .map((x) => {
-          const phoneRevoked = revokedPhones.has(x.phone);
-          const machineRevoked = revokedMachines.has(x.machine);
-          const expiry = x.expires ? esc(x.expires) : '永久';
-          const left =
-            x.status === 'expired'
-              ? '已过期'
-              : x.daysLeft != null
-                ? `剩 ${x.daysLeft} 天`
-                : '';
-          return `<tr>
+        .map(
+          (x) => `<tr>
+            <td class="col-check"><input type="checkbox" data-row="active" data-id="${esc(x.id)}" aria-label="选择" /></td>
             <td><div class="phone">${esc(x.phone)}</div>${x.note ? `<div class="hint">${esc(x.note)}</div>` : ''}</td>
             <td class="mono">${esc(x.machine)}${x.deviceVersion === 1 ? '<div class="hint">旧版 16 位</div>' : ''}</td>
             <td><span class="badge ${esc(x.status)}">${esc(statusLabel[x.status] || x.status)}</span></td>
-            <td>${esc(x.issuedAt)}</td>
-            <td>${expiry}${left ? `<div class="hint">${esc(left)}</div>` : ''}</td>
+            <td class="nowrap">${esc(x.issuedAt)}</td>
+            ${expiryCell(x)}
             <td class="actions">
-              <button class="btn sm" data-action="copy-key" data-id="${esc(x.id)}">复制激活码</button>
-              ${
-                machineRevoked
-                  ? `<button class="btn sm ghost" data-action="unrevoke-machine" data-values="${esc(x.machine)}">恢复设备</button>`
-                  : `<button class="btn sm danger" data-action="revoke-machine" data-values="${esc(x.machine)}">取消设备授权</button>`
-              }
-              ${
-                phoneRevoked
-                  ? `<button class="btn sm ghost" data-action="unrevoke-phone" data-values="${esc(x.phone)}">恢复手机号</button>`
-                  : `<button class="btn sm ghost" data-action="revoke-phone" data-values="${esc(x.phone)}">停用手机号</button>`
-              }
-              <button class="btn sm ghost" data-action="delete" data-id="${esc(x.id)}">删除记录</button>
+              <button class="btn sm" data-action="copy-key" data-id="${esc(x.id)}">复制</button>
+              <button class="btn sm danger" data-action="cancel" data-id="${esc(x.id)}">取消授权</button>
             </td>
-          </tr>`;
-        })
+          </tr>`
+        )
         .join('')}</tbody>
     </table>`;
   }
 
-  function renderRevocations() {
-    const phones = state.revocations.phones;
-    const machines = state.revocations.machines;
+  function renderRevokedTable() {
+    const box = $('revokedTable');
+    const rows = (state?.licenses || []).filter((x) => x.status === 'revoked' && matches(x, revokedFilter));
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty-row">没有已停用的授权。</div>';
+      return;
+    }
+    box.innerHTML = `<table>
+      <thead><tr>
+        <th class="col-check"><input type="checkbox" data-select-all="revoked" aria-label="全选" /></th>
+        <th>手机号 / 备注</th><th>设备码</th><th>停用原因</th><th>签发</th><th>到期</th><th>操作</th>
+      </tr></thead>
+      <tbody>${rows
+        .map(
+          (x) => `<tr>
+            <td class="col-check"><input type="checkbox" data-row="revoked" data-id="${esc(x.id)}" aria-label="选择" /></td>
+            <td><div class="phone">${esc(x.phone)}</div>${x.note ? `<div class="hint">${esc(x.note)}</div>` : ''}</td>
+            <td class="mono">${esc(x.machine)}${x.deviceVersion === 1 ? '<div class="hint">旧版 16 位</div>' : ''}</td>
+            <td><span class="badge revoked">${esc(revokedByLabel[x.revokedBy] || '已停用')}</span></td>
+            <td class="nowrap">${esc(x.issuedAt)}</td>
+            ${expiryCell(x)}
+            <td class="actions">
+              <button class="btn sm" data-action="copy-key" data-id="${esc(x.id)}">复制</button>
+              <button class="btn sm primary" data-action="restore" data-id="${esc(x.id)}">恢复授权</button>
+            </td>
+          </tr>`
+        )
+        .join('')}</tbody>
+    </table>`;
+  }
+
+  function renderLegacyRevokes() {
+    const phones = state.revocations?.phones || [];
+    const machines = state.revocations?.machines || [];
+    $('legacyRevokes').hidden = !phones.length && !machines.length;
     $('revokedPhoneList').innerHTML = phones.length
       ? phones
           .map(
             (p) =>
-              `<span class="chip">${esc(p)}<button data-action="unrevoke-phone" data-values="${esc(p)}" title="解除停用">✕</button></span>`
+              `<span class="chip">${esc(p)}<button data-action="unrevoke-phone" data-values="${esc(p)}" title="解除停用">恢复</button></span>`
           )
           .join('')
-      : '<span class="hint">暂无停用手机号</span>';
+      : '<span class="hint">暂无</span>';
     $('revokedMachineList').innerHTML = machines.length
       ? machines
           .map(
             (m) =>
-              `<span class="chip">${esc(fmtDevice(m))}<button data-action="unrevoke-machine" data-values="${esc(m)}" title="解除停用">✕</button></span>`
+              `<span class="chip">${esc(fmtDevice(m))}<button data-action="unrevoke-machine" data-values="${esc(m)}" title="解除停用">恢复</button></span>`
           )
           .join('')
-      : '<span class="hint">暂无停用设备</span>';
+      : '<span class="hint">暂无</span>';
   }
 
   function renderManifest() {
@@ -210,46 +247,84 @@
     $('manifestUrl').textContent = state.admin.manifestUrl;
     $('publishPath').textContent = state.admin.publishFile || '（未找到仓库发布文件）';
     $('publishUrl').textContent = state.admin.publishUrl || '';
-    $('manifestText').value = tokenText || '（还没有停用记录；添加手机号或设备后自动生成签名清单）';
+    $('manifestText').value = tokenText || '（还没有停用记录；取消授权后自动生成签名清单）';
     $('copyManifest').disabled = !tokenText;
     $('downloadManifest').disabled = !tokenText;
     $('publishFile').disabled = !tokenText || !state.admin.publishFile;
   }
 
-  function renderIssueResult(created) {
-    if (!created?.length) return;
-    const html = `
-      <div class="result">
-        ${created
-          .map(
-            (x) => `<div class="key-item">
-              <div class="meta"><span>${esc(x.phone)} · ${esc(x.machine)}</span><span>${esc(x.expires || '永久')}</span></div>
-              <div class="key">${esc(x.key)}</div>
-              <button class="btn sm" data-action="copy-key" data-id="${esc(x.id)}">复制这个激活码</button>
-            </div>`
-          )
-          .join('')}
-        <div class="row">
-          <button class="btn primary" data-action="copy-created">复制全部激活码</button>
-          <button class="btn ghost" data-action="download-created">下载 TXT</button>
-        </div>
-      </div>`;
+  function renderIssueResult(list) {
+    if (!list?.length) return;
     $('issueResult').className = 'result';
-    $('issueResult').innerHTML = html;
-    $('issueResult').dataset.ids = created.map((x) => x.id).join(',');
+    $('issueResult').innerHTML = list
+      .map(
+        (x) => `<div class="key-item">
+          <div class="meta"><span>${esc(x.phone)} · ${esc(x.machine)}</span><span>${esc(x.expires || '永久')}</span></div>
+          <div class="key">${esc(x.key)}</div>
+          <button class="btn sm" data-action="copy-key" data-id="${esc(x.id)}">复制这个授权码</button>
+        </div>`
+      )
+      .join('');
+    $('copyCreated').disabled = false;
+    $('downloadCreated').disabled = false;
   }
 
-  function createdRecords() {
-    const ids = String($('issueResult').dataset.ids || '').split(',').filter(Boolean);
-    return (state?.licenses || []).filter((x) => ids.includes(x.id));
+  /* ------------------------------ 选择 / 操作 ------------------------------ */
+
+  function selectedIds(group) {
+    return [...document.querySelectorAll(`#${group}Table input[data-row="${group}"]:checked`)].map((el) => el.dataset.id);
   }
 
-  async function revoke(scope, value, revoked) {
+  function updateSelectionButtons() {
+    const active = selectedIds('active').length;
+    const revoked = selectedIds('revoked').length;
+    $('cancelSelected').disabled = !state?.keyReady || !active;
+    $('cancelSelected').textContent = active ? `取消选中授权（${active}）` : '取消选中授权';
+    $('restoreSelected').disabled = !state?.keyReady || !revoked;
+    $('restoreSelected').textContent = revoked ? `恢复选中授权（${revoked}）` : '恢复选中授权';
+    document.querySelectorAll('input[data-select-all]').forEach((el) => {
+      const group = el.dataset.selectAll;
+      const boxes = [...document.querySelectorAll(`#${group}Table input[data-row="${group}"]`)];
+      el.checked = boxes.length > 0 && boxes.every((box) => box.checked);
+      el.indeterminate = boxes.some((box) => box.checked) && !el.checked;
+    });
+  }
+
+  async function cancelRecords(ids) {
+    if (!ids.length) return;
+    if (!confirm(`确定取消选中的 ${ids.length} 条授权？\n\n只会停用对应的「手机号 + 设备码」，同一台设备上的其他手机号不受影响。`)) return;
+    try {
+      const data = await api('/api/cancel', { method: 'POST', body: JSON.stringify({ ids }) });
+      state = data.state;
+      render();
+      toast(data.changed ? `已取消 ${ids.length} 条授权` : '这些授权已经停用');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  async function restoreRecords(ids) {
+    if (!ids.length) return;
+    if (
+      !confirm(
+        `确定恢复选中的 ${ids.length} 条授权？\n\n如果该手机号或设备之前被整体停用，恢复后它们名下的所有授权都会一起恢复。`
+      )
+    )
+      return;
+    try {
+      const data = await api('/api/restore', { method: 'POST', body: JSON.stringify({ ids }) });
+      state = data.state;
+      render();
+      toast(data.changed ? `已恢复 ${ids.length} 条授权` : '这些授权已经恢复');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  async function revokeScope(scope, value, revoked) {
     const label = scope === 'phone' ? '手机号' : '设备';
     const verb = revoked ? '停用' : '恢复';
-    const extra =
-      scope === 'phone' && revoked ? '\n\n注意：该手机号下的所有设备都会一起被锁定。' : '';
-    if (!confirm(`确定${verb}${label}「${value}」？${extra}`)) return;
+    if (!confirm(`确定${verb}${label}「${fmtDevice(value) || value}」？\n\n这会影响该${label}名下的所有授权。`)) return false;
     try {
       const data = await api('/api/revoke', {
         method: 'POST',
@@ -258,27 +333,50 @@
       state = data.state;
       render();
       toast(`${label}已${verb}${data.changed ? '' : '（无变化）'}`);
+      return true;
     } catch (err) {
       toast(err.message, 'error');
+      return false;
     }
   }
 
-  async function deleteRecord(id) {
-    const rec = state?.licenses.find((x) => x.id === id);
-    if (!rec) return;
-    if (
-      !confirm(
-        `只删除这条台账记录，不会让已经激活的客户端失效。\n要真正取消授权，请用「取消设备授权」或「停用手机号」。\n\n确定删除 ${rec.phone} · ${rec.machine}？`
-      )
-    )
-      return;
+  /* ------------------------------ 签发 ------------------------------ */
+
+  function readValidity(prefix) {
+    const mode = $(`${prefix}Days`).value;
+    if (mode === 'custom') {
+      const expires = $(`${prefix}Expires`).value;
+      return expires ? { expires } : { error: '请选择到期日' };
+    }
+    return { days: Number(mode) };
+  }
+
+  function parsePairLine(line) {
+    const raw = String(line ?? '').trim();
+    if (!raw) return null;
+    const match = raw.match(/(?:TK2[-\s]?)?(?:[0-9A-Fa-f]{4}[-\s]?){5}[0-9A-Fa-f]{4}/);
+    if (!match) return null;
+    return {
+      phone: raw.replace(match[0], ' ').replace(/[^\d+]/g, ''),
+      machine: match[0],
+    };
+  }
+
+  async function submitIssue(button, path, body, onDone) {
+    const btn = $(button);
+    btn.disabled = true;
     try {
-      const data = await api('/api/delete', { method: 'POST', body: JSON.stringify({ id }) });
+      const data = await api(path, { method: 'POST', body: JSON.stringify(body) });
       state = data.state;
+      created = data.created || [];
       render();
-      toast('记录已删除');
+      renderIssueResult(created);
+      onDone?.();
+      toast(`已生成 ${created.length} 个授权码`);
     } catch (err) {
       toast(err.message, 'error');
+    } finally {
+      btn.disabled = !state?.keyReady;
     }
   }
 
@@ -297,22 +395,88 @@
 
   $('reload').addEventListener('click', () => void load());
 
+  document.querySelectorAll('#themeSwitch button').forEach((btn) => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.themeValue));
+  });
+
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
-      for (const name of ['issue', 'list', 'revoke']) {
+      for (const name of ['issue', 'active', 'revoked']) {
         $(`tab-${name}`).hidden = tab.dataset.tab !== name;
       }
+      updateSelectionButtons();
     });
   });
 
-  $('days').addEventListener('change', () => {
-    $('expiresField').hidden = $('days').value !== 'custom';
+  for (const prefix of ['single', 'batch']) {
+    $(`${prefix}Days`).addEventListener('change', () => {
+      $(`${prefix}ExpiresField`).hidden = $(`${prefix}Days`).value !== 'custom';
+    });
+  }
+
+  $('activeSearch').addEventListener('input', () => {
+    activeFilter = $('activeSearch').value;
+    renderActiveTable();
+    updateSelectionButtons();
+  });
+  $('revokedSearch').addEventListener('input', () => {
+    revokedFilter = $('revokedSearch').value;
+    renderRevokedTable();
+    updateSelectionButtons();
   });
 
-  $('search').addEventListener('input', () => {
-    filter = $('search').value;
-    renderTable();
+  $('singleForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!state?.keyReady) return toast('未找到授权私钥，无法签发', 'error');
+    const phone = $('singlePhone').value.trim();
+    const machine = $('singleMachine').value.trim();
+    if (!phone) return toast('请填写手机号', 'error');
+    if (!machine) return toast('请填写设备码', 'error');
+    const validity = readValidity('single');
+    if (validity.error) return toast(validity.error, 'error');
+    void submitIssue(
+      'issueBtn',
+      '/api/issue',
+      { phone, machine, note: $('singleNote').value.trim(), ...validity, edition: 'pro' },
+      () => {
+        $('singleMachine').value = '';
+      }
+    );
+  });
+
+  $('batchForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!state?.keyReady) return toast('未找到授权私钥，无法签发', 'error');
+    const lines = $('batchPairs').value.split(/\r?\n/);
+    const pairs = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const pair = parsePairLine(lines[i]);
+      if (!pair) return toast(`第 ${i + 1} 行格式不正确，应为「手机号 + 设备码」`, 'error');
+      if (!pair.phone) return toast(`第 ${i + 1} 行缺少手机号`, 'error');
+      pairs.push(pair);
+    }
+    if (!pairs.length) return toast('请至少填写一条「手机号 + 设备码」', 'error');
+    const validity = readValidity('batch');
+    if (validity.error) return toast(validity.error, 'error');
+    void submitIssue(
+      'batchIssueBtn',
+      '/api/issue-batch',
+      { pairs, note: $('batchNote').value.trim(), ...validity, edition: 'pro' },
+      () => {
+        $('batchPairs').value = '';
+      }
+    );
+  });
+
+  $('cancelSelected').addEventListener('click', () => void cancelRecords(selectedIds('active')));
+  $('restoreSelected').addEventListener('click', () => void restoreRecords(selectedIds('revoked')));
+  $('revokePhoneBtn').addEventListener('click', async () => {
+    const input = $('revokePhone');
+    const value = input.value.trim();
+    if (!value) return toast('请填写要停用的手机号', 'error');
+    if (await revokeScope('phone', value, true)) input.value = '';
   });
 
   $('importLegacy').addEventListener('click', async () => {
@@ -326,51 +490,14 @@
     }
   });
 
-  $('issueForm').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!state?.keyReady) return toast('未找到授权私钥，无法签发', 'error');
-    const phone = $('phone').value.trim();
-    const machines = $('machines').value.trim();
-    const mode = $('days').value;
-    const body = {
-      phone,
-      machines,
-      note: $('note').value.trim(),
-      edition: 'pro',
-    };
-    if (mode === 'custom') {
-      body.expires = $('expires').value;
-      if (!body.expires) return toast('请选择到期日', 'error');
-    } else {
-      body.days = Number(mode);
-    }
-    const btn = $('issueBtn');
-    btn.disabled = true;
-    try {
-      const data = await api('/api/issue', { method: 'POST', body: JSON.stringify(body) });
-      state = data.state;
-      render();
-      renderIssueResult(data.created);
-      $('machines').value = '';
-      toast(`已签发 ${data.created.length} 个授权码`);
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      btn.disabled = !state?.keyReady;
-    }
+  $('copyCreated').addEventListener('click', () => {
+    const text = created.map((x) => `${x.phone}\t${x.machine}\t${x.expires || '永久'}\t${x.key}`).join('\n');
+    if (text) void copy(text);
   });
-
-  $('revokePhoneBtn').addEventListener('click', () => {
-    const value = $('revokePhone').value.trim();
-    if (!value) return toast('请先填手机号', 'error');
-    void revoke('phone', value, true);
-    $('revokePhone').value = '';
-  });
-  $('revokeMachineBtn').addEventListener('click', () => {
-    const value = $('revokeMachine').value.trim();
-    if (!value) return toast('请先填设备码', 'error');
-    void revoke('machine', value, true);
-    $('revokeMachine').value = '';
+  $('downloadCreated').addEventListener('click', () => {
+    if (!created.length) return;
+    const text = created.map((x) => `${x.phone}\t${x.machine}\t${x.expires || '永久'}\n${x.key}`).join('\n\n');
+    download(`license-keys-${new Date().toISOString().slice(0, 10)}.txt`, text);
   });
 
   $('copyManifest').addEventListener('click', () => {
@@ -406,28 +533,30 @@
     if (action === 'copy-key') {
       const rec = state.licenses.find((x) => x.id === id);
       if (rec) void copy(rec.key);
-    } else if (action === 'copy-created') {
-      const text = createdRecords()
-        .map((x) => `${x.phone}\t${x.machine}\t${x.expires || '永久'}\t${x.key}`)
-        .join('\n');
-      if (text) void copy(text);
-    } else if (action === 'download-created') {
-      const text = createdRecords()
-        .map((x) => `${x.phone}\t${x.machine}\t${x.expires || '永久'}\n${x.key}`)
-        .join('\n\n');
-      if (text) download(`license-keys-${new Date().toISOString().slice(0, 10)}.txt`, text);
-    } else if (action === 'revoke-machine') {
-      void revoke('machine', value, true);
-    } else if (action === 'unrevoke-machine') {
-      void revoke('machine', value, false);
-    } else if (action === 'revoke-phone') {
-      void revoke('phone', value, true);
+    } else if (action === 'cancel') {
+      void cancelRecords([id]);
+    } else if (action === 'restore') {
+      void restoreRecords([id]);
     } else if (action === 'unrevoke-phone') {
-      void revoke('phone', value, false);
-    } else if (action === 'delete') {
-      void deleteRecord(id);
+      void revokeScope('phone', value, false);
+    } else if (action === 'unrevoke-machine') {
+      void revokeScope('machine', value, false);
     }
   });
 
+  document.addEventListener('change', (event) => {
+    const all = event.target.closest('input[data-select-all]');
+    if (all) {
+      const group = all.dataset.selectAll;
+      document.querySelectorAll(`#${group}Table input[data-row="${group}"]`).forEach((box) => {
+        box.checked = all.checked;
+      });
+      updateSelectionButtons();
+      return;
+    }
+    if (event.target.matches('input[data-row]')) updateSelectionButtons();
+  });
+
+  applyTheme(localStorage.getItem(THEME_KEY) || 'system');
   void load();
 })();

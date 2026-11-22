@@ -19,6 +19,7 @@
  *   seed.js        首装示例图
  */
 import { app, Menu, BrowserWindow, dialog, session } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import { flushLogs, initLogger } from './logger.js';
 import { getSettingsSnapshot as getSettings } from './settings-cache.js';
@@ -48,6 +49,21 @@ import { discardDownloaded, moveDownloaded } from './lib/download-target.js';
 export { APP_ICON, APP_NAME } from './main/constants.js';
 
 app.setName(APP_DIR_NAME);
+
+// 老版本的 userData / 缓存目录叫 TuKu，改名 youyoutuku 后要把旧数据搬过来，
+// 否则升级后图库索引和设置看起来「丢了」。只在安装版做，且新目录不存在时执行一次。
+if (app.isPackaged && !process.env.PORTABLE_EXECUTABLE_DIR) {
+  try {
+    const appData = app.getPath('appData');
+    const nextDir = path.join(appData, APP_DIR_NAME);
+    const oldDir = path.join(appData, 'TuKu');
+    if (nextDir !== oldDir && !fs.existsSync(nextDir) && fs.existsSync(oldDir)) {
+      fs.renameSync(oldDir, nextDir);
+    }
+  } catch (err) {
+    console.warn('[desktop] 旧数据目录迁移失败，继续使用新目录：', err?.message || err);
+  }
+}
 
 // 绿色版（electron-builder portable 目标）会把 exe 解到临时目录运行，若仍用默认
 // userData，绿色版与安装版会共用同一个库目录与设置：一边升级 schema、另一边还在写，
@@ -85,10 +101,10 @@ process.on('unhandledRejection', (err) => {
  */
 process.env.TUKU_USER_DATA = app.isPackaged ? app.getPath('userData') : APP_ROOT_DIR;
 process.env.TUKU_PACKAGED = app.isPackaged ? '1' : '';
-// 默认图片保存位置：用户「图片」目录下的 TuKu 文件夹。
+// 默认图片保存位置：用户「图片」目录下的 youyoutuku 文件夹。
 // 不用中文目录名——素材路径会进 DB、进日志、进备份，ASCII 少一堆编码麻烦。
 // 不再写死具体路径——任何人安装后都能在设置页改成自己想要的任意文件夹。
-process.env.TUKU_DEFAULT_STORAGE_DIR = path.join(app.getPath('pictures'), 'TuKu');
+process.env.TUKU_DEFAULT_STORAGE_DIR = path.join(app.getPath('pictures'), 'youyoutuku');
 
 // 只允许一个实例：第二次启动直接退出，并把已有窗口带到前台
 // （两个实例会同时读写同一个数据库与图片文件，容易互相锁住）

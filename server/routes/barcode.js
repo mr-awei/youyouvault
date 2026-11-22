@@ -13,7 +13,7 @@ import { db, getLibraryGeneration } from '../db.js';
 import { ensureFolderUnderParent, linkImageToFolder } from '../folders.js';
 import { ingest, setTags } from '../library.js';
 import { assertWritableDir } from '../lib/safe-path.js';
-import { safeCodeName, scanDir } from '../lib/barcode-split.js';
+import { naturalSort, safeCodeName, scanDir } from '../lib/barcode-split.js';
 
 const RASTER = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -38,6 +38,56 @@ function assertSourceDir(input) {
 function isInside(parent, child) {
   const rel = path.relative(parent, child);
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/** 输出侧文件夹校验：必须是绝对路径且真实存在的目录 */
+function assertFolder(input, label = '编码文件夹') {
+  const raw = String(input ?? '').trim();
+  if (!raw) throw new Error(`${label}不能为空`);
+  if (!path.isAbsolute(raw)) throw new Error(`${label}必须是绝对路径（收到：${raw}）`);
+  const resolved = path.resolve(raw);
+  let st;
+  try {
+    st = fs.statSync(resolved);
+  } catch {
+    throw new Error(`${label}不存在：${resolved}`);
+  }
+  if (!st.isDirectory()) throw new Error(`${label}不是文件夹：${resolved}`);
+  return resolved;
+}
+
+/** 文件夹里直接包含的图片文件名（不含子目录），按自然顺序排 */
+async function listImageFiles(dir) {
+  const entries = await fsp.readdir(dir, { withFileTypes: true });
+  return naturalSort(
+    entries
+      .filter((e) => e.isFile() && RASTER.has(path.extname(e.name).toLowerCase()))
+      .map((e) => e.name)
+  );
+}
+
+/**
+ * 读取图片「显示方向」的宽高。
+ * 手机竖拍常见 EXIF 方向 5–8，元数据里的宽高是反的，必须交换后再判断 1:1。
+ */
+async function imageSize(abs) {
+  const meta = await sharp(abs, { failOn: 'none' }).metadata();
+  let width = Number(meta.width || 0);
+  let height = Number(meta.height || 0);
+  const orientation = Number(meta.orientation || 1);
+  if (orientation >= 5 && orientation <= 8) [width, height] = [height, width];
+  return { width, height };
+}
+
+/** 请求里的文件名是否安全且确实位于 dir 内 */
+function safeChildName(dir, name) {
+  const raw = String(name ?? '').trim();
+  if (!raw || raw.includes('..') || path.isAbsolute(raw) || raw.includes('/') || raw.includes('\\')) {
+    return '';
+  }
+  if (!RASTER.has(path.extname(raw).toLowerCase())) return '';
+  const abs = path.resolve(dir, raw);
+  return isInside(dir, abs) ? abs : '';
 }
 
 /** 同批编码重复时依次加 -2 / -3；Windows 文件夹名大小写不敏感，统一按小写判重 */
@@ -353,6 +403,285 @@ export function register(app, ctx) {
         cleanedTotal,
         importedToLibrary: importToLibrary,
       });
+    })
+  );
+
+  /* 检查 eBay 图片是否为 1:1（只读，不修改文件） */
+  app.post(
+    '/api/barcode/ratio',
+    asyncRoute(async (req, res) => {
+      const input = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (!input.length) return res.status(400).json({ error: '没有要检查的文件夹' });
+
+      const items = [];
+      for (const it of input) {
+        const code = String(it?.code || '').trim();
+        let dir;
+        try {
+          dir = assertFolder(it?.dir);
+        } catch (err) {
+          items.push({
+            code,
+            dir: String(it?.dir || ''),
+            total: 0,
+            notSquare: [],
+            errors: [{ file: '', error: err instanceof Error ? err.message : String(err) }],
+          });
+          continue;
+        }
+
+        const names =
+          Array.isArray(it?.files) && it.files.length ? it.files.map(String) : await listImageFiles(dir);
+        const notSquare = [];
+        const errors = [];
+        for (const name of names) {
+          const abs = safeChildName(dir, name);
+          if (!abs) {
+            errors.push({ file: String(name), error: '文件名不合法或不是图片' });
+            continue;
+          }
+          try {
+            const { width, height } = await imageSize(abs);
+            if (!width || !height) errors.push({ file: String(name), error: '读不到图片尺寸' });
+            else if (width !== height) notSquare.push({ file: String(name), width, height });
+          } catch (err) {
+            errors.push({ file: String(name), error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+        items.push({ code, dir, total: names.length, notSquare, errors });
+      }
+      res.json({ items });
+    })
+  );
+
+  /* 居中裁成 1:1：原地覆盖，先写临时文件再 rename，避免裁一半留下坏图 */
+  app.post(
+    '/api/barcode/crop',
+    asyncRoute(async (req, res) => {
+      const input = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (!input.length) return res.status(400).json({ error: '没有要裁剪的文件夹' });
+
+      const items = [];
+      for (const it of input) {
+        const code = String(it?.code || '').trim();
+        let dir;
+        try {
+          dir = assertFolder(it?.dir);
+        } catch (err) {
+          items.push({
+            code,
+            dir: String(it?.dir || ''),
+            cropped: [],
+            errors: [{ file: '', error: err instanceof Error ? err.message : String(err) }],
+          });
+          continue;
+        }
+
+        const names =
+          Array.isArray(it?.files) && it.files.length ? it.files.map(String) : await listImageFiles(dir);
+        const cropped = [];
+        const errors = [];
+        for (const name of names) {
+          const abs = safeChildName(dir, name);
+          if (!abs) {
+            errors.push({ file: String(name), error: '文件名不合法或不是图片' });
+            continue;
+          }
+          try {
+            const { width, height } = await imageSize(abs);
+            if (!width || !height) {
+              errors.push({ file: String(name), error: '读不到图片尺寸' });
+              continue;
+            }
+            const side = Math.min(width, height);
+            if (width === side && height === side) continue;
+            const left = Math.floor((width - side) / 2);
+            const top = Math.floor((height - side) / 2);
+            const ext = path.extname(abs).toLowerCase();
+            const tmp = path.join(dir, `.crop-${Date.now()}-${cropped.length}${ext}`);
+            await sharp(abs, { failOn: 'none' })
+              .rotate()
+              .extract({ left, top, width: side, height: side })
+              .toFile(tmp);
+            await fsp.rename(tmp, abs);
+            cropped.push(String(name));
+          } catch (err) {
+            errors.push({ file: String(name), error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+        items.push({ code, dir, cropped, errors });
+      }
+      res.json({ items });
+    })
+  );
+
+  /* 图片编号：按拍摄顺序重命名成 1.jpg / 2.jpg…（编号就是最终文件名） */
+  app.post(
+    '/api/barcode/number',
+    asyncRoute(async (req, res) => {
+      const input = Array.isArray(req.body?.folders) ? req.body.folders : [];
+      if (!input.length) return res.status(400).json({ error: '没有要编号的文件夹' });
+
+      const results = [];
+      for (const it of input) {
+        const code = String(it?.code || '').trim();
+        let dir;
+        try {
+          dir = assertFolder(it?.dir);
+        } catch (err) {
+          results.push({
+            code,
+            dir: String(it?.dir || ''),
+            files: [],
+            errors: [{ file: '', error: err instanceof Error ? err.message : String(err) }],
+          });
+          continue;
+        }
+
+        const names = await listImageFiles(dir);
+        const errors = [];
+        const temps = [];
+        const stamp = Date.now();
+        // 两段式改名：先全部改成临时名，避免 1.jpg 已存在时互相覆盖
+        try {
+          for (let i = 0; i < names.length; i++) {
+            const name = names[i];
+            const tmp = path.join(dir, `.num-${stamp}-${i}${path.extname(name).toLowerCase()}`);
+            await fsp.rename(path.join(dir, name), tmp);
+            temps.push({ tmp, name });
+          }
+          for (let i = 0; i < temps.length; i++) {
+            const target = `${i + 1}${path.extname(temps[i].name).toLowerCase()}`;
+            await fsp.rename(temps[i].tmp, path.join(dir, target));
+            temps[i].tmp = '';
+          }
+        } catch (err) {
+          errors.push({ file: '', error: err instanceof Error ? err.message : String(err) });
+          // 尽力恢复：还没落到最终名的临时文件改回原名
+          for (const t of temps) {
+            if (!t.tmp) continue;
+            try {
+              await fsp.rename(t.tmp, path.join(dir, t.name));
+            } catch {
+              /* 恢复失败时保留临时名，至少文件还在 */
+            }
+          }
+        }
+        results.push({ code, dir, files: await listImageFiles(dir), errors });
+      }
+      res.json({ results });
+    })
+  );
+
+  /* 入库：把已编号的文件夹登记进图库，并写产品名 / 完整编码 / 主 SKU 标签 */
+  app.post(
+    '/api/barcode/import',
+    asyncRoute(async (req, res) => {
+      const root = assertWritableDir(req.body?.root, '输出根目录');
+      const date = String(req.body?.date ?? '').trim();
+      if (!DATE_RE.test(date)) return res.status(400).json({ error: '日期格式必须是 YYYY-MM-DD' });
+      const input = Array.isArray(req.body?.groups) ? req.body.groups : [];
+      if (!input.length) return res.status(400).json({ error: '没有可入库的分组' });
+
+      let parentFolderId = null;
+      if (req.body?.parentFolderId != null) {
+        const pid = Number(req.body.parentFolderId);
+        if (!Number.isInteger(pid) || pid <= 0) {
+          return res.status(400).json({ error: '入库父文件夹不合法' });
+        }
+        const exists = db.prepare('SELECT id FROM folders WHERE id = ?').get(pid);
+        if (!exists) return res.status(400).json({ error: '入库父文件夹不存在，请重新选择' });
+        parentFolderId = pid;
+      }
+
+      const dateDir = path.join(root, date);
+      await fsp.mkdir(dateDir, { recursive: true });
+      // 图库层级：当前选中的文件夹 / 拍摄日期 / 编码
+      const dateFolderId = ensureFolderUnderParent(parentFolderId, date);
+
+      const results = [];
+      let importedTotal = 0;
+      let importSkippedTotal = 0;
+
+      for (const g of input) {
+        const code = safeCodeName(g?.code);
+        const folderInput = String(g?.folder || '');
+        if (!code) {
+          results.push({
+            code: '',
+            folder: folderInput,
+            imported: 0,
+            importSkipped: 0,
+            importErrors: [{ file: '', error: '编码为空，已跳过该组' }],
+            libraryFolderId: null,
+          });
+          continue;
+        }
+
+        let folder;
+        try {
+          folder = assertFolder(folderInput);
+        } catch (err) {
+          results.push({
+            code,
+            folder: folderInput,
+            imported: 0,
+            importSkipped: 0,
+            importErrors: [{ file: '', error: err instanceof Error ? err.message : String(err) }],
+            libraryFolderId: null,
+          });
+          continue;
+        }
+        // 只允许入库「输出根目录/日期」下面的文件夹，避免误把源图登记进库
+        if (!isInside(dateDir, folder) || folder === dateDir) {
+          results.push({
+            code,
+            folder,
+            imported: 0,
+            importSkipped: 0,
+            importErrors: [{ file: '', error: '文件夹不在「输出根目录/日期」下' }],
+            libraryFolderId: null,
+          });
+          continue;
+        }
+
+        let imported = 0;
+        let importSkipped = 0;
+        const importErrors = [];
+        let libraryFolderId = null;
+        try {
+          const names = await listImageFiles(folder);
+          if (!names.length) {
+            importErrors.push({ file: '', error: '文件夹里没有图片' });
+          } else {
+            const folderName = path.basename(folder);
+            libraryFolderId = ensureFolderUnderParent(dateFolderId, folderName);
+            const mainSku = cleanTag(g.mainSku) || (String(g.code || '').match(/^(\d{4,6})/)?.[1] || '');
+            const tags = [
+              ...new Set(
+                [cleanTag(g.productName), cleanTag(g.code), cleanTag(mainSku)].filter(Boolean)
+              ),
+            ];
+            const generation = getLibraryGeneration();
+            for (const name of names) {
+              const r = await importImageToFolder(path.join(folder, name), libraryFolderId, tags, generation);
+              if (r.ok) {
+                if (r.duplicate) importSkipped++;
+                else imported++;
+              } else {
+                importErrors.push({ file: name, error: r.error || '入库失败' });
+              }
+            }
+          }
+        } catch (err) {
+          importErrors.push({ file: '', error: err instanceof Error ? err.message : String(err) });
+        }
+        importedTotal += imported;
+        importSkippedTotal += importSkipped;
+        results.push({ code, folder, imported, importSkipped, importErrors, libraryFolderId });
+      }
+
+      res.json({ ok: true, dateDir, importedTotal, importSkippedTotal, results });
     })
   );
 

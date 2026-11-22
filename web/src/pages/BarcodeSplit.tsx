@@ -9,7 +9,11 @@ import {
   openFolder,
   pickFolder,
   type BarcodeApplyResponse,
+  type BarcodeCropItemResult,
   type BarcodeGroup,
+  type BarcodeImportResponse,
+  type BarcodeNumberItemResult,
+  type BarcodeRatioItemResult,
   type BarcodeScanResult,
   type OmsDesignRow,
   type OmsStatus,
@@ -64,6 +68,30 @@ function platformOf(code: string) {
   return /^Y01/i.test(m[1]) ? 'eBay' : '非eBay';
 }
 
+/** 九个固定步骤：识别 → 查询 → 核对 → 建夹 → 构图 → 编号 → 入库 → 上传 → 报表 */
+type StepKey =
+  | 'scan'
+  | 'resolve'
+  | 'review'
+  | 'copy'
+  | 'ratio'
+  | 'number'
+  | 'import'
+  | 'upload'
+  | 'report';
+
+const STEP_DEFS: { key: StepKey; title: string }[] = [
+  { key: 'scan', title: '识别主 SKU' },
+  { key: 'resolve', title: '查询完整编码' },
+  { key: 'review', title: '核对编码' },
+  { key: 'copy', title: '创建文件夹' },
+  { key: 'ratio', title: 'eBay 构图' },
+  { key: 'number', title: '图片编号' },
+  { key: 'import', title: '入库' },
+  { key: 'upload', title: '上传 OMS' },
+  { key: 'report', title: '生成 Excel' },
+];
+
 /**
  * OMS 后台地址。
  * 多个候选时点开对应设计单详情，用户可以在后台核对/选择；
@@ -94,10 +122,22 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [edits, setEdits] = useState<GroupEdit[]>([]);
   const [scanning, setScanning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [applyMode, setApplyMode] = useState<'copy' | 'import' | 'upload' | null>(null);
+  const [applyMode, setApplyMode] = useState<
+    'copy' | 'import' | 'upload' | 'ratio' | 'crop' | 'number' | 'report' | null
+  >(null);
   const applying = applyMode !== null;
   const [cleanStale, setCleanStale] = useState(true);
   const [applied, setApplied] = useState<BarcodeApplyResponse | null>(null);
+  /** 1:1 检查结果（eBay 构图） */
+  const [ratios, setRatios] = useState<BarcodeRatioItemResult[] | null>(null);
+  /** 自动居中裁剪结果 */
+  const [cropReport, setCropReport] = useState<BarcodeCropItemResult[] | null>(null);
+  /** 编号结果：1.jpg、2.jpg… */
+  const [numbered, setNumbered] = useState<BarcodeNumberItemResult[] | null>(null);
+  /** 入库结果 */
+  const [imported, setImported] = useState<BarcodeImportResponse | null>(null);
+  const [uploadedOk, setUploadedOk] = useState(false);
+  const [reported, setReported] = useState(false);
   const [uploads, setUploads] = useState<Record<string, UploadOutcome>>({});
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [oms, setOms] = useState<OmsStatus | null>(null);
@@ -199,7 +239,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     const skuOf = (i: number) => {
       const code = (edits[i]?.code ?? scan.groups[i]?.code ?? '').trim();
       if (/^\d{4,6}$/.test(code)) return code;
-      return (edits[i]?.mainSku || '').trim();
+      // 已有完整编码时用前缀查，顺便补产品名
+      return (edits[i]?.mainSku || code.match(/^(\d{4,6})/)?.[1] || '').trim();
     };
     const skus = [...new Set(scan.groups.map((_, i) => skuOf(i)).filter((c) => /^\d{4,6}$/.test(c)))];
     if (!skus.length) {
@@ -269,6 +310,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setApplied(null);
     setUploads({});
     setUploadProgress(null);
+    // 重新扫描后下游全部作废，避免拿旧文件夹/旧编号继续走
+    setRatios(null);
+    setCropReport(null);
+    setNumbered(null);
+    setImported(null);
+    setUploadedOk(false);
+    setReported(false);
     try {
       const result = await api.barcodeScan(srcDir.trim());
       setScan(result);
@@ -276,15 +324,25 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         result.groups.map((g) => ({
           code: g.code,
           skip: false,
-          mainSku: /^\d{4,6}$/.test(g.code.trim()) ? g.code.trim() : '',
+          // 完整编码也能反推主 SKU 前缀，后续重新查询 OMS 不用再手填
+          mainSku: g.code.trim().match(/^(\d{4,6})/)?.[1] || '',
         }))
       );
       setDate((prev) => prev || result.date);
       if (!result.groups.length) onToast(i18n.t('k07190065'));
-      // 已配置 OMS 时顺手把 5 位主 SKU 换成完整编码（只取「待拍摄」）
+      // 已配置 OMS 时顺手换成完整编码并补产品名（只取「待拍摄」）
       if (oms?.configured) {
-        const skus = [...new Set(result.groups.map((g) => g.code.trim()).filter((c) => /^\d{4,6}$/.test(c)))];
-        if (skus.length) void runOmsQuery(skus, (i) => (result.groups[i]?.code || '').trim());
+        const skus = [...new Set(
+          result.groups
+            .map((g) => g.code.trim().match(/^(\d{4,6})/)?.[1] || '')
+            .filter(Boolean)
+        )];
+        if (skus.length) {
+          void runOmsQuery(skus, (i) => {
+            const c = (result.groups[i]?.code || '').trim();
+            return /^\d{4,6}$/.test(c) ? c : c.match(/^(\d{4,6})/)?.[1] || '';
+          });
+        }
       }
     } catch (err) {
       onToast(`${i18n.t('k5ec14542')}：${(err as Error).message}`, 'error');
@@ -407,7 +465,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         })
       : [];
 
-  /** 第 1 步：只保存/复制到文件夹，完成后停下等人工确认 */
+  /** 已复制出来的编码文件夹：后续检查 / 编号 / 入库 / 上传都围绕它们 */
+  const outputFolders = (applied?.results || [])
+    .filter((r) => r.folder)
+    .map((r) => ({ sourceIndex: r.sourceIndex, code: r.code, folder: r.folder }));
+
+  /** 第 4 步：创建本地文件夹（只复制，不移动原图） */
   const runSave = async () => {
     if (!scan) return;
     if (flowIssues.length) {
@@ -434,9 +497,16 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         cleanStale,
       });
       setApplied(result);
+      // 文件夹重建后，后面的检查结果全部作废
+      setRatios(null);
+      setCropReport(null);
+      setNumbered(null);
+      setImported(null);
       setUploads({});
+      setUploadedOk(false);
+      setReported(false);
       onToast(i18n.t('k2827af98', { p0: result.totalCopied, p1: result.dateDir }));
-      onToast('保存完成：请确认文件夹内容，再点「入库」', 'info');
+      onToast('文件夹已创建：下一步检查 eBay 图片是否 1:1', 'info');
     } catch (err) {
       onToast((err as Error).message, 'error');
     } finally {
@@ -444,34 +514,148 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
-  /** 第 2 步：把文件夹登记进图库；测试阶段允许跳过保存，直接补前置 */
+  /** 第 5 步：检查 1:1。只有 eBay 组需要；只提示，不自动改图 */
+  const ebayFolders = outputFolders.filter((f) => platformOf(f.code) === 'eBay');
+  const checkRatios = async () => {
+    const items = ebayFolders.map((f) => ({ code: f.code, dir: f.folder }));
+    if (!items.length) {
+      setRatios([]);
+      return [];
+    }
+    const res = await api.barcodeRatio(items);
+    setRatios(res.items);
+    return res.items;
+  };
+
+  const runRatio = async () => {
+    setApplyMode('ratio');
+    try {
+      const items = await checkRatios();
+      if (!items) return;
+      if (!items.length) {
+        onToast('没有 eBay 组，不需要检查 1:1');
+        return;
+      }
+      const bad = items.reduce((n, it) => n + it.notSquare.length, 0);
+      if (bad) {
+        const detail = items
+          .filter((it) => it.notSquare.length)
+          .slice(0, 3)
+          .map((it) => `${it.code}（${it.notSquare.length} 张）`)
+          .join('、');
+        onToast(
+          `有 ${bad} 张 eBay 图不是 1:1，必须是正方形：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。请手动裁，或点「自动居中裁剪」`,
+          'error'
+        );
+      } else {
+        onToast('检查完成：eBay 图都是 1:1');
+      }
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setApplyMode(null);
+    }
+  };
+
+  /** 第 5 步补充：只裁不是 1:1 的图，居中裁成正方形并原地覆盖 */
+  const runCrop = async () => {
+    const bad = (ratios || []).filter((it) => it.notSquare.length);
+    if (!bad.length) {
+      onToast('没有需要裁剪的图片，请先点「检查 1:1」', 'error');
+      return;
+    }
+    setApplyMode('crop');
+    try {
+      const res = await api.barcodeCrop(
+        bad.map((it) => ({ code: it.code, dir: it.dir, files: it.notSquare.map((f) => f.file) }))
+      );
+      setCropReport(res.items);
+      const cropped = res.items.reduce((n, it) => n + it.cropped.length, 0);
+      const failed = res.items.reduce((n, it) => n + it.errors.length, 0);
+      // 裁完再核一次，确认真的都是 1:1
+      await checkRatios();
+      onToast(
+        failed ? `已裁剪 ${cropped} 张，${failed} 张失败（可在结果里查看）` : `已裁剪 ${cropped} 张，全部为 1:1`,
+        failed ? 'error' : 'info'
+      );
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setApplyMode(null);
+    }
+  };
+
+  /** 第 6 步：图片编号，编号直接作为最终文件名 */
+  const runNumber = async () => {
+    const folders = outputFolders.map((f) => ({ code: f.code, dir: f.folder }));
+    if (!folders.length) {
+      onToast('还没有创建文件夹', 'error');
+      return;
+    }
+    setApplyMode('number');
+    try {
+      const res = await api.barcodeNumber(folders);
+      setNumbered(res.results);
+      setImported(null);
+      setUploadedOk(false);
+      setReported(false);
+      const total = res.results.reduce((n, r) => n + r.files.length, 0);
+      const failed = res.results.reduce((n, r) => n + r.errors.length, 0);
+      onToast(
+        failed
+          ? `编号完成：${total} 张，${failed} 个文件夹出错`
+          : `编号完成：${res.results.length} 个文件夹，共 ${total} 张（1.jpg、2.jpg…）`,
+        failed ? 'error' : 'info'
+      );
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setApplyMode(null);
+    }
+  };
+
+  /** 第 7 步：把已编号的文件夹登记进图库 */
   const runImport = async () => {
     if (!scan) return;
-    if (flowIssues.length) {
-      onToast('页面还有报错/警告，先处理完再继续', 'error');
+    if (!outputFolders.length) {
+      onToast('还没有创建文件夹', 'error');
       return;
     }
-    if (!rootDir.trim()) {
-      onToast(i18n.t('k9b498a6d'), 'error');
+    if (!numbered) {
+      onToast('请先完成图片编号，再入库', 'error');
       return;
     }
-    const groups = buildGroups();
+    const groups = outputFolders.map((f) => {
+      const edit = edits[f.sourceIndex];
+      const code = String(edit?.code || f.code || '').trim();
+      return {
+        code,
+        folder: f.folder,
+        productName: edit?.productName || '',
+        mainSku: edit?.mainSku || code.match(/^(\d{4,6})/)?.[1] || '',
+      };
+    });
     setApplyMode('import');
     try {
-      const result = await api.barcodeApply({
-        dir: scan.dir,
+      const result = await api.barcodeImport({
         root: rootDir.trim(),
         date,
-        groups,
-        importToLibrary: true,
         parentFolderId: folderId,
-        // 已保存过就不再动磁盘；直接跳过保存时按当前勾选执行清理
-        cleanStale: applied ? false : cleanStale,
+        groups,
       });
-      setApplied(result);
-      setUploads({});
+      setImported(result);
+      setUploadedOk(false);
+      setReported(false);
       onLibraryChanged();
-      onToast(`入库完成：${result.importedTotal ?? 0} 张；请确认图库内容，再点「上传」`, 'info');
+      const failed = result.results.reduce((n, r) => n + r.importErrors.length, 0);
+      onToast(
+        failed
+          ? `入库完成：新登记 ${result.importedTotal} 张，${failed} 个错误`
+          : `入库完成：新登记 ${result.importedTotal} 张${
+              result.importSkippedTotal ? `，已存在 ${result.importSkippedTotal} 张` : ''
+            }`,
+        failed ? 'error' : 'info'
+      );
     } catch (err) {
       onToast((err as Error).message, 'error');
     } finally {
@@ -479,35 +663,25 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
-  /** 第 3 步：核对 OMS 名称并自动上传；测试阶段允许跳过前两步自动补前置 */
+  /** 第 8 步：核对 OMS 名称并上传（本轮不测，保留完整实现） */
   const runUpload = async () => {
     if (!scan) return;
     if (flowIssues.length) {
       onToast('页面还有报错/警告，先处理完再继续', 'error');
       return;
     }
-    if (!rootDir.trim()) {
-      onToast(i18n.t('k9b498a6d'), 'error');
+    if (!imported) {
+      onToast('请先完成入库，再上传 OMS', 'error');
+      return;
+    }
+    if (!applied) {
+      onToast('还没有可上传的文件夹', 'error');
       return;
     }
     setApplyMode('upload');
     try {
-      let base = applied;
-      if (!base?.importedToLibrary) {
-        base = await api.barcodeApply({
-          dir: scan.dir,
-          root: rootDir.trim(),
-          date,
-          groups: buildGroups(),
-          importToLibrary: true,
-          parentFolderId: folderId,
-          cleanStale: applied ? false : cleanStale,
-        });
-        setApplied(base);
-        setUploads({});
-        onLibraryChanged();
-      }
-      const up = await uploadAppliedGroups(base);
+      const up = await uploadAppliedGroups(applied);
+      setUploadedOk(up.mismatch === 0);
       onToast(
         up.mismatch
           ? `上传 ${up.uploadedTotal} 张；有 ${up.mismatch} 个 SKU 名称不一致，已停止等待核对`
@@ -519,6 +693,32 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     } finally {
       setApplyMode(null);
       setUploadProgress(null);
+    }
+  };
+
+  /** 第 9 步：生成工作日报 Excel（时长列留空，由用户手填） */
+  const runReport = async () => {
+    if (!reportRows.length) {
+      onToast('没有可导出的 SKU', 'error');
+      return;
+    }
+    setApplyMode('report');
+    try {
+      const blob = await api.omsProductReport({ date: shootDate, rows: reportRows });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `工作日报-${shootDate}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setReported(true);
+      onToast(`已生成工作日报：工作日报-${shootDate}.xlsx`);
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setApplyMode(null);
     }
   };
 
@@ -556,6 +756,28 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     (rootDir.trim()
       ? `${rootDir.trim().replace(/[\\/]+$/, '')}${rootDir.includes('\\') ? '\\' : '/'}${shootDate}`
       : '');
+
+  /** 各步骤完成状态：当前步骤 = 第一个没完成的 */
+  const stepDone: Record<StepKey, boolean> = {
+    scan: !!scan && scan.groups.length > 0,
+    resolve:
+      !!scan &&
+      scan.groups.length > 0 &&
+      !omsQuerying &&
+      scan.groups.every(
+        (g, i) => !!edits[i]?.skip || !!edits[i]?.omsState || isFullCode(edits[i]?.code ?? g.code)
+      ),
+    review: !!scan && scan.groups.length > 0 && flowIssues.length === 0,
+    copy: outputFolders.length > 0,
+    // 有不是 1:1 的图就停在这一步：用户手动裁完再检查一次即可继续
+    ratio: !!ratios && ratios.every((it) => it.notSquare.length === 0),
+    number: !!numbered,
+    import: !!imported,
+    upload: uploadedOk,
+    report: reported,
+  };
+  const currentKey: StepKey = STEP_DEFS.find((s) => !stepDone[s.key])?.key ?? 'report';
+  const notSquareTotal = (ratios || []).reduce((n, it) => n + it.notSquare.length, 0);
 
   /** 复制成可直接粘贴进 Excel 的表格：日期/时长/进度/工作成果跨行合并 */
   const copyReportTable = async () => {
@@ -1013,87 +1235,187 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 {flowIssues.length > 4 ? ` 等 ${flowIssues.length} 项` : ''}
               </div>
             )}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                className="btn primary"
-                onClick={runSave}
-                disabled={applying || flowIssues.length > 0 || !scan.groups.length}
-              >
-                <IconFolder /> {applyMode === 'copy' ? '保存中…' : '1. 保存'}
-              </button>
-              <button
-                className="btn sm"
-                onClick={runImport}
-                disabled={applying || flowIssues.length > 0 || !scan.groups.length}
-              >
-                {applyMode === 'import' ? '入库中…' : '2. 入库'}
-              </button>
-              <button
-                className="btn sm"
-                onClick={runUpload}
-                disabled={applying || flowIssues.length > 0 || !scan.groups.length}
-              >
-                {applyMode === 'upload' ? '上传中…' : '3. 上传'}
-              </button>
-              <label
-                className="hint"
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                title={`${i18n.t('k21048b99')}。${i18n.t('k58179dae')}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={cleanStale}
-                  onChange={(e) => setCleanStale(e.target.checked)}
-                />
-                {i18n.t('k23b26af3')}
-              </label>
-              <button className="btn sm" onClick={copyReportTable}>
-                复制表格
-              </button>
-              <button
-                className="btn sm"
-                onClick={() => {
-                  if (!outputDateDir) {
-                    onToast('请先选择输出根目录', 'error');
-                    return;
-                  }
-                  downloadFile(omsProductFolderShotUrl(outputDateDir));
-                }}
-              >
-                下载文件夹截图
-              </button>
-              {applied && (
-                <>
-                  <span className="hint" style={{ marginLeft: 'auto' }}>
-                    {i18n.t('k2827af98', { p0: applied.totalCopied, p1: applied.dateDir })}
-                    {applied.importedToLibrary
-                      ? ` · ${i18n.t('k3a58cce9', { p0: applied.importedTotal ?? 0 })}`
-                      : ''}
-                    {(applied.cleanedTotal ?? 0) > 0
-                      ? ` · ${i18n.t('k6b18e06e', { p0: applied.cleanedTotal })}`
-                      : ''}
-                    {applied.importedToLibrary
-                      ? ` · 上传 ${Object.values(uploads).reduce((n, u) => n + u.uploaded, 0)} 张`
-                      : ''}
+            {/* 九步流程条：做完打勾，当前步骤高亮 */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {STEP_DEFS.map((s, i) => {
+                const done = stepDone[s.key];
+                const active = s.key === currentKey;
+                return (
+                  <span
+                    key={s.key}
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      border: `1px solid ${
+                        active ? 'var(--accent, #4c8dff)' : done ? 'var(--ok, #3c9d5d)' : 'var(--line)'
+                      }`,
+                      color: active
+                        ? 'var(--accent, #4c8dff)'
+                        : done
+                          ? 'var(--ok, #3c9d5d)'
+                          : 'var(--muted)',
+                      background: active ? 'rgba(76, 141, 255, 0.12)' : 'transparent',
+                      fontWeight: active ? 600 : 400,
+                    }}
+                  >
+                    {done ? '✓' : i + 1} {s.title}
                   </span>
-                  <button className="btn sm" onClick={() => openFolder(applied.dateDir)}>
-                    {i18n.t('kc49c4607')}
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              {currentKey === 'scan' && (
+                <button className="btn primary" onClick={runScan} disabled={scanning || !srcDir.trim()}>
+                  <IconBarcode /> {scanning ? '识别中…' : '开始识别'}
+                </button>
+              )}
+
+              {currentKey === 'resolve' && (
+                <button className="btn primary" onClick={queryOms} disabled={omsQuerying}>
+                  {omsQuerying ? '查询中…' : '查询完整编码'}
+                </button>
+              )}
+
+              {currentKey === 'review' && (
+                <span className="hint" style={{ fontWeight: 600, color: 'var(--text)' }}>
+                  在上方列表核对 / 修改编码，处理完自动进入下一步
+                </span>
+              )}
+
+              {currentKey === 'copy' && (
+                <>
+                  <button
+                    className="btn primary"
+                    onClick={runSave}
+                    disabled={applying || flowIssues.length > 0 || !outputDateDir}
+                  >
+                    <IconFolder /> {applyMode === 'copy' ? '创建中…' : '创建文件夹'}
                   </button>
+                  <label
+                    className="hint"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                    title={`${i18n.t('k21048b99')}。${i18n.t('k58179dae')}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={cleanStale}
+                      onChange={(e) => setCleanStale(e.target.checked)}
+                    />
+                    {i18n.t('k23b26af3')}
+                  </label>
                 </>
               )}
+
+              {currentKey === 'ratio' && (
+                <>
+                  <button className="btn primary" onClick={runRatio} disabled={applying}>
+                    {applyMode === 'ratio' ? '检查中…' : notSquareTotal ? '重新检查 1:1' : '检查 1:1'}
+                  </button>
+                  {notSquareTotal > 0 && (
+                    <button className="btn" onClick={runCrop} disabled={applying}>
+                      {applyMode === 'crop' ? '裁剪中…' : '自动居中裁剪'}
+                    </button>
+                  )}
+                  <span className="hint">
+                    eBay 图必须 1:1；也可以自己手动裁，裁完点「重新检查 1:1」
+                  </span>
+                </>
+              )}
+
+              {currentKey === 'number' && (
+                <button className="btn primary" onClick={runNumber} disabled={applying}>
+                  {applyMode === 'number' ? '编号中…' : '开始编号'}
+                </button>
+              )}
+
+              {currentKey === 'import' && (
+                <button className="btn primary" onClick={runImport} disabled={applying}>
+                  {applyMode === 'import' ? '入库中…' : '入库'}
+                </button>
+              )}
+
+              {currentKey === 'upload' && (
+                <button className="btn primary" onClick={runUpload} disabled={applying}>
+                  {applyMode === 'upload' ? '上传中…' : '上传 OMS'}
+                </button>
+              )}
+
+              {currentKey === 'report' && (
+                <button className="btn primary" onClick={runReport} disabled={applying}>
+                  {applyMode === 'report' ? '生成中…' : '生成 Excel'}
+                </button>
+              )}
+
+              {currentKey === 'report' && (
+                <button className="btn sm" onClick={copyReportTable}>
+                  复制表格
+                </button>
+              )}
+
+              {currentKey === 'report' && (
+                <button
+                  className="btn sm"
+                  onClick={() => {
+                    if (!outputDateDir) {
+                      onToast('请先选择输出根目录', 'error');
+                      return;
+                    }
+                    downloadFile(omsProductFolderShotUrl(outputDateDir));
+                  }}
+                >
+                  下载文件夹截图
+                </button>
+              )}
+
+              {applied && (
+                <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => openFolder(applied.dateDir)}>
+                  {i18n.t('kc49c4607')}
+                </button>
+              )}
             </div>
-            <div className="hint" style={{ marginTop: 6 }} title={i18n.t('k58179dae')}>
+
+            {/* 当前步骤的结果反馈：数量、异常都摆在这里，不用去翻上面的卡片 */}
+            <div className="hint" style={{ marginTop: 8 }}>
+              {currentKey === 'scan' && '选择源目录后开始：标签照片开组，标签本身不进产品文件夹。'}
+              {currentKey === 'resolve' && '用 5 位主 SKU 到中台查「待拍摄」的完整编码；查到会自动回填产品名。'}
+              {currentKey === 'review' &&
+                (flowIssues.length ? `还有 ${flowIssues.length} 个问题需要处理。` : '编码、产品名、产品图都齐了。')}
+              {currentKey === 'copy' && `将复制到：${outputDateDir || '请先选择输出根目录'}`}
+              {currentKey === 'ratio' &&
+                (ratios
+                  ? notSquareTotal
+                    ? `有 ${notSquareTotal} 张 eBay 图不是 1:1，必须为正方形。`
+                    : ebayFolders.length
+                      ? 'eBay 图都是 1:1，可以继续编号。'
+                      : '没有 eBay 组，跳过 1:1 检查。'
+                  : '创建文件夹后，先检查 eBay 图是否 1:1。')}
+              {currentKey === 'number' &&
+                (numbered
+                  ? `已编号 ${numbered.reduce((n, r) => n + r.files.length, 0)} 张（1.jpg、2.jpg…）`
+                  : '按拍摄顺序重命名成 1.jpg、2.jpg…，编号就是最终文件名。')}
+              {currentKey === 'import' &&
+                (imported
+                  ? `已入库 ${imported.importedTotal} 张`
+                  : `登记到图库：${activeFolder?.name || activeLibName || '图库根'}`)}
+              {currentKey === 'upload' && '核对 OMS 名称后上传；名称不一致会停下等你确认。'}
+              {currentKey === 'report' && `生成 工作日报-${shootDate}.xlsx，时长列留空。`}
+            </div>
+
+            {cropReport && cropReport.some((it) => it.cropped.length) && (
+              <div className="hint" style={{ marginTop: 4 }}>
+                最近一次裁剪：
+                {cropReport
+                  .filter((it) => it.cropped.length)
+                  .map((it) => `${it.code} ${it.cropped.length} 张`)
+                  .join('；')}
+              </div>
+            )}
+
+            <div className="hint" style={{ marginTop: 4 }}>
               {i18n.t('k168903f9')}：{activeFolder?.name || activeLibName || i18n.t('k1dae2087')} ·{' '}
               {i18n.t('k948019e4')}
-            </div>
-            <div className="hint" style={{ marginTop: 4 }}>
-              {flowIssues.length > 0
-                ? '先处理上面的报错/警告，处理完才能点保存/入库/上传。'
-                : !applied
-                  ? '1 保存 → 2 入库 → 3 上传。测试阶段无报错时可点任意一步，缺的前置会自动补上。'
-                  : !applied.importedToLibrary
-                    ? '保存完成。确认文件夹内容后，点「2. 入库」；也可以直接点「3. 上传」自动补入库。'
-                    : '入库完成。确认图库内容后，点「3. 上传」；名称一致自动上传，不一致停下等你核对。'}
             </div>
           </div>
         </>

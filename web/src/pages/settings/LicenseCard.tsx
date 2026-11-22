@@ -22,6 +22,19 @@ interface Props {
   onToast: (m: string, kind?: 'info' | 'error') => void;
 }
 
+/** 激活码外形检查：只做即时提示，真正的验签 / 设备绑定校验仍在服务端完成 */
+function looksLikeLicenseKey(input: string) {
+  let raw = input.trim();
+  if (raw.startsWith('{')) {
+    try {
+      raw = String(JSON.parse(raw)?.key || '').trim();
+    } catch {
+      return false;
+    }
+  }
+  return /^TUKU1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(raw);
+}
+
 /**
  * 设置 → 授权：手机号 + 设备码、激活码与专业版能力。
  *
@@ -57,9 +70,21 @@ export default function LicenseCard({ onToast }: Props) {
 
   const activate = async () => {
     if (busy) return;
+    const key = draft.trim();
+    if (!looksLikeLicenseKey(key)) {
+      onToast('激活码格式不正确，应为 TUKU1.xxx.yyy 形式；请重新复制完整授权码', 'error');
+      return;
+    }
     setBusy(true);
     try {
-      const next = await api.activateLicense(draft.trim());
+      const next = await api.activateLicense(key);
+      // 只有真的写入并通过本机验签的授权文件才算激活成功；
+      // 开发模式 / 试用期的 Pro 不能被当成“这个激活码有效”。
+      if (next.licensedByKey !== true) {
+        setStatus(next);
+        onToast('激活码未通过本机校验，请确认设备码与授权码是否匹配', 'error');
+        return;
+      }
       setStatus(next);
       setDraft('');
       void refreshLicense(true);
@@ -73,10 +98,10 @@ export default function LicenseCard({ onToast }: Props) {
 
   const deactivate = async () => {
     if (busy) return;
-    // 开发模式的 Pro 来自 TUKU_DEV_PRO=1，删授权文件也不会掉，直接解释清楚
+    // 开发环境（源码运行）默认拥有专业版能力，删授权文件也不会掉，直接解释清楚
     if (status?.devPro && !status.licensedByKey) {
       onToast(
-        '当前专业版来自开发环境变量 TUKU_DEV_PRO=1，取消授权不会改变状态；请去掉该环境变量后重启再试。',
+        '当前专业版来自开发环境（源码运行），取消授权不会改变状态；打包后的安装包才会按真实授权判断。',
         'error'
       );
       return;
@@ -110,12 +135,44 @@ export default function LicenseCard({ onToast }: Props) {
   const deviceCode = status.deviceCode || status.machineCode;
   const badge = realLicensed
     ? i18n.t('k3f086416')
-    : status.licensed
-      ? '开发模式 Pro'
-      : i18n.t('k0357cdb4');
+    : status.trial
+      ? `试用中 · 剩 ${status.trialDaysLeft} 天`
+      : status.licensed
+        ? '开发模式 Pro'
+        : i18n.t('k0357cdb4');
 
   return (
     <Card title={i18n.t('ke3c2d3c8')} desc={i18n.t('k97ac2c53')} badge={<span className="settings-badge">{badge}</span>}>
+      {status.trial && (
+        <div
+          style={{
+            margin: '4px 0 12px',
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--panel)',
+            lineHeight: 1.7,
+          }}
+        >
+          新设备试用期还剩 <b>{status.trialDaysLeft}</b> 天
+          {status.trialEndsAt ? `（到 ${new Date(status.trialEndsAt).toLocaleDateString()} 结束）` : ''}
+          ，期间可使用全部专业版功能。到期后自动退回免费版，不会锁软件。
+        </div>
+      )}
+      {status.trialExpired && (
+        <div
+          style={{
+            margin: '4px 0 12px',
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--warn, #d99a2b)',
+            background: 'rgba(217, 154, 43, 0.12)',
+            lineHeight: 1.7,
+          }}
+        >
+          7 天试用已结束，当前为免费版。输入激活码即可恢复专业版。
+        </div>
+      )}
       <div className="field">
         <label>设备码</label>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -168,6 +225,22 @@ export default function LicenseCard({ onToast }: Props) {
         </div>
       )}
 
+      {status.verifierHealthy === false && (
+        <div
+          style={{
+            margin: '8px 0',
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--danger, #d9534f)',
+            background: 'rgba(217, 83, 79, 0.12)',
+            color: 'var(--danger, #d9534f)',
+            fontWeight: 600,
+          }}
+        >
+          授权校验模块未通过自检，已按免费版运行。请重新安装官方客户端。
+        </div>
+      )}
+
       {status.revoked && (
         <div
           style={{
@@ -206,7 +279,7 @@ export default function LicenseCard({ onToast }: Props) {
         <>
           {status.devPro && (
             <div className="hint" style={{ color: 'var(--warn)', marginBottom: 8 }}>
-              当前是开发模式临时专业版（TUKU_DEV_PRO=1），不是真实授权；取消授权不会改变它。下面仍可激活正式授权码。
+              当前是开发环境（源码运行），默认拥有专业版能力，不是真实授权；打包后的安装包会按授权码判断。下面仍可激活正式授权码。
             </div>
           )}
           <div className="hint" style={{ color: 'var(--warn)' }}>
@@ -222,6 +295,9 @@ export default function LicenseCard({ onToast }: Props) {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
             />
+            <div className="hint">
+              激活时会在本机用内置公钥验签，并校验产品、设备码和有效期；任何一项不符都会被拒绝，不会写入授权文件。
+            </div>
             <div style={{ marginTop: 8 }}>
               <button className="btn primary" disabled={busy || !draft.trim()} onClick={() => void activate()}>
                 {i18n.t('k83a991d7')}

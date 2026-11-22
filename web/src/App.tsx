@@ -86,6 +86,8 @@ export default function App() {
   const [activeLibId, setActiveLibId] = useState<number | null>(null);
 
   const [view, setView] = useState<View>(initialRoute.view);
+  /** 打开设置时直接落到哪一节：右上角头像菜单的「设置 / 授权 / 关于软件」 */
+  const [settingsSection, setSettingsSection] = useState<'general' | 'about' | 'license'>('general');
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const v = localStorage.getItem('tuku:view-mode');
@@ -115,6 +117,10 @@ export default function App() {
   const requestStatsRefresh = useCallback(() => refreshStatsRef.current(), []);
   const isImportingNow = useCallback(() => importingRef.current, []);
   const showGallery = useCallback(() => setView('gallery'), []);
+  const openSettings = useCallback((section: 'general' | 'about' | 'license' = 'general') => {
+    setSettingsSection(section);
+    setView('settings');
+  }, []);
   /** 启动竞态 / 服务重启后，成功请求要能把顶部残留的错误条清掉 */
   const clearLoadError = useCallback(() => setLoadError(''), [setLoadError]);
 
@@ -323,6 +329,7 @@ export default function App() {
         activeLibName={activeLibName}
         view={view}
         onView={setView}
+        onOpenSettings={openSettings}
         toolsOpen={toolsOpen}
         onToolsOpen={setToolsOpen}
         toolsRef={toolsRef}
@@ -464,6 +471,7 @@ export default function App() {
               showUnfiled={showUnfiled}
               startTour={startTour}
               onLibraryChanged={onLibraryChanged}
+              settingsSection={settingsSection}
             />
           </div>
 

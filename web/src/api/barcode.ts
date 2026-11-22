@@ -82,6 +82,49 @@ export interface BarcodeApplyResponse {
   importedToLibrary?: boolean;
 }
 
+/** 一个输出文件夹的 1:1 检查结果 */
+export interface BarcodeRatioItemResult {
+  code: string;
+  dir: string;
+  total: number;
+  /** 不是 1:1 的图片；eBay 必须为 1:1 */
+  notSquare: { file: string; width: number; height: number }[];
+  errors: { file: string; error: string }[];
+}
+
+export interface BarcodeCropItemResult {
+  code: string;
+  dir: string;
+  /** 本次被居中裁成 1:1 的文件 */
+  cropped: string[];
+  errors: { file: string; error: string }[];
+}
+
+export interface BarcodeNumberItemResult {
+  code: string;
+  dir: string;
+  /** 编号后的最终文件名：1.jpg、2.jpg… */
+  files: string[];
+  errors: { file: string; error: string }[];
+}
+
+export interface BarcodeImportGroupResult {
+  code: string;
+  folder: string;
+  imported: number;
+  importSkipped: number;
+  importErrors: { file: string; error: string }[];
+  libraryFolderId: number | null;
+}
+
+export interface BarcodeImportResponse {
+  ok: boolean;
+  dateDir: string;
+  importedTotal: number;
+  importSkippedTotal: number;
+  results: BarcodeImportGroupResult[];
+}
+
 const LONG_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** 源目录里的图片预览地址；同源 GET 可直接给 <img src>。max 用于双击看大图 */
@@ -112,6 +155,43 @@ export const barcodeAPI = {
     cleanStale?: boolean;
   }) =>
     request<BarcodeApplyResponse>('/api/barcode/apply', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeoutMs: LONG_TIMEOUT_MS,
+    }),
+
+  /** 检查输出文件夹里的图片是否 1:1（eBay 构图要求） */
+  barcodeRatio: (items: { code: string; dir: string; files?: string[] }[]) =>
+    request<{ items: BarcodeRatioItemResult[] }>('/api/barcode/ratio', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+      timeoutMs: LONG_TIMEOUT_MS,
+    }),
+
+  /** 居中裁成 1:1，原地覆盖 */
+  barcodeCrop: (items: { code: string; dir: string; files?: string[] }[]) =>
+    request<{ items: BarcodeCropItemResult[] }>('/api/barcode/crop', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+      timeoutMs: LONG_TIMEOUT_MS,
+    }),
+
+  /** 按拍摄顺序把图片重命名成 1.jpg、2.jpg… */
+  barcodeNumber: (folders: { code: string; dir: string }[]) =>
+    request<{ results: BarcodeNumberItemResult[] }>('/api/barcode/number', {
+      method: 'POST',
+      body: JSON.stringify({ folders }),
+      timeoutMs: LONG_TIMEOUT_MS,
+    }),
+
+  /** 把已编号的文件夹登记进图库（写产品名 / 完整编码 / 主 SKU 标签） */
+  barcodeImport: (payload: {
+    root: string;
+    date: string;
+    parentFolderId?: number | null;
+    groups: { code: string; folder: string; productName?: string; mainSku?: string }[];
+  }) =>
+    request<BarcodeImportResponse>('/api/barcode/import', {
       method: 'POST',
       body: JSON.stringify(payload),
       timeoutMs: LONG_TIMEOUT_MS,
