@@ -66,6 +66,13 @@ async function obfuscate() {
     if (!fs.existsSync(src)) continue;
     fs.cpSync(src, path.join(backupDir, target), { recursive: true });
     for (const file of walk(src)) {
+      // .cjs 必须原样保留，不能过 esbuild 的 format:'esm'：
+      // 1) 它会把 `module.exports = {...}` 包成只有 default 导出的 ESM，主进程
+      //    `import { tf } from './i18n-main.cjs'` 在安装后直接抛
+      //    "does not provide an export named 'tf'"（开发时不混淆所以看不出来）。
+      // 2) Electron 的 preload 脚本也必须是真正的 CommonJS，转成 ESM 后加载失败。
+      // 这两个文件都是小字典/桥接层，混淆收益几乎为零，跳过最稳。
+      if (file.endsWith('.cjs')) continue;
       const rel = path.relative(ROOT, file).replace(/\\/g, '/');
       const code = fs.readFileSync(file, 'utf8');
       const result = await transform(code, {
@@ -85,6 +92,28 @@ async function obfuscate() {
     }
   }
   console.log(`[secure] 已混淆 ${count} 个文件；源码备份：${backupDir}`);
+  verifyCjsUntouched();
+}
+
+/**
+ * CJS 自检：esbuild 的 format:'esm' 会把 `module.exports = {...}` 改成只有 default
+ * 导出的包装模块，主进程的具名 import / Electron preload 都会在启动瞬间失败。
+ * 这里逐一比对混淆前后的 .cjs 字节，确保它们永远原样进包。
+ */
+function verifyCjsUntouched() {
+  for (const target of TARGETS) {
+    const backupTarget = path.join(backupDir, target);
+    if (!fs.existsSync(backupTarget)) continue;
+    const liveDir = path.join(ROOT, target);
+    for (const file of walk(liveDir).filter((f) => f.endsWith('.cjs'))) {
+      const rel = path.relative(liveDir, file);
+      const before = fs.readFileSync(path.join(backupTarget, rel), 'utf8');
+      const after = fs.readFileSync(file, 'utf8');
+      if (before !== after) {
+        throw new Error(`[secure] CommonJS 文件被改写：${rel}；CJS→ESM 会丢掉具名导出，安装后会无法启动`);
+      }
+    }
+  }
 }
 
 function restore() {
