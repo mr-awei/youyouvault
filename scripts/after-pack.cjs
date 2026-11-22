@@ -16,7 +16,7 @@ const path = require('node:path');
 const ARCH_NAMES = { 0: 'ia32', 1: 'x64', 2: 'armv7l', 3: 'arm64', 4: 'universal' };
 
 /** 纯前端依赖：产物里出现就删（包体大、服务端不用） */
-const WEB_ONLY = ['onnxruntime-web', 'three', 'xlsx', 'mammoth', 'codepage'];
+const WEB_ONLY = ['onnxruntime-web', 'three', 'mammoth', 'codepage'];
 
 /**
  * Chromium 自带 55 种界面语言包（合计约 48MB），应用界面只有中文、没有多语言切换。

@@ -627,6 +627,41 @@ async function rotateImageInner(id, dir = 'cw') {
   return toDTO(getImage(id));
 }
 
+/* ------------------------------- Office 文件写回 ------------------------------- */
+
+/** 允许在应用内保存的办公文档扩展名（与前端 OfficeViewer 的可编辑范围一致） */
+const OFFICE_WRITE_EXT = new Set(['xlsx', 'csv', 'docx', 'pptx', 'txt', 'md']);
+const OFFICE_WRITE_MAX = 64 * 1024 * 1024;
+
+/**
+ * 保存应用内编辑过的办公文档：原子写回原文件，并更新大小 / mtime。
+ * 不做格式转换——调用方必须传回与扩展名匹配的完整文件内容。
+ * @param {number} id
+ * @param {Buffer | Uint8Array} data
+ */
+export async function saveOfficeFile(id, data) {
+  const row = getImage(id);
+  if (!row || !row.abs_path) throw new Error('文件不存在');
+  const ext = extOfPath(row.abs_path);
+  if (!OFFICE_WRITE_EXT.has(ext)) throw new Error(`不支持在应用内保存 .${ext || '未知'} 文件`);
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  if (!buf.length) throw new Error('保存内容为空');
+  if (buf.length > OFFICE_WRITE_MAX) throw new Error('文件超过 64MB，请用系统应用编辑');
+  if (!fs.existsSync(row.abs_path)) throw new Error('本地文件不存在（可能被移动或删除）');
+
+  await pushEditBackup(row, 'office-save');
+  await writeFileAtomic(row.abs_path, buf);
+
+  let fsMtime = Number(row.fs_mtime || 0) + 1;
+  try {
+    fsMtime = Math.max(Math.round(fs.statSync(row.abs_path).mtimeMs / 1000), fsMtime);
+  } catch {
+    /* 保留递增兜底值 */
+  }
+  db.prepare('UPDATE images SET size_bytes = ?, fs_mtime = ? WHERE id = ?').run(buf.length, fsMtime, id);
+  return toDTO(getImage(id));
+}
+
 /* ------------------------------- 画质增强 ------------------------------- */
 // 实现已拆到 lib/enhance.js（re-export 保持既有调用方 import 路径不变）
 export {

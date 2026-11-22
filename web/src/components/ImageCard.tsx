@@ -299,6 +299,97 @@ function MediaGlyph({
   );
 }
 
+const sheetPreviewCache = new Map<string, string[][] | null>();
+
+/**
+ * Office 文档在列表页的内容缩略：
+ * - xlsx / csv：懒加载解析前几行，直接画出「表格里有什么」，不再只有一个文件图标
+ * - docx / pptx：解析成本高，保留图标卡；点开灯箱即可阅读
+ * 只在卡片进入视口附近时才请求，避免一屏几十个文档同时拉文件、解析整本工作簿。
+ */
+function OfficeCardPreview({ item, label }: { item: ImageItem; label: string }) {
+  const ext = extOfPath(item.path || item.title);
+  const [rows, setRows] = useState<string[][] | null>(() => sheetPreviewCache.get(item.url) || null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (ext !== 'xlsx' && ext !== 'csv') return;
+    if (sheetPreviewCache.has(item.url)) {
+      setRows(sheetPreviewCache.get(item.url) || null);
+      return;
+    }
+    const host = hostRef.current;
+    if (!host) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(item.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buf = await res.arrayBuffer();
+        const mod = (await import('xlsx-js-style')) as unknown as { default?: typeof import('xlsx-js-style') };
+        const XLSX = mod.default || (mod as unknown as typeof import('xlsx-js-style'));
+        const wb = XLSX.read(buf, { type: 'array' }) as {
+          SheetNames: string[];
+          Sheets: Record<string, Record<string, unknown>>;
+        };
+        const ws = wb.Sheets[wb.SheetNames[0]] || {};
+        const out: string[][] = [];
+        for (let r = 0; r < 5; r++) {
+          const line: string[] = [];
+          for (let c = 0; c < 6; c++) {
+            const cell = ws[XLSX.utils.encode_cell({ r, c })] as { w?: string; v?: unknown } | undefined;
+            line.push(cell ? String(cell.w ?? cell.v ?? '') : '');
+          }
+          out.push(line);
+        }
+        sheetPreviewCache.set(item.url, out);
+        if (!cancelled) setRows(out);
+      } catch {
+        sheetPreviewCache.set(item.url, null);
+        if (!cancelled) setRows(null);
+      }
+    };
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        io.disconnect();
+        void load();
+      },
+      { rootMargin: '240px' }
+    );
+    io.observe(host);
+    return () => {
+      cancelled = true;
+      io.disconnect();
+    };
+  }, [item.url, ext]);
+
+  if ((ext === 'xlsx' || ext === 'csv') && rows) {
+    return (
+      <div className="card-sheet-preview" ref={hostRef}>
+        <table>
+          <tbody>
+            {rows.map((line, r) => (
+              <tr key={r}>
+                {line.map((v, c) => (
+                  <td key={c} className={r === 0 ? 'head' : ''}>
+                    {v}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return (
+    <div ref={hostRef} className="card-sheet-preview pending">
+      <MediaGlyph kind="office" size={item.sizeBytes} title={item.title.replace(/\.[a-z0-9]{2,5}$/i, '')} label={label} />
+    </div>
+  );
+}
+
 const ImageCard = React.memo(function ImageCard({
   item,
   selected,
@@ -529,6 +620,10 @@ const ImageCard = React.memo(function ImageCard({
     }
     if (kind === 'font') {
       return <FontThumb url={fullUrl} title={item.title} />;
+    }
+    if (kind === 'office') {
+      const label = [kindLabel, extOfPath(item.path || item.url)].filter(Boolean).join(' · ');
+      return <OfficeCardPreview item={item} label={label} />;
     }
     if (!isPlainImage) {
       // 音频 / PDF / Office / 3D 等没有画面：卡片上给文件名 + 时长 + 大小，

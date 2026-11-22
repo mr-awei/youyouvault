@@ -356,6 +356,38 @@
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* Excel / CSV 卡片：直接显示前几行内容，代替「只有一个文件图标」 */
+.card-sheet-preview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+  overflow: hidden;
+  background: #fdfdfd;
+  border-radius: 6px;
+}
+.card-sheet-preview.pending {
+  background: transparent;
+}
+.card-sheet-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: #2b2d36;
+}
+.card-sheet-preview td {
+  border: 1px solid #e3e4ec;
+  padding: 3px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-sheet-preview td.head {
+  background: #f0f1f7;
+  font-weight: 600;
+}
 .media-font-sample {
   font-size: 26px;
   font-weight: 500;

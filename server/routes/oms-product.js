@@ -9,8 +9,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
-import * as XLSX from 'xlsx';
 import { omsClient } from '../lib/oms.js';
+import { buildWorkReport } from '../lib/work-report.js';
 import { collectImages } from '../lib/barcode-split.js';
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|bmp|tiff?|heic|heif)$/i;
@@ -214,51 +214,7 @@ export function register(app, ctx) {
         .filter((r) => r.sku);
       if (!rows.length) return res.status(400).json({ error: '没有可导出的 SKU' });
 
-      const header = [
-        '日期',
-        '今日完成工作',
-        '运营',
-        'SKU',
-        '品名',
-        '平台',
-        '类别',
-        '拍摄时长/h',
-        '包装/安装/拆卸/h',
-        '任务总工作时长/h',
-        '进度',
-        '工作成果',
-        '主管/组长/带教',
-      ];
-      const aoa = [header];
-      for (const r of rows) {
-        aoa.push([
-          date,
-          `产品拍摄*${rows.length}`,
-          '',
-          r.sku,
-          r.name,
-          r.platform,
-          r.category,
-          '待填',
-          '待填',
-          '待填',
-          '100%',
-          '文件夹截图',
-          '',
-        ]);
-      }
-      // 和现有日报一致：末尾补一行「图片上传 / 其它」
-      aoa.push([date, '图片上传', '', '', '', '', '其它', '', '', '待填', '100%', '文件夹截图', '']);
-
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [
-        { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 28 }, { wch: 24 },
-        { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 18 }, { wch: 18 },
-        { wch: 10 }, { wch: 16 }, { wch: 16 },
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '工作日报');
-      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const buf = buildWorkReport({ date, rows });
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="work-report-${date}.xlsx"; filename*=UTF-8''${encodeURIComponent(`工作日报-${date}.xlsx`)}`

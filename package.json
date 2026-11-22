@@ -1,7 +1,7 @@
 {
   "name": "tuku-gallery",
   "productName": "youyoutuku",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "通用本地图片管理工具 — pHash 去重 / 暗色图片库",
   "author": "图库",
@@ -73,6 +73,7 @@
     "side-channel-list": "^1.0.0",
     "side-channel-map": "^1.0.1",
     "side-channel-weakmap": "^1.0.2",
+    "xlsx-js-style": "^1.2.0",
     "yallist": "^5.0.0"
   },
   "devDependencies": {
@@ -90,8 +91,7 @@
     "mammoth": "^1.13.0",
     "three": "^0.187.0",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7",
-    "xlsx": "^0.18.5"
+    "vite": "^6.0.7"
   },
   "build": {
     "appId": "com.tuku.gallery",
@@ -112,7 +112,6 @@
       "!node_modules/scheduler/**",
       "!node_modules/onnxruntime-web/**",
       "!node_modules/three/**",
-      "!node_modules/xlsx/**",
       "!node_modules/mammoth/**",
       "!node_modules/codepage/**",
       "!node_modules/@huggingface/transformers/dist/ort-wasm*",

@@ -1,6 +1,7 @@
 // @ts-check
 // 文件服务路由：原图/缩略图直出、批量打包下载 zip（从 app.js 拆出）
 import archiver from 'archiver';
+import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -277,6 +278,33 @@ export function register(app, ctx) {
       // 使用统计：下载也记一次「导出」（用户心智里下载下来用过就算用过）
       bumpUsage('export', [row.id]);
       res.sendFile(src, SEND_OPTS);
+    })
+  );
+
+  /**
+   * 保存应用内编辑过的办公文档（xlsx / csv / docx / pptx / txt / md）。
+   * 前端把 SheetJS 等生成的完整文件内容以原始字节 POST 上来，这里原子写回原文件。
+   * 仅允许 office 类素材，避免被当成任意文件写入接口。
+   */
+  app.post(
+    '/api/images/:id/office',
+    express.raw({ type: '*/*', limit: '64mb' }),
+    asyncRoute(async (req, res) => {
+      const id = Number(req.params.id);
+      const row = lib.getImage(id);
+      if (!row) return res.status(404).json({ error: '素材不存在' });
+      if ((row.media_kind || '') !== 'office') {
+        return res.status(400).json({ error: '只有办公文档可以在应用内保存' });
+      }
+      if (!Buffer.isBuffer(req.body) || !req.body.length) {
+        return res.status(400).json({ error: '请求体为空' });
+      }
+      try {
+        const item = await lib.saveOfficeFile(id, req.body);
+        res.json({ ok: true, item });
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+      }
     })
   );
 

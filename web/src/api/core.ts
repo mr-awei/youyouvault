@@ -3,7 +3,7 @@
  * 各域模块（api/*.ts）都从这里拿 request/BASE/quiet，不再各自造一套。
  */
 import type { AppInfo, DesktopAPI } from './types';
-import type { Filters } from '../types';
+import type { Filters, ImageItem } from '../types';
 export const desktop = (window as unknown as { desktopAPI?: DesktopAPI }).desktopAPI;
 export const isDesktop = !!desktop;
 import i18n, { currentLocale } from '../i18n';
@@ -157,6 +157,28 @@ export async function revealFile(path: string) {
 export async function pickFolder() {
   if (!desktop) return null;
   return desktop.pickFolder();
+}
+
+/**
+ * 保存应用内编辑过的办公文档（xlsx / csv / docx / pptx / txt / md）。
+ * 与普通 JSON 接口不同，这里直接 POST 原始字节；服务端会校验素材类型再原子写回。
+ */
+export async function saveOfficeFile(
+  id: number,
+  bytes: Uint8Array
+): Promise<{ ok: boolean; item?: ImageItem }> {
+  const token = await getApiToken();
+  const res = await fetch(`${BASE}/api/images/${id}/office`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: bytes as unknown as BodyInit,
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: string; item?: ImageItem };
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return { ok: true, item: data.item };
 }
 
 export const BASE = (import.meta.env.VITE_API_BASE as string) || '';

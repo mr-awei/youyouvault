@@ -565,7 +565,7 @@ export default function MediaViewer({ item, onReplaceItem, onToast }: Props) {
     return (
       <div className="mv-wrap" onClick={(e) => e.stopPropagation()}>
         <Suspense fallback={<div className="mv-fallback">{i18n.t('k660ce95d')}</div>}>
-          <OfficeViewer item={item} onToast={onToast} />
+          <OfficeViewer item={item} onToast={onToast} onSaved={onReplaceItem} />
         </Suspense>
         <div className="mv-bar">
           <span>{item.title}</span>

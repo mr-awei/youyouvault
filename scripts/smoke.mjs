@@ -14,6 +14,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { writeStat } from './doc-stats.mjs';
 import { signLicenseKey } from '../server/lib/license-core.js';
+import { buildWorkReport } from '../server/lib/work-report.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 38790 + Math.floor(Math.random() * 500);
@@ -229,6 +230,41 @@ try {
       ups.every((u) => u.ok) && ups.every((u) => Number(u.body?.image?.id) > 0),
       ups.map((u) => `${u.status}:${u.body?.image?.id || u.body?.error || '-'}`).join(' ')
     );
+
+    // ---- Office 文档：入库类型 + 应用内编辑保存写回 ----
+    const reportBytes = buildWorkReport({ date: '2026-11-21', rows: [{ sku: 'SMOKE-1', name: '冒烟' }] });
+    const reportUp = await upload(reportBytes, 'smoke-report.xlsx');
+    const reportId = Number(reportUp.body?.image?.id || 0);
+    check('Excel 文档可入库', reportUp.ok && reportId > 0, `${reportUp.status}:${reportId}`);
+
+    const reportDetail = await (await fetch(`${BASE}/api/images/${reportId}`, { headers })).json();
+    check('Excel 入库后识别为 office', reportDetail?.mediaKind === 'office', String(reportDetail?.mediaKind));
+
+    const editedBytes = buildWorkReport({
+      date: '2026-11-22',
+      rows: [{ sku: 'SMOKE-1', name: '冒烟' }, { sku: 'SMOKE-2', name: '改后' }],
+    });
+    const saveRes = await fetch(`${BASE}/api/images/${reportId}/office`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+      body: editedBytes,
+    });
+    const saveBody = await saveRes.json().catch(() => ({}));
+    const savedFile = Buffer.from(
+      await (await fetch(`${BASE}/api/images/${reportId}/file`, { headers })).arrayBuffer()
+    );
+    check(
+      '应用内编辑 Excel 可写回原文件',
+      saveRes.ok && saveBody?.ok === true && savedFile.equals(editedBytes),
+      `${saveRes.status} ${saveBody?.error || ''} 字节=${savedFile.length}/${editedBytes.length}`
+    );
+
+    const rejectSave = await fetch(`${BASE}/api/images/${reportId}/office`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+      body: Buffer.alloc(0),
+    });
+    check('空内容保存被拒绝 (400)', rejectSave.status === 400, String(rejectSave.status));
 
     // ---- 缩略图张冠李戴回归 ----
     // 缩略图/预览图按 id 命名，而 id 会随建库、清库、恢复备份从头再来。磁盘上「上一辈子
