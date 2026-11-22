@@ -1,6 +1,6 @@
 # 图库 TuKu
 
-[![版本](https://img.shields.io/badge/version-1.5.5-2563eb.svg)](https://github.com/mr-awei/youyouvault/releases/latest)
+[![版本](https://img.shields.io/badge/version-1.5.6-2563eb.svg)](https://github.com/mr-awei/youyouvault/releases/latest)
 [![平台](https://img.shields.io/badge/platform-Windows%2010%2F11-5b6472.svg)](#2-下载与安装)
 [![Electron](https://img.shields.io/badge/Electron-44.4.5-47848f.svg)](#6-架构与数据流)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522.5-339933.svg)](#9-常用命令)
@@ -89,7 +89,7 @@ flowchart LR
 | 整理与查重 | 待整理三视图、收件箱、MD5 完全重复、pHash 相似重复、库-盘一致性、孤儿缩略图清理、缩略图失败队列 | `查重` `失配` `待整理` `收件箱` |
 | 编辑与导出 | 裁切、旋转、调色、擦除修复、标注、插值增强、非破坏编辑、视频裁剪 / GIF / WebM、CSV / JSON / HTML 画廊、Eagle 库导出 | `裁切` `非破坏` `导出` |
 | 导入与分享 | 本地导入（内容级去重 / 命名模板 / 断点续传 / 冲突识别）、拖拽投放、剪贴板、手机扫码投送、只读分享（有效期 / 密码 / 禁下载）、元数据 CSV 导回 | `导入` `分享` `CSV` |
-| 拍摄与入库 | 条码照片自动分组、OMS 按 5 位主 SKU 回填完整编码、保存并入库（当前文件夹 → 日期 → 编码）、产品名与编码写入标签、旧文件移到 `.stale` | `条码` `OMS` `入库` |
+| 拍摄与入库 | 条码照片自动分组、OMS 按 5 位主 SKU 回填完整编码、保存并入库（当前文件夹 → 日期 → 编码）、每个产品自己挑前五张并按所选顺序编号、产品名与编码写入标签、旧文件移到 `.stale` | `条码` `OMS` `入库` |
 | 桌面与系统 | 托盘常驻、全局快捷键、开机自启、区域截图 | `托盘` `快捷键` |
 | AI 与自动化 | CLIP 语义搜索、自动标签与描述、适配度评分、知识库问答、OCR、AI 多供应商、批量动作、插件脚本、MCP / API | `语义搜索` `OCR` `MCP` |
 | 数据与设置 | 多资源库、同步文件夹快照、备份恢复、外键约束与完整性自检、离线授权、快捷键自定义、命令面板、日志与诊断、检查更新 | `资源库` `备份` `授权` `快捷键` `关于软件` |
@@ -393,7 +393,7 @@ flowchart TB
 
 ```bash
 # 1. 升版本（不自动打 tag）
-npm version patch --no-git-tag-version   # 本次 1.5.5 用 patch；功能版本用 minor
+npm version patch --no-git-tag-version   # 本次 1.5.6 用 patch；功能版本用 minor
 # 2. 全量验证
 npm run verify
 # 3. 提交
