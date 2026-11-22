@@ -308,7 +308,8 @@ const sheetPreviewCache = new Map<string, string[][] | null>();
  * 只在卡片进入视口附近时才请求，避免一屏几十个文档同时拉文件、解析整本工作簿。
  */
 function OfficeCardPreview({ item, label }: { item: ImageItem; label: string }) {
-  const ext = extOfPath(item.path || item.title);
+  // extOfPath 返回大写（用于角标展示），这里判断解析能力必须转小写
+  const ext = (extOfPath(item.path || item.title) || '').toLowerCase();
   const [rows, setRows] = useState<string[][] | null>(() => sheetPreviewCache.get(item.url) || null);
   const hostRef = useRef<HTMLDivElement | null>(null);
 
@@ -344,7 +345,9 @@ function OfficeCardPreview({ item, label }: { item: ImageItem; label: string }) 
         }
         sheetPreviewCache.set(item.url, out);
         if (!cancelled) setRows(out);
-      } catch {
+      } catch (err) {
+        // 解析失败就退回图标卡；把原因留在控制台，便于排查是权限、坏文件还是解析器问题
+        console.warn('[office-preview] 表格预览解析失败', item.title, err);
         sheetPreviewCache.set(item.url, null);
         if (!cancelled) setRows(null);
       }
