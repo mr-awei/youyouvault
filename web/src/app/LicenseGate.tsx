@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from '../api';
+import { maskPhone } from '../lib/phone-mask';
 import type { LicenseStatus } from '../types';
 
 interface LicenseContextValue {
@@ -61,7 +62,9 @@ export function LicenseProvider({ children }: { children: React.ReactNode }) {
           <h2 style={{ margin: '0 0 8px', color: 'var(--danger, #d9534f)' }}>软件已停用</h2>
           <div style={{ lineHeight: 1.8, fontSize: 13 }}>
             <div>{status.reason || '该手机号或设备已被远程停用，请联系管理员。'}</div>
-            {status.phone && <div className="hint">手机号：{status.phone}</div>}
+            {status.phone && (
+              <div className="hint">手机号：{status.omsLoggedIn ? status.phone : maskPhone(status.phone)}</div>
+            )}
             <div className="hint">设备码：{status.deviceCode || status.machineCode}</div>
             {status.revokeCheckedAt && (
               <div className="hint">最近检查：{new Date(status.revokeCheckedAt).toLocaleString()}</div>

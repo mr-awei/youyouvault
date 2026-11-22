@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { LightboxState } from '../hooks/useLightbox';
 import type { PendingCounts } from '../hooks/useStatsAndTags';
@@ -116,6 +116,12 @@ export default function AppPages(props: Props) {
     enterFolder, dropImagesOnFolderAt, openRoot, openFromFolderGroup, showUnfiled,
     startTour, onLibraryChanged, settingsSection,
   } = props;
+
+  // 条码流程（扫描 / 编号 / 入库 / OMS 上传）耗时较长，切页不能卸载组件：
+  // 一旦卸载，组件内的 useState 和正在跑的上传闭包全丢，回来就是空白页。
+  // 首次进入后置位，之后用 display 隐藏而不是条件渲染，让流程在后台继续跑完。
+  const barcodeVisited = useRef(false);
+  if (view === 'barcode') barcodeVisited.current = true;
 
   return (
     // 页面级错误边界：单个页面渲染崩了只影响内容区，不会整窗白屏
@@ -248,20 +254,22 @@ export default function AppPages(props: Props) {
 
         {view === 'smart' && <Smart onToast={showToast} onOpenItem={openItem} onTagsChanged={reloadTags} />}
 
-        {view === 'barcode' && (
-          <ProGate
-            feature="barcode"
-            label="条码分文件夹"
-            onOpenSettings={() => setView('settings')}
-          >
-            <BarcodeSplit
-              onToast={showToast}
-              folderId={folderId}
-              activeFolder={activeFolder}
-              activeLibName={activeLibName}
-              onLibraryChanged={onLibraryChanged}
-            />
-          </ProGate>
+        {barcodeVisited.current && (
+          <div style={{ display: view === 'barcode' ? undefined : 'none' }}>
+            <ProGate
+              feature="barcode"
+              label="条码分文件夹"
+              onOpenSettings={() => setView('settings')}
+            >
+              <BarcodeSplit
+                onToast={showToast}
+                folderId={folderId}
+                activeFolder={activeFolder}
+                activeLibName={activeLibName}
+                onLibraryChanged={onLibraryChanged}
+              />
+            </ProGate>
+          </div>
         )}
 
 

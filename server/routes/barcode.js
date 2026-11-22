@@ -515,7 +515,21 @@ export function register(app, ctx) {
     })
   );
 
-  /* 图片编号：按拍摄顺序重命名成 1.jpg / 2.jpg…（编号就是最终文件名） */
+  /* 编号前列出产品文件夹里的图片，让用户自己选哪五张排最前 */
+  app.get(
+    '/api/barcode/folder-images',
+    asyncRoute(async (req, res) => {
+      let dir;
+      try {
+        dir = assertFolder(req.query?.dir);
+      } catch (err) {
+        return res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+      }
+      res.json({ files: await listImageFiles(dir) });
+    })
+  );
+
+  /* 图片编号：按用户选定顺序（默认拍摄顺序）重命名成 1.jpg / 2.jpg… */
   app.post(
     '/api/barcode/number',
     asyncRoute(async (req, res) => {
@@ -538,7 +552,22 @@ export function register(app, ctx) {
           continue;
         }
 
-        const names = await listImageFiles(dir);
+        const onDisk = await listImageFiles(dir);
+        // 用户选定顺序优先：选中的前 5 张排最前，其余按自然序跟随；没传 files 时维持旧行为。
+        const requested = Array.isArray(it?.files)
+          ? it.files.map((n) => String(n || '').trim()).filter(Boolean)
+          : [];
+        let names = onDisk;
+        if (requested.length) {
+          const seen = new Set();
+          const picked = [];
+          for (const name of requested) {
+            if (!safeChildName(dir, name) || !onDisk.includes(name) || seen.has(name)) continue;
+            seen.add(name);
+            picked.push(name);
+          }
+          if (picked.length) names = [...picked, ...onDisk.filter((n) => !seen.has(n))];
+        }
         const errors = [];
         const temps = [];
         const stamp = Date.now();

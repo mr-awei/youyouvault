@@ -176,8 +176,12 @@ export const barcodeAPI = {
       timeoutMs: LONG_TIMEOUT_MS,
     }),
 
-  /** 按拍摄顺序把图片重命名成 1.jpg、2.jpg… */
-  barcodeNumber: (folders: { code: string; dir: string }[]) =>
+  /** 列出某个产品文件夹里的图片（编号前让用户自己挑前五张） */
+  barcodeFolderImages: (dir: string) =>
+    request<{ files: string[] }>(`/api/barcode/folder-images?${new URLSearchParams({ dir })}`),
+
+  /** 按用户选定的顺序（或默认拍摄顺序）把图片重命名成 1.jpg、2.jpg… */
+  barcodeNumber: (folders: { code: string; dir: string; files?: string[] }[]) =>
     request<{ results: BarcodeNumberItemResult[] }>('/api/barcode/number', {
       method: 'POST',
       body: JSON.stringify({ folders }),

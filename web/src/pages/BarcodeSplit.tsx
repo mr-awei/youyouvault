@@ -19,6 +19,7 @@ import {
   type OmsStatus,
 } from '../api';
 import { IconArrowUpRight, IconBarcode, IconCopy, IconFolder, IconRefresh } from '../components/Icons';
+import { confirmDialog } from '../components/Dialogs';
 import i18n from '../i18n';
 import type { FolderNode } from '../types';
 
@@ -134,6 +135,10 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [cropReport, setCropReport] = useState<BarcodeCropItemResult[] | null>(null);
   /** 编号结果：1.jpg、2.jpg… */
   const [numbered, setNumbered] = useState<BarcodeNumberItemResult[] | null>(null);
+  /** 编号前：每个产品的图片、用户自己挑的前 5 张（key = 产品文件夹） */
+  const [numberFiles, setNumberFiles] = useState<Record<string, string[]>>({});
+  const [numberPicks, setNumberPicks] = useState<Record<string, string[]>>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
   /** 入库结果 */
   const [imported, setImported] = useState<BarcodeImportResponse | null>(null);
   const [uploadedOk, setUploadedOk] = useState(false);
@@ -314,6 +319,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setRatios(null);
     setCropReport(null);
     setNumbered(null);
+    setNumberFiles({});
+    setNumberPicks({});
+    setPickerOpen(false);
     setImported(null);
     setUploadedOk(false);
     setReported(false);
@@ -501,12 +509,38 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setRatios(null);
       setCropReport(null);
       setNumbered(null);
+      setNumberFiles({});
+      setNumberPicks({});
+      setPickerOpen(false);
       setImported(null);
       setUploads({});
       setUploadedOk(false);
       setReported(false);
       onToast(i18n.t('k2827af98', { p0: result.totalCopied, p1: result.dateDir }));
       onToast('文件夹已创建：下一步检查 eBay 图片是否 1:1', 'info');
+      // 输出目录大概率就是用户现有的素材库：检测到就刷新列表；是别的库先问要不要切过去。
+      void (async () => {
+        try {
+          const probe = await api.probeLibrary(rootDir.trim());
+          if (!probe.found) return;
+          if (probe.library && !probe.library.active) {
+            if (
+              await confirmDialog(
+                `检测到「${probe.library.name}」是已有素材库，是否切换到该库并刷新图片列表？`
+              )
+            ) {
+              await api.activateLibrary(probe.library.id);
+              onLibraryChanged();
+              onToast('已切换并刷新素材库', 'info');
+            }
+          } else {
+            onLibraryChanged();
+            onToast('输出目录属于当前素材库，已刷新图片列表', 'info');
+          }
+        } catch {
+          /* 探测 / 刷新失败不能影响条码主流程 */
+        }
+      })();
     } catch (err) {
       onToast((err as Error).message, 'error');
     } finally {
@@ -586,8 +620,56 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   };
 
   /** 第 6 步：图片编号，编号直接作为最终文件名 */
+  const openNumberPicker = async () => {
+    if (!outputFolders.length) {
+      onToast('还没有创建文件夹', 'error');
+      return;
+    }
+    setApplyMode('number');
+    try {
+      const pairs = await Promise.all(
+        outputFolders.map(async (f) => {
+          const r = await api.barcodeFolderImages(f.folder);
+          return [f.folder, r.files] as const;
+        })
+      );
+      setNumberFiles(Object.fromEntries(pairs));
+      setNumberPicks((prev) => {
+        const next = { ...prev };
+        for (const [dir, files] of pairs) if (!next[dir]?.length) next[dir] = files.slice(0, 5);
+        return next;
+      });
+      setPickerOpen(true);
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setApplyMode(null);
+    }
+  };
+
+  const toggleNumberPick = (dir: string, name: string) => {
+    const cur = numberPicks[dir] || [];
+    if (!cur.includes(name) && cur.length >= 5) {
+      onToast('每个产品最多选 5 张作为前五张', 'error');
+      return;
+    }
+    setNumberPicks((prev) => {
+      const list = prev[dir] || [];
+      return {
+        ...prev,
+        [dir]: list.includes(name) ? list.filter((n) => n !== name) : [...list, name],
+      };
+    });
+  };
+
+  /** 第 6 步：图片编号，编号直接作为最终文件名 */
   const runNumber = async () => {
-    const folders = outputFolders.map((f) => ({ code: f.code, dir: f.folder }));
+    const folders = outputFolders.map((f) => ({
+      code: f.code,
+      dir: f.folder,
+      // 没挑过的产品不传 files，服务端按自然序（旧行为）
+      files: numberPicks[f.folder]?.length ? numberPicks[f.folder] : undefined,
+    }));
     if (!folders.length) {
       onToast('还没有创建文件夹', 'error');
       return;
@@ -596,6 +678,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     try {
       const res = await api.barcodeNumber(folders);
       setNumbered(res.results);
+      setPickerOpen(false);
+      setNumberFiles({});
       setImported(null);
       setUploadedOk(false);
       setReported(false);
@@ -940,7 +1024,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 style={{ flex: 1 }}
                 value={omsUser}
                 onChange={(e) => setOmsUser(e.target.value)}
-                placeholder="18228263717"
+                placeholder="13333333333"
               />
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
@@ -1325,9 +1409,15 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               )}
 
               {currentKey === 'number' && (
-                <button className="btn primary" onClick={runNumber} disabled={applying}>
-                  {applyMode === 'number' ? '编号中…' : '开始编号'}
-                </button>
+                <>
+                  <button className="btn" onClick={() => void openNumberPicker()} disabled={applying}>
+                    {applyMode === 'number' ? '读取中…' : '选择前五张'}
+                  </button>
+                  <button className="btn primary" onClick={() => void runNumber()} disabled={applying}>
+                    {applyMode === 'number' ? '编号中…' : numbered ? '重新编号' : '开始编号'}
+                  </button>
+                  <span className="hint">每个产品自己挑前 5 张；不挑就按文件名顺序。</span>
+                </>
               )}
 
               {currentKey === 'import' && (
@@ -1376,6 +1466,90 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               )}
             </div>
 
+            {currentKey === 'number' && pickerOpen && (
+              <div className="card" style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
+                  <b>逐个产品选择前五张</b>
+                  <span className="hint">按点击顺序编号：第 1 次点的是 1.jpg，第 5 次点的是 5.jpg。</span>
+                  <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => setPickerOpen(false)}>
+                    收起
+                  </button>
+                </div>
+                {outputFolders.map((f) => {
+                  const picked = numberPicks[f.folder] || [];
+                  return (
+                    <div
+                      key={f.folder}
+                      style={{ borderTop: '1px solid var(--border)', padding: '10px 0 4px' }}
+                    >
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 6 }}>
+                        <b style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 12.5 }}>
+                          {f.code || '—'}
+                        </b>
+                        <span className="hint">已选 {picked.length}/5</span>
+                        {picked.length > 0 && (
+                          <button className="btn ghost sm" onClick={() => setNumberPicks((p) => ({ ...p, [f.folder]: [] }))}>
+                            清空这个产品
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {(numberFiles[f.folder] || []).map((name) => {
+                          const order = picked.indexOf(name);
+                          return (
+                            <button
+                              key={name}
+                              type="button"
+                              title={name}
+                              onClick={() => toggleNumberPick(f.folder, name)}
+                              style={{
+                                position: 'relative',
+                                width: 76,
+                                height: 76,
+                                padding: 0,
+                                border: order >= 0 ? '2px solid var(--accent, #4f8cff)' : '1px solid var(--border)',
+                                borderRadius: 8,
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                background: 'var(--panel-strong)',
+                              }}
+                            >
+                              <img
+                                src={barcodeThumbUrl(f.folder, name, 160)}
+                                alt=""
+                                loading="lazy"
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                              />
+                              {order >= 0 && (
+                                <span
+                                  style={{
+                                    position: 'absolute',
+                                    top: 2,
+                                    left: 2,
+                                    minWidth: 18,
+                                    height: 18,
+                                    borderRadius: 9,
+                                    background: 'var(--accent, #4f8cff)',
+                                    color: '#fff',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    display: 'grid',
+                                    placeItems: 'center',
+                                  }}
+                                >
+                                  {order + 1}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* 当前步骤的结果反馈：数量、异常都摆在这里，不用去翻上面的卡片 */}
             <div className="hint" style={{ marginTop: 8 }}>
               {currentKey === 'scan' && '选择源目录后开始：标签照片开组，标签本身不进产品文件夹。'}
@@ -1394,7 +1568,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {currentKey === 'number' &&
                 (numbered
                   ? `已编号 ${numbered.reduce((n, r) => n + r.files.length, 0)} 张（1.jpg、2.jpg…）`
-                  : '按拍摄顺序重命名成 1.jpg、2.jpg…，编号就是最终文件名。')}
+                  : '逐个产品选前五张，按所选顺序重命名成 1.jpg…；不选则按文件名顺序。')}
               {currentKey === 'import' &&
                 (imported
                   ? `已入库 ${imported.importedTotal} 张`

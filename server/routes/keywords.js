@@ -1,5 +1,7 @@
 // @ts-check
 // 设置 / 图库文件夹与多资源库路由（从 app.js 拆出）
+import fs from 'node:fs';
+import path from 'node:path';
 import { applyProxy } from '../network.js';
 import * as lib from '../library.js';
 import {
@@ -88,6 +90,41 @@ export function register(app, ctx) {
   app.get('/api/libraries', (_req, res) => {
     res.json({ libraries: listLibraries(), activeId: getActiveLibrary()?.id ?? null });
   });
+
+  /**
+   * 探测某个目录是否已经是图库里的素材库。条码流程把图片写进用户选的输出目录，
+   * 这个目录大概率就是现有素材库的根目录 —— 写完必须提示并刷新列表。
+   * 命中注册表（root_path 一致）算「已有库」；目录里有 .tuku 也算，即使没登记。
+   */
+  app.get(
+    '/api/libraries/probe',
+    asyncRoute(async (req, res) => {
+      const raw = String(req.query.dir || '').trim();
+      if (!raw) return res.status(400).json({ error: '缺少 dir' });
+      let target;
+      try {
+        target = path.resolve(raw);
+      } catch {
+        return res.status(400).json({ error: '目录不合法' });
+      }
+      const activeId = getActiveLibrary()?.id ?? null;
+      // listLibraries() 的 JSDoc 推断只保留了附加字段，这里按 any 读原始列
+      const libs = /** @type {any[]} */ (listLibraries());
+      const hit = libs.find((l) => l.root_path && path.resolve(l.root_path) === target) || null;
+      let hasTuku = false;
+      try {
+        hasTuku = fs.statSync(path.join(target, '.tuku')).isDirectory();
+      } catch {
+        /* 没有 .tuku 是正常情况 */
+      }
+      res.json({
+        found: !!hit || hasTuku,
+        library: hit ? { id: hit.id, name: hit.name, active: hit.id === activeId } : null,
+        hasTuku,
+        activeId,
+      });
+    })
+  );
 
   app.post(
     '/api/libraries',

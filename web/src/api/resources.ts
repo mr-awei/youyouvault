@@ -40,6 +40,14 @@ export const resourcesAPI = {
     ),
   // 资源库（多资源库）
   libraries: () => request<{ libraries: Library[]; activeId: number | null }>('/api/libraries'),
+  /** 探测目录是否已是现有素材库（条码流程的输出目录常用现成库） */
+  probeLibrary: (dir: string) =>
+    request<{
+      found: boolean;
+      library: { id: number; name: string; active: boolean } | null;
+      hasTuku: boolean;
+      activeId: number | null;
+    }>(`/api/libraries/probe?${new URLSearchParams({ dir })}`),
   createLibrary: (payload: { name: string; rootPath?: string; libFolder?: string }) =>
     request<{ ok: boolean; id: number }>('/api/libraries', {
       method: 'POST',

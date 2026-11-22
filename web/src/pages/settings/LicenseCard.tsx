@@ -3,6 +3,7 @@ import { api } from '../../api';
 import type { LicenseStatus } from '../../types';
 import { confirmDialog } from '../../components/Dialogs';
 import { useLicense } from '../../app/LicenseGate';
+import { maskPhone } from '../../lib/phone-mask';
 import Card from './Card';
 import i18n from '../../i18n';
 
@@ -214,7 +215,10 @@ export default function LicenseCard({ onToast }: Props) {
       {phone && (
         <div className="field">
           <label>授权手机号</label>
-          <div style={{ fontFamily: 'ui-monospace, monospace' }}>{phone}</div>
+          <div style={{ fontFamily: 'ui-monospace, monospace' }}>
+            {status.omsLoggedIn ? phone : maskPhone(phone)}
+            {!status.omsLoggedIn && phone && <span className="hint">（未登录，已打码）</span>}
+          </div>
           <div className="hint">
             {status.revokeError
               ? status.revokeError
@@ -232,7 +236,7 @@ export default function LicenseCard({ onToast }: Props) {
           {status.omsBound
             ? 'OMS 账号与授权手机号一致，专业版已启用。'
             : status.omsLoggedIn
-              ? `当前登录的 OMS 账号与授权手机号（${phone || '无'}）不一致，专业版未启用。`
+              ? `当前登录的 OMS 账号与授权手机号（${maskPhone(phone) || '无'}）不一致，专业版未启用。`
               : '请在右上角账号菜单点「登录 / 激活授权」用 OMS 账号登录；登录后会话过期会自动退回免费版。'}
         </div>
       </div>

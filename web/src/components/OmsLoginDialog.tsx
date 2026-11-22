@@ -10,6 +10,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { useLicense } from '../app/LicenseGate';
+import { maskPhone } from '../lib/phone-mask';
 import { IconClose } from './Icons';
 
 interface Props {
@@ -19,7 +20,7 @@ interface Props {
 
 export default function OmsLoginDialog({ onClose, onToast }: Props) {
   const { status, refresh } = useLicense();
-  const [username, setUsername] = useState(status?.omsUsername || status?.phone || '');
+  const [username, setUsername] = useState(status?.omsUsername || '');
   const [password, setPassword] = useState('');
   const [baseUrl, setBaseUrl] = useState('https://sit.uyoyous.com');
   const [busy, setBusy] = useState(false);
@@ -29,7 +30,8 @@ export default function OmsLoginDialog({ onClose, onToast }: Props) {
     api
       .omsStatus()
       .then((s) => {
-        if (s.username) setUsername(s.username);
+        // 未登录时不要把保存的真实账号回填到输入框，避免一眼看到手机号
+        if (s.loggedIn && s.username) setUsername(s.username);
         if (s.baseUrl) setBaseUrl(s.baseUrl);
         if (s.error) setError(s.error);
       })
@@ -102,7 +104,7 @@ export default function OmsLoginDialog({ onClose, onToast }: Props) {
               <input
                 className="input"
                 autoComplete="username"
-                placeholder="例如 18228263717"
+                placeholder="例如 13333333333"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
@@ -126,7 +128,7 @@ export default function OmsLoginDialog({ onClose, onToast }: Props) {
 
             {mismatch && (
               <div className="hint" style={{ color: 'var(--warn, #d99a2b)' }}>
-                当前授权码绑定的是 {licensePhone}，与填写的账号 {username} 不一致；即使登录成功也不会升级专业版。
+                当前授权码绑定的手机号（{maskPhone(licensePhone)}）与填写的账号不一致；即使登录成功也不会升级专业版。
               </div>
             )}
             {!licensePhone && (
