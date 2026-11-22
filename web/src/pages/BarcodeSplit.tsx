@@ -135,6 +135,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [cropReport, setCropReport] = useState<BarcodeCropItemResult[] | null>(null);
   /** 编号结果：1.jpg、2.jpg… */
   const [numbered, setNumbered] = useState<BarcodeNumberItemResult[] | null>(null);
+  /** 入库 / 上传允许跳过：跳过也视为完成，报表步骤照常可用 */
+  const [importSkipped, setImportSkipped] = useState(false);
+  const [uploadSkipped, setUploadSkipped] = useState(false);
   /** 编号前：每个产品的图片、用户自己挑的前 5 张（key = 产品文件夹） */
   const [numberFiles, setNumberFiles] = useState<Record<string, string[]>>({});
   const [numberPicks, setNumberPicks] = useState<Record<string, string[]>>({});
@@ -323,6 +326,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setNumberPicks({});
     setPickerOpen(false);
     setImported(null);
+    setImportSkipped(false);
+    setUploadSkipped(false);
     setUploadedOk(false);
     setReported(false);
     try {
@@ -513,6 +518,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setNumberPicks({});
       setPickerOpen(false);
       setImported(null);
+      setImportSkipped(false);
+      setUploadSkipped(false);
       setUploads({});
       setUploadedOk(false);
       setReported(false);
@@ -681,6 +688,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setPickerOpen(false);
       setNumberFiles({});
       setImported(null);
+      setImportSkipped(false);
+      setUploadSkipped(false);
       setUploadedOk(false);
       setReported(false);
       const total = res.results.reduce((n, r) => n + r.files.length, 0);
@@ -701,6 +710,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 第 7 步：把已编号的文件夹登记进图库 */
   const runImport = async () => {
     if (!scan) return;
+    setImportSkipped(false);
     if (!outputFolders.length) {
       onToast('还没有创建文件夹', 'error');
       return;
@@ -750,12 +760,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 第 8 步：核对 OMS 名称并上传（本轮不测，保留完整实现） */
   const runUpload = async () => {
     if (!scan) return;
+    setUploadSkipped(false);
     if (flowIssues.length) {
       onToast('页面还有报错/警告，先处理完再继续', 'error');
       return;
     }
-    if (!imported) {
-      onToast('请先完成入库，再上传 OMS', 'error');
+    if (!imported && !importSkipped) {
+      onToast('请先完成入库，再上传 OMS（或点「跳过入库」）', 'error');
       return;
     }
     if (!applied) {
@@ -854,10 +865,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     review: !!scan && scan.groups.length > 0 && flowIssues.length === 0,
     copy: outputFolders.length > 0,
     // 有不是 1:1 的图就停在这一步：用户手动裁完再检查一次即可继续
-    ratio: !!ratios && ratios.every((it) => it.notSquare.length === 0),
+    // 没有 eBay 组时这一步无事可做，直接算完成，别让用户卡在「检查 1:1」
+    ratio: !ebayFolders.length || (!!ratios && ratios.every((it) => it.notSquare.length === 0)),
     number: !!numbered,
-    import: !!imported,
-    upload: uploadedOk,
+    import: !!imported || importSkipped,
+    upload: uploadedOk || uploadSkipped,
     report: reported,
   };
   const currentKey: StepKey = STEP_DEFS.find((s) => !stepDone[s.key])?.key ?? 'report';
@@ -1421,15 +1433,39 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               )}
 
               {currentKey === 'import' && (
-                <button className="btn primary" onClick={runImport} disabled={applying}>
-                  {applyMode === 'import' ? '入库中…' : '入库'}
-                </button>
+                <>
+                  <button className="btn primary" onClick={runImport} disabled={applying}>
+                    {applyMode === 'import' ? '入库中…' : '入库'}
+                  </button>
+                  <button
+                    className="btn ghost"
+                    disabled={applying}
+                    onClick={() => {
+                      setImportSkipped(true);
+                      onToast('已跳过入库，可继续下一步', 'info');
+                    }}
+                  >
+                    跳过入库
+                  </button>
+                </>
               )}
 
               {currentKey === 'upload' && (
-                <button className="btn primary" onClick={runUpload} disabled={applying}>
-                  {applyMode === 'upload' ? '上传中…' : '上传 OMS'}
-                </button>
+                <>
+                  <button className="btn primary" onClick={runUpload} disabled={applying}>
+                    {applyMode === 'upload' ? '上传中…' : '上传 OMS'}
+                  </button>
+                  <button
+                    className="btn ghost"
+                    disabled={applying}
+                    onClick={() => {
+                      setUploadSkipped(true);
+                      onToast('已跳过上传，可继续下一步', 'info');
+                    }}
+                  >
+                    跳过上传
+                  </button>
+                </>
               )}
 
               {currentKey === 'report' && (
@@ -1467,7 +1503,16 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             </div>
 
             {currentKey === 'number' && pickerOpen && (
-              <div className="card" style={{ marginBottom: 12 }}>
+              <div
+                className="card"
+                style={{
+                  marginBottom: 12,
+                  maxHeight: '70vh',
+                  overflowY: 'auto',
+                  overscrollBehavior: 'contain',
+                }}
+                onWheel={(e) => e.stopPropagation()}
+              >
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
                   <b>逐个产品选择前五张</b>
                   <span className="hint">按点击顺序编号：第 1 次点的是 1.jpg，第 5 次点的是 5.jpg。</span>
@@ -1504,18 +1549,18 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                               onClick={() => toggleNumberPick(f.folder, name)}
                               style={{
                                 position: 'relative',
-                                width: 76,
-                                height: 76,
+                                width: 120,
+                                height: 120,
                                 padding: 0,
                                 border: order >= 0 ? '2px solid var(--accent, #4f8cff)' : '1px solid var(--border)',
-                                borderRadius: 8,
+                                borderRadius: 10,
                                 overflow: 'hidden',
                                 cursor: 'pointer',
                                 background: 'var(--panel-strong)',
                               }}
                             >
                               <img
-                                src={barcodeThumbUrl(f.folder, name, 160)}
+                                src={barcodeThumbUrl(f.folder, name, 260)}
                                 alt=""
                                 loading="lazy"
                                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
@@ -1524,14 +1569,14 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                                 <span
                                   style={{
                                     position: 'absolute',
-                                    top: 2,
-                                    left: 2,
-                                    minWidth: 18,
-                                    height: 18,
-                                    borderRadius: 9,
+                                    top: 4,
+                                    left: 4,
+                                    minWidth: 22,
+                                    height: 22,
+                                    borderRadius: 11,
                                     background: 'var(--accent, #4f8cff)',
                                     color: '#fff',
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: 700,
                                     display: 'grid',
                                     placeItems: 'center',

@@ -276,7 +276,7 @@ class OmsClient {
       return { res, json };
     };
 
-    let { res, json } = await send((await this.login()).token);
+    const { res, json } = await send((await this.login()).token);
     if (res.status === 401 || json?.code === 401) {
       // 网站要求重新登录 → 清掉本地 token，退回免费版。
       // 不再静默重登：否则用户不知道会话已经失效，Pro 会在后台悄悄续上。
