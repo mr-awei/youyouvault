@@ -19,6 +19,7 @@ import {
   type OmsStatus,
 } from '../api';
 import { IconArrowUpRight, IconBarcode, IconCopy, IconFolder, IconRefresh } from '../components/Icons';
+import { getApiToken } from '../api/core';
 import { confirmDialog } from '../components/Dialogs';
 import i18n from '../i18n';
 import type { FolderNode } from '../types';
@@ -791,6 +792,29 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
+  /** 文件夹截图复制成剪贴板图片，可直接粘到 Excel「工作成果」列；不支持时退回下载 */
+  const copyFolderShot = async () => {
+    if (!outputDateDir) {
+      onToast('请先选择输出根目录', 'error');
+      return;
+    }
+    const url = omsProductFolderShotUrl(outputDateDir);
+    try {
+      const token = await getApiToken();
+      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+        throw new Error('当前环境不支持复制图片');
+      }
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      onToast('文件夹截图已复制，可直接粘贴到 Excel', 'info');
+    } catch (err) {
+      onToast(`复制截图失败：${(err as Error).message}，已改为下载`, 'error');
+      downloadFile(url);
+    }
+  };
+
   /** 第 9 步：生成工作日报 Excel（时长列留空，由用户手填） */
   const runReport = async () => {
     if (!reportRows.length) {
@@ -1481,18 +1505,23 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               )}
 
               {currentKey === 'report' && (
-                <button
-                  className="btn sm"
-                  onClick={() => {
-                    if (!outputDateDir) {
-                      onToast('请先选择输出根目录', 'error');
-                      return;
-                    }
-                    downloadFile(omsProductFolderShotUrl(outputDateDir));
-                  }}
-                >
-                  下载文件夹截图
-                </button>
+                <>
+                  <button className="btn sm" onClick={() => void copyFolderShot()}>
+                    复制文件夹截图
+                  </button>
+                  <button
+                    className="btn sm"
+                    onClick={() => {
+                      if (!outputDateDir) {
+                        onToast('请先选择输出根目录', 'error');
+                        return;
+                      }
+                      downloadFile(omsProductFolderShotUrl(outputDateDir));
+                    }}
+                  >
+                    下载文件夹截图
+                  </button>
+                </>
               )}
 
               {applied && (
