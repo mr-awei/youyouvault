@@ -2,6 +2,7 @@
 import { getLibraryGeneration } from '../db.js';
 import * as lib from '../library.js';
 import { ensurePreview, existingPreviewPath } from '../thumbs.js';
+import { kindOfPath } from './media-kind.js';
 
 /**
  * 预览图（灯箱大图）后台预取队列。
@@ -22,6 +23,15 @@ import { ensurePreview, existingPreviewPath } from '../thumbs.js';
 const MAX_CONCURRENT = 2;
 /** 队列上限：一页 120 张最多，再多也没意义（用户根本翻不到那么快） */
 const MAX_PENDING = 160;
+
+/** 只有这些类型才有服务端预览图；Office / PDF / 音视频 / 字体等直接跳过，避免无意义报错 */
+const PREVIEWABLE_KINDS = new Set(['image', 'gif', 'raw', 'design']);
+
+function isPreviewable(row) {
+  if (!row) return false;
+  const kind = row.media_kind || kindOfPath(row.abs_path);
+  return PREVIEWABLE_KINDS.has(kind);
+}
 
 const queue = [];
 const queued = new Set();
@@ -63,7 +73,7 @@ export function noteForegroundEnd() {
 async function generate(id) {
   const gen = getLibraryGeneration();
   const row = lib.getImage(id);
-  if (!row || !row.abs_path) return '';
+  if (!row || !row.abs_path || !isPreviewable(row)) return '';
   if (getLibraryGeneration() !== gen) return '';
   return ensurePreview(id, row.abs_path);
 }
@@ -92,6 +102,7 @@ export function queuePreview(id) {
   if (queue.length >= MAX_PENDING) return false;
   // 命中缓存的直接跳过：切库后重新进来，同一页很快又会被排一次
   if (existingPreviewPath(n)) return false;
+  if (!isPreviewable(lib.getImage(n))) return false;
   queued.add(n);
   queue.push(n);
   pump();
@@ -120,6 +131,7 @@ export function prioritizePreviews(ids) {
     const n = Number(raw);
     if (!Number.isFinite(n) || n <= 0 || want.includes(n)) continue;
     if (existingPreviewPath(n)) continue;
+    if (!isPreviewable(lib.getImage(n))) continue;
     want.push(n);
   }
   if (!want.length) return { moved: 0, added: 0 };

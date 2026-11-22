@@ -139,6 +139,39 @@
   transform: translateY(-3px) scale(1.02);
   border-color: rgba(249, 115, 22, 0.5);
 }
+/* 表格类文档：直接画内容缩略，外观与其他缩略图格子保持一致 */
+.recent-sheet {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fdfdfd;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.recent-sheet:hover {
+  transform: translateY(-3px) scale(1.02);
+  border-color: rgba(249, 115, 22, 0.5);
+}
+.recent-sheet .card-sheet-preview {
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+}
+/* 仪表盘格子只有 130px 左右，缩小内边距才能露出表头文字，不然每格只剩一个省略号 */
+.recent-sheet .card-sheet-preview table {
+  font-size: 9px;
+}
+.recent-sheet .card-sheet-preview td {
+  padding: 2px 3px;
+}
+.recent-sheet img {
+  border: 0;
+  border-radius: 0;
+}
 /* 虚拟滚动版清单网格：格子由 VirtualGrid 定位，单元撑满即可 */
 .recent-grid-v {
   width: 100%;

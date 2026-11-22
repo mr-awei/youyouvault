@@ -1,4 +1,5 @@
 import { IconFolder } from './Icons';
+import { hasServerThumb } from '../lib/media-kinds';
 /**
  * 文件夹收纳视图（Eagle 式「按文件夹分组」）。
  *
@@ -146,7 +147,7 @@ function FolderGroup({
           onClick={() => onOpenFolder(folder.id)}
           title={i18n.t('k00625712', { p0: folder.name })}
         >
-          {folder.cover?.thumbUrl ? (
+          {folder.cover?.thumbUrl && hasServerThumb(folder.cover.kind) ? (
             <img src={folder.cover.thumbUrl} alt="" loading="lazy" decoding="async" />
           ) : (
             <span>{folder.icon || <IconFolder size={18} />}</span>

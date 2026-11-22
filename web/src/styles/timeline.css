@@ -336,6 +336,68 @@
   transform: scale(1.04);
 }
 
+/* 时间线里的 xlsx / csv：直接画表格前几行，而不是一张永远转圈的文件占位 */
+.tl-sheet {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #fdfdfd;
+  border-radius: 8px;
+}
+.tl-sheet table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 8.5px;
+  line-height: 1.35;
+  color: #2b2d36;
+}
+.tl-sheet td {
+  border: 1px solid #e3e4ec;
+  padding: 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-sheet td.head {
+  background: #f0f1f7;
+  font-weight: 600;
+}
+
+/* 其它 Office 文档（docx / pptx / 老格式）：类型 + 文件名，点开灯箱阅读 */
+.tl-office-ph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface-3, rgba(127, 127, 127, 0.12));
+  color: var(--muted);
+  text-align: center;
+}
+.tl-office-ext {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent, #4f8cff);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.tl-office-name {
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-all;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 /* 缩略图待生成 / 重试耗尽：盖住浏览器默认的「坏图」图标，等补图完成后自动恢复 */
 .tl-thumb-ph {
   position: absolute;

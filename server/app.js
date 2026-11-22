@@ -652,7 +652,12 @@ export function buildApp({ desktop = false } = {}) {
       // 这一页的灯箱预览图交给后台预取：用户点开时就是磁盘命中（几毫秒），
       // 而不是等着现解码 20MB 的原图（那就是「模糊一两秒」的来源）。
       // 只取前 24 张：一屏放不下更多，翻页快的人也不必为没看过的图付 CPU。
-      prefetchPreviews(data.items?.slice(0, 24).map((it) => it.id));
+      prefetchPreviews(
+        (data.items || [])
+          .filter((it) => ['image', 'gif', 'raw', 'design'].includes(it.mediaKind || 'image'))
+          .slice(0, 24)
+          .map((it) => it.id)
+      );
     })
   );
 

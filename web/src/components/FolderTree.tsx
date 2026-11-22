@@ -12,6 +12,7 @@ import {
   IconUnlock,
 } from './Icons';
 import { FOLDER_MIME, IMAGE_MIME } from '../lib/dnd';
+import { hasServerThumb } from '../lib/media-kinds';
 import type { FolderNode } from '../types';
 import i18n from '../i18n';
 
@@ -310,7 +311,8 @@ export default function FolderTree({
                   {f.icon}
                 </span>
               ) : (
-                f.cover?.thumbUrl && (
+                f.cover?.thumbUrl &&
+                hasServerThumb(f.cover.kind) && (
                   <img
                     className="folder-cover"
                     src={f.cover.thumbUrl}

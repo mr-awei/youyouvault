@@ -9,6 +9,7 @@ import * as lib from '../library.js';
 import { db } from '../db.js';
 import * as nd from '../lib/nondestructive.js';
 import { bumpUsage } from '../lib/usage.js';
+import { kindOfPath } from '../lib/media-kind.js';
 import { existingPreviewPath, existingThumbPath, ensurePreview, mtimeOf } from '../thumbs.js';
 import {
   noteForegroundEnd,
@@ -200,6 +201,13 @@ export function register(app, ctx) {
       const id = Number(req.params.id);
       const row = lib.getImage(id);
       if (!row || !fs.existsSync(row.abs_path)) return res.status(404).end('not found');
+      // 只有位图 / GIF / RAW / 设计稿有「灯箱预览图」。PDF、Office、音视频、字体
+      // 由前端各自渲染，不要在这里调 sharp，否则 xlsx 会反复报 unsupported image format。
+      const kind = row.media_kind || kindOfPath(row.abs_path);
+      if (kind !== 'image' && kind !== 'gif' && kind !== 'raw' && kind !== 'design') {
+        res.set('Cache-Control', 'no-store');
+        return res.status(404).end('preview not available');
+      }
       // 带 ?v=（文件指纹）的请求可以放心长缓存：增强/旋转写回后指纹变，URL 也就变了。
       // 不带版本的保持 no-cache + ETag，避免外部直连拿到旧图。
       const cacheHeader = req.query.v ? 'private, max-age=604800, immutable' : 'no-cache';

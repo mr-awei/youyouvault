@@ -1,4 +1,4 @@
-﻿﻿import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ImageItem, TimelineSummary } from '../types';
 import type { JobItem } from '../api';
@@ -6,6 +6,8 @@ import { api, BASE } from '../api';
 import { copyText, openFolder, revealFile } from '../api/core';
 import { confirmDialog, promptDialog } from '../components/Dialogs';
 import { cancelPrefetchPreview, schedulePrefetchPreview } from '../lib/preview-prefetch';
+import { useSheetPreview } from '../lib/sheet-preview';
+import { hasServerThumb } from '../lib/media-kinds';
 import VirtualGrid from '../components/VirtualGrid';
 import { IconRefresh, IconWarning } from '../components/Icons';
 import i18n from '../i18n';
@@ -111,6 +113,43 @@ function TlThumb({ src, alt, resetKey }: { src: string; alt: string; resetKey?: 
         </span>
       )}
     </>
+  );
+}
+
+/**
+ * 时间线里「服务端生成不出缩略图」的素材卡（Office / PDF / 音视频 / 字体 / 3D）：
+ * - xlsx / csv 直接画前几行，和列表页 / 仪表盘保持一致
+ * - 其余只显示文件类型 + 文件名，点开灯箱用对应查看器打开
+ * 不能再走 <img src=thumbUrl>：这些类型没有服务端缩略图，会一直 404 重试。
+ */
+function TlFileCell({ item }: { item: ImageItem }) {
+  const { hostRef, rows } = useSheetPreview<HTMLDivElement>(item);
+  const kind = item.mediaKind || 'other';
+  const ext = extTag(item.title) || KIND_TAG[kind] || 'FILE';
+  if (rows) {
+    return (
+      <div className="tl-sheet" ref={hostRef}>
+        <table>
+          <tbody>
+            {rows.map((line, r) => (
+              <tr key={r}>
+                {line.map((v, c) => (
+                  <td key={c} className={r === 0 ? 'head' : ''}>
+                    {v}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return (
+    <div className="tl-office-ph" ref={hostRef}>
+      <span className="tl-office-ext">{ext}</span>
+      <span className="tl-office-name">{item.title.replace(/\.[a-z0-9]{2,5}$/i, '')}</span>
+    </div>
   );
 }
 
@@ -259,7 +298,13 @@ function DayBlock({
           ratio={1}
           renderItem={(it) => {
             const k = it.mediaKind || 'image';
-            const tag = k === 'image' || k === 'gif' ? extTag(it.title) : KIND_TAG[k] || k.toUpperCase();
+            const thumbable = hasServerThumb(k);
+            // 文件占位卡自己已经把类型写在中间，角标就不重复贴一次
+            const tag = !thumbable
+              ? ''
+              : k === 'image' || k === 'gif'
+                ? extTag(it.title)
+                : KIND_TAG[k] || k.toUpperCase();
             return (
               <button
                 type="button"
@@ -275,7 +320,11 @@ function DayBlock({
                   onItemMenu(e, it, items);
                 }}
               >
-                <TlThumb src={it.thumbUrl} alt={it.title} resetKey={imgEpoch} />
+                {thumbable ? (
+                  <TlThumb src={it.thumbUrl} alt={it.title} resetKey={imgEpoch} />
+                ) : (
+                  <TlFileCell item={it} />
+                )}
                 {tag && (
                   <span className={`tl-kind tl-kind-${k}`} title={it.title}>
                     {tag}

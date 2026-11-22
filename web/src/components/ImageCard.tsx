@@ -7,6 +7,7 @@ import { confirmDialog, promptDialog } from './Dialogs';
 import { fontFrameDataUrl, imageFrameDataUrl, videoElementDataUrl, videoFrameDataUrl } from '../lib/coverFrame';
 import { captureVideoSprite, frameIndexAt, type SpriteResult } from '../lib/video-frames';
 import { IMAGE_MIME, TAG_MIME } from '../lib/dnd';
+import { useSheetPreview } from '../lib/sheet-preview';
 import { cancelPrefetchPreview, prefetchPreviewNow, schedulePrefetchPreview } from '../lib/preview-prefetch';
 import {
   IconBox,
@@ -299,8 +300,6 @@ function MediaGlyph({
   );
 }
 
-const sheetPreviewCache = new Map<string, string[][] | null>();
-
 /**
  * Office 文档在列表页的内容缩略：
  * - xlsx / csv：懒加载解析前几行，直接画出「表格里有什么」，不再只有一个文件图标
@@ -308,66 +307,9 @@ const sheetPreviewCache = new Map<string, string[][] | null>();
  * 只在卡片进入视口附近时才请求，避免一屏几十个文档同时拉文件、解析整本工作簿。
  */
 function OfficeCardPreview({ item, label }: { item: ImageItem; label: string }) {
-  // extOfPath 返回大写（用于角标展示），这里判断解析能力必须转小写
-  const ext = (extOfPath(item.path || item.title) || '').toLowerCase();
-  const [rows, setRows] = useState<string[][] | null>(() => sheetPreviewCache.get(item.url) || null);
-  const hostRef = useRef<HTMLDivElement | null>(null);
+  const { hostRef, rows } = useSheetPreview(item);
 
-  useEffect(() => {
-    if (ext !== 'xlsx' && ext !== 'csv') return;
-    if (sheetPreviewCache.has(item.url)) {
-      setRows(sheetPreviewCache.get(item.url) || null);
-      return;
-    }
-    const host = hostRef.current;
-    if (!host) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch(item.url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buf = await res.arrayBuffer();
-        const mod = (await import('xlsx-js-style')) as unknown as { default?: typeof import('xlsx-js-style') };
-        const XLSX = mod.default || (mod as unknown as typeof import('xlsx-js-style'));
-        const wb = XLSX.read(buf, { type: 'array' }) as {
-          SheetNames: string[];
-          Sheets: Record<string, Record<string, unknown>>;
-        };
-        const ws = wb.Sheets[wb.SheetNames[0]] || {};
-        const out: string[][] = [];
-        for (let r = 0; r < 5; r++) {
-          const line: string[] = [];
-          for (let c = 0; c < 6; c++) {
-            const cell = ws[XLSX.utils.encode_cell({ r, c })] as { w?: string; v?: unknown } | undefined;
-            line.push(cell ? String(cell.w ?? cell.v ?? '') : '');
-          }
-          out.push(line);
-        }
-        sheetPreviewCache.set(item.url, out);
-        if (!cancelled) setRows(out);
-      } catch (err) {
-        // 解析失败就退回图标卡；把原因留在控制台，便于排查是权限、坏文件还是解析器问题
-        console.warn('[office-preview] 表格预览解析失败', item.title, err);
-        sheetPreviewCache.set(item.url, null);
-        if (!cancelled) setRows(null);
-      }
-    };
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((e) => e.isIntersecting)) return;
-        io.disconnect();
-        void load();
-      },
-      { rootMargin: '240px' }
-    );
-    io.observe(host);
-    return () => {
-      cancelled = true;
-      io.disconnect();
-    };
-  }, [item.url, ext]);
-
-  if ((ext === 'xlsx' || ext === 'csv') && rows) {
+  if (rows) {
     return (
       <div className="card-sheet-preview" ref={hostRef}>
         <table>

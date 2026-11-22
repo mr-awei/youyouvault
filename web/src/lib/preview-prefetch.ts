@@ -52,6 +52,7 @@ export function downloadPreview(item: PrefetchTarget) {
 
 /** 立刻预取（键盘聚焦这类明确意图用，不用等 120ms）：先插队生成，再下载字节 */
 export function prefetchPreviewNow(item: PrefetchTarget) {
+  if (!BITMAP_KINDS.has(item.mediaKind || 'image')) return;
   // 服务端把这张挪到预取队首：停留的这半秒足够现做完成
   api.warmPreviews([item.id]).catch(() => undefined);
   downloadPreview(item);

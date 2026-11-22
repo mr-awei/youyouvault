@@ -4,6 +4,7 @@ import fsp from 'node:fs/promises';
 import sharp from 'sharp';
 import { getThumbDir } from './db.js';
 import { designThumbJpeg, isDesignLikePath } from './lib/design-thumb.js';
+import { kindOfPath } from './lib/media-kind.js';
 
 /**
  * 缩略图按 id 分桶存储：thumbs/<id%256 的两位 hex>/<id>.jpg
@@ -121,6 +122,11 @@ export function existingPreviewPath(id, notBeforeMs) {
 }
 
 export async function ensurePreview(id, absPath) {
+  // 只有位图 / GIF / 可从文件里抽预览的设计稿与 RAW 才走 sharp。
+  // PDF / Office / 音视频 / 字体等没有可生成的位图，直接返回 null：
+  // 以前这里对 xlsx 调 sharp，每次都会打一条 “unsupported image format”，日志被刷爆。
+  const kind = kindOfPath(absPath);
+  if (kind !== 'image' && kind !== 'gif' && kind !== 'raw' && kind !== 'design') return null;
   const hit = existingPreviewPath(id, mtimeOf(absPath));
   if (hit) return hit;
   try {

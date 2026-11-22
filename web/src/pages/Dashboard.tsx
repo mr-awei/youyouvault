@@ -5,6 +5,7 @@ import { Bars, Donut, TrendLine } from '../components/Charts';
 import { BUCKET_LABELS, ORIENTATION_LABELS, SOURCE_LABELS, api, formatSize } from '../api';
 import i18n from '../i18n';
 import { previewHoverProps } from '../lib/preview-prefetch';
+import { useSheetPreview } from '../lib/sheet-preview';
 
 /** 使用统计：最常复制 / 导出的素材。没有记录时整块不出现，别占着版面说「暂无」。 */
 function UsageBoard() {
@@ -74,6 +75,69 @@ interface Props {
 }
 
 const BUCKET_ORDER = ['sd', 'fhd', '2k', '4k'];
+
+/**
+ * 「最近入库 / 体积最大」的一格：
+ * 表格类文档（xlsx/csv）直接画前几行内容，和列表页的卡片保持一致；
+ * 其余类型仍用缩略图。没有内容缩略时退回服务端缩略图，不会出现空白格。
+ */
+function RecentCell({
+  item,
+  onOpen,
+  title,
+}: {
+  item: ImageItem;
+  onOpen: () => void;
+  title?: string;
+}) {
+  const { hostRef, rows } = useSheetPreview<HTMLButtonElement>(item);
+  const isOffice = item.mediaKind === 'office';
+  if (!isOffice) {
+    return (
+      <img
+        src={item.thumbUrl}
+        alt={item.title}
+        loading="lazy"
+        {...previewHoverProps(item)}
+        onClick={onOpen}
+        title={title}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="recent-sheet"
+      ref={hostRef}
+      onClick={onOpen}
+      title={title || item.title}
+      {...previewHoverProps(item)}
+    >
+      {rows ? (
+        <div className="card-sheet-preview">
+          <table>
+            <tbody>
+              {rows.map((line, r) => (
+                <tr key={r}>
+                  {line.map((v, c) => (
+                    <td key={c} className={r === 0 ? 'head' : ''}>
+                      {v}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        // office 缩略图接口返回 404（无画面可生成），别放 <img> 变破图；
+        // 解析完成前先留一块空白，解析完立刻换成表格内容
+        <div className="card-sheet-preview pending" />
+      )}
+    </button>
+  );
+}
+
 
 export default function Dashboard({ stats, error, onOpen }: Props) {
   if (!stats) {
@@ -180,14 +244,7 @@ export default function Dashboard({ stats, error, onOpen }: Props) {
         {stats.recent.length ? (
           <div className="recent-grid">
             {stats.recent.map((item) => (
-              <img
-                key={item.id}
-                src={item.thumbUrl}
-                alt={item.title}
-                loading="lazy"
-                {...previewHoverProps(item)}
-                onClick={() => onOpen(item, stats.recent)}
-              />
+              <RecentCell key={item.id} item={item} onOpen={() => onOpen(item, stats.recent)} />
             ))}
           </div>
         ) : (
@@ -202,13 +259,10 @@ export default function Dashboard({ stats, error, onOpen }: Props) {
           <h4 className="section-title">{i18n.t('k30a18c19')}</h4>
           <div className="recent-grid">
             {stats.largest.map((item) => (
-              <img
+              <RecentCell
                 key={item.id}
-                src={item.thumbUrl}
-                alt={item.title}
-                loading="lazy"
-                {...previewHoverProps(item)}
-                onClick={() => onOpen(item, stats.largest)}
+                item={item}
+                onOpen={() => onOpen(item, stats.largest)}
                 title={`${item.width}×${item.height}`}
               />
             ))}
