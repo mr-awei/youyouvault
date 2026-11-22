@@ -1,6 +1,6 @@
 # 图库 TuKu
 
-[![版本](https://img.shields.io/badge/version-1.5.2-2563eb.svg)](https://github.com/mr-awei/youyouvault/releases/latest)
+[![版本](https://img.shields.io/badge/version-1.5.3-2563eb.svg)](https://github.com/mr-awei/youyouvault/releases/latest)
 [![平台](https://img.shields.io/badge/platform-Windows%2010%2F11-5b6472.svg)](#2-下载与安装)
 [![Electron](https://img.shields.io/badge/Electron-44.4.5-47848f.svg)](#6-架构与数据流)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522.5-339933.svg)](#9-常用命令)
@@ -83,7 +83,7 @@ flowchart LR
 
 | 分类 | 关键能力 | 教程里搜 |
 | --- | --- | --- |
-| 浏览与搜索 | 瀑布流 / 网格 / 按文件夹收纳、时间线（年 → 月 → 日）、空格快速预览、搜索前缀语法、多维筛选、排序、混合检索（关键词 + 语义）、时间线与清单虚拟滚动、EPUB 阅读器、无限画布 | `搜索语法` `时间线` `快速预览` `筛选` `画布` |
+| 浏览与搜索 | 瀑布流 / 网格 / 按文件夹收纳、时间线（年 → 月 → 日）、空格快速预览、搜索前缀语法、多维筛选、排序、混合检索（关键词 + 语义）、时间线与清单虚拟滚动、EPUB 阅读器、无限画布、Excel / CSV 卡片内容缩略 | `搜索语法` `时间线` `快速预览` `筛选` `画布` |
 | 文件夹与标签 | 多层文件夹、拖拽排序、图标与颜色、封面与锁定、标签分组 / 合并、拖标签打标、批量创建、批量改信息（评分 / 收藏 / 标签 / 备注）、保存筛选器、智能文件夹（AND/OR 嵌套） | `文件夹` `标签` `批量改信息` `智能文件夹` |
 | 堆叠与笔记 | 图片堆叠（建组 / 拖拽并入 / 合并 / 设封面 / 解散）、多条文本笔记、视频音频时间点笔记 | `堆叠` `笔记` `时间点` |
 | 整理与查重 | 待整理三视图、收件箱、MD5 完全重复、pHash 相似重复、库-盘一致性、孤儿缩略图清理、缩略图失败队列 | `查重` `失配` `待整理` `收件箱` |
@@ -389,7 +389,7 @@ flowchart TB
 
 ```bash
 # 1. 升版本（不自动打 tag）
-npm version patch --no-git-tag-version   # 本次 1.5.2 用 patch；功能版本用 minor
+npm version patch --no-git-tag-version   # 本次 1.5.3 用 patch；功能版本用 minor
 # 2. 全量验证
 npm run verify
 # 3. 提交
