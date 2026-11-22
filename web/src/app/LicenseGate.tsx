@@ -25,11 +25,19 @@ export function LicenseProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void refresh();
-    // 正常 30 分钟一次；被停用或联网校验失败时 1 分钟重试，恢复后自动回到专业版
-    const every = status?.blocked || status?.checkFailed ? 60 * 1000 : 30 * 60 * 1000;
+    // 正常 30 分钟一次；被停用 / 联网校验失败 / OMS 已登录时 1 分钟一次。
+    // OMS 会话可能随时过期，必须及时发现并退回免费版。
+    const fast =
+      status?.blocked || status?.checkFailed || status?.omsLoggedIn || status?.licensed === true;
+    const every = fast ? 60 * 1000 : 30 * 60 * 1000;
     const timer = setInterval(() => void refresh(Boolean(status?.blocked)), every);
-    return () => clearInterval(timer);
-  }, [refresh, status?.blocked, status?.checkFailed]);
+    const onFocus = () => void refresh();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refresh, status?.blocked, status?.checkFailed, status?.omsLoggedIn, status?.licensed]);
 
   // 只有明确被远程停用才整屏禁用；联网校验失败 / 授权到期都只是退回免费版
   if (status?.blocked) {
@@ -102,8 +110,8 @@ export function ProGate({
       <div className="big">🔒</div>
       <h3>「{label}」需要专业版授权</h3>
       <div className="hint" style={{ maxWidth: 520, lineHeight: 1.8 }}>
-        当前是免费版。到「设置 → 授权」输入激活码，或把设备码 <code>{status.deviceCode || status.machineCode}</code>{' '}
-        发给管理员购买授权。
+        当前是免费版。先在右上角「登录 / 激活授权」用 OMS 账号登录，并激活该手机号对应的授权码；
+        或把设备码 <code>{status.deviceCode || status.machineCode}</code> 发给管理员购买授权。
         {status.reason ? ` ${status.reason}` : ''}
       </div>
       <button className="btn primary" style={{ marginTop: 12 }} onClick={onOpenSettings}>

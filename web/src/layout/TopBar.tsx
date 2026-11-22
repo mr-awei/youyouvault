@@ -17,6 +17,7 @@ import {
   IconWand,
 } from '../components/Icons';
 import { useLicense } from '../app/LicenseGate';
+import OmsLoginDialog from '../components/OmsLoginDialog';
 import { TOOLS, navLabel } from './nav';
 import i18n from '../i18n';
 
@@ -36,6 +37,7 @@ interface Props {
   onExportGallery: () => void;
   /** 生成只读分享链接（手机扫码浏览） */
   onShareLink: () => void;
+  onToast: (msg: string, kind?: 'info' | 'error') => void;
 }
 
 export default function TopBar({
@@ -51,10 +53,12 @@ export default function TopBar({
   onToggleTheme,
   onExportGallery,
   onShareLink,
+  onToast,
 }: Props) {
   // 账号常驻在右上角：头像 + 套餐状态，点开是设置 / 授权 / 关于软件
   const { status } = useLicense();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -78,10 +82,11 @@ export default function TopBar({
     : status?.licensed
       ? i18n.t('k3f086416')
       : i18n.t('k0357cdb4');
-  // 只有真正写入本机授权文件的才算「登录」；开发模式 / 试用期的 Pro 不算
-  const signedIn = status?.licensedByKey === true && !status?.revoked;
-  const accountName = status?.phone || (status?.devPro ? '开发模式' : i18n.t('k63e85df1'));
-  const avatarText = status?.phone ? status.phone.slice(-2) : '优';
+  // 只有 OMS 会话有效才算「登录」；token 过期会自动退回未登录 / 免费版。
+  const signedIn = status?.omsLoggedIn === true;
+  // 没登录 OMS 时一律显示「未登录」——授权文件里的手机号不代表用户已登录
+  const accountName = status?.omsUsername || (status?.devPro ? '开发模式' : i18n.t('k63e85df1'));
+  const avatarText = status?.omsUsername ? status.omsUsername.slice(-2) : '优';
 
   return (
     <header className="topbar" data-tour="topbar">
@@ -180,7 +185,7 @@ export default function TopBar({
                   role="menuitem"
                   onClick={() => {
                     setAccountOpen(false);
-                    onOpenSettings('license');
+                    setLoginOpen(true);
                   }}
                 >
                   <IconKey />
@@ -199,17 +204,30 @@ export default function TopBar({
                 <span>{i18n.t('ke366ccf1')}</span>
               </button>
               {signedIn && (
-                <button
-                  className="tools-item"
-                  role="menuitem"
-                  onClick={() => {
-                    setAccountOpen(false);
-                    onOpenSettings('license');
-                  }}
-                >
-                  <IconKey />
-                  <span>{i18n.t('k32abef73')}</span>
-                </button>
+                <>
+                  <button
+                    className="tools-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      setLoginOpen(true);
+                    }}
+                  >
+                    <IconKey />
+                    <span>退出登录 / 切换账号</span>
+                  </button>
+                  <button
+                    className="tools-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      onOpenSettings('license');
+                    }}
+                  >
+                    <IconKey />
+                    <span>{i18n.t('k32abef73')}</span>
+                  </button>
+                </>
               )}
               <button
                 className="tools-item"
@@ -226,6 +244,7 @@ export default function TopBar({
           )}
         </div>
       </div>
+      {loginOpen && <OmsLoginDialog onClose={() => setLoginOpen(false)} onToast={onToast} />}
     </header>
   );
 }

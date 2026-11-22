@@ -28,6 +28,10 @@ import {
   verifyLicenseKey,
   verifyRevocationList,
 } from './license-core.js';
+import { omsClient } from './oms.js';
+
+// 预读本机 OMS 账号（只读本地文件），让 licenseStatus 的同步快照能拿到登录账号。
+void omsClient.loadAccount();
 
 const LICENSE_FILE = path.join(DATA_DIR, 'license.key');
 const REVOKE_FILE = path.join(DATA_DIR, 'license-revoke.json');
@@ -48,6 +52,12 @@ const STRICT_LICENSE = !IS_PACKAGED && /^(1|true|on)$/i.test(String(process.env.
 const TRIAL_DISABLED = !IS_PACKAGED && /^(1|true|on)$/i.test(String(process.env.TUKU_TRIAL_DISABLE || ''));
 const REVOKE_DISABLED =
   !IS_PACKAGED && /^(1|true|on)$/i.test(String(process.env.TUKU_LICENSE_REVOKE_DISABLE || ''));
+/**
+ * 仅用于未打包的开发 / 冒烟测试：跳过「OMS 登录 + 手机号一致」这道 Pro 条件。
+ * 打包版永远忽略，正式渠道必须由用户登录 OMS 才能开 Pro。
+ */
+const OMS_BINDING_DISABLED =
+  !IS_PACKAGED && /^(1|true|on)$/i.test(String(process.env.TUKU_OMS_LOGIN_DISABLE || ''));
 const REVOKE_URL = REVOKE_DISABLED
   ? ''
   : String(process.env.TUKU_LICENSE_REVOKE_URL || DEFAULT_REVOKE_URL).trim();
@@ -362,6 +372,20 @@ function readTrialInfo() {
 }
 
 /**
+ * OMS 会话是否绑定了这张授权：
+ * - 必须已登录 OMS（token 未过期），网站要求重新登录时自动退回免费版；
+ * - 授权码里的手机号必须与 OMS 账号一致（签发时管理员用的就是这个账号）。
+ * 试用 / 开发模式不走这条判断，保持原来的体验。
+ * @param {{loggedIn?: boolean, username?: string}} oms
+ * @param {string} licensePhone
+ */
+export function omsSessionMatchesLicense(oms, licensePhone) {
+  const omsPhone = normalizePhone(oms?.username);
+  const keyPhone = normalizePhone(licensePhone);
+  return !!(oms?.loggedIn && omsPhone && keyPhone && omsPhone === keyPhone);
+}
+
+/**
  * 当前授权状态。refresh=true 时重新探测硬件（换过硬件后可手动刷新）。
  * @param {{ refresh?: boolean }} [opts]
  */
@@ -371,7 +395,8 @@ export function licenseStatus({ refresh = false } = {}) {
     partsCache = null;
     statusCache = null;
   }
-  const stamp = `${fileStamp()}|${revokeStamp()}|${revokeCheck.ok ? '1' : '0'}|${revokeCheck.at}`;
+  const oms = omsClient.sessionSnapshot();
+  const stamp = `${fileStamp()}|${revokeStamp()}|${revokeCheck.ok ? '1' : '0'}|${revokeCheck.at}|${oms.loggedIn ? '1' : '0'}|${oms.username}|${oms.expiresAt}`;
   if (!refresh && statusCache && statusCache.stamp === stamp) return statusCache.value;
 
   const parts = components(refresh);
@@ -395,6 +420,7 @@ export function licenseStatus({ refresh = false } = {}) {
     ? String(payload.phone || payload.account || payload.email || payload.note || '').trim()
     : '';
   const account = phone; // 兼容旧字段：新授权码的账号就是手机号
+  const omsBound = OMS_BINDING_DISABLED || omsSessionMatchesLicense(oms, phone);
   const revoke = readRevokeCache();
   const revokedPhones = Array.isArray(revoke?.payload?.revokedPhones)
     ? revoke.payload.revokedPhones.map((p) => normalizePhone(p)).filter(Boolean)
@@ -448,10 +474,15 @@ export function licenseStatus({ refresh = false } = {}) {
   const failClosed = !!payload && !REVOKE_DISABLED;
   const checkFailed = failClosed && !revokeCheck.ok;
   const blocked = revoked;
-  const proActive = VERIFIER_HEALTHY && (devPro || trial.active || (!blocked && !checkFailed && !!payload));
+  const proActive =
+    VERIFIER_HEALTHY && (devPro || trial.active || (!blocked && !checkFailed && !!payload && omsBound));
   if (revoked) reason = '该手机号或设备已被远程停用，请联系管理员';
   else if (checkFailed) {
     reason = `无法连接授权服务器，已暂时退回免费版${revokeCheck.error ? `（${revokeCheck.error}）` : ''}；网络恢复后会自动恢复专业版。`;
+  } else if (!OMS_BINDING_DISABLED && payload && !oms.loggedIn) {
+    reason = 'OMS 登录已过期或未登录，请重新登录以继续使用专业版';
+  } else if (payload && !omsBound) {
+    reason = `授权手机号（${phone || '无'}）与 OMS 账号（${oms.username || '未登录'}）不一致，请用一个手机号登录并激活对应授权`;
   } else if (!payload && VERIFIER_HEALTHY) {
     if (devPro) reason = '开发环境：专业版功能已开启';
     else if (trial.active) reason = `试用中，还剩 ${trial.daysLeft} 天`;
@@ -477,6 +508,12 @@ export function licenseStatus({ refresh = false } = {}) {
     deviceCodeVersion: 2,
     phone,
     account,
+    /** OMS 登录会话：必须由这个账号登录且授权手机号一致，才会真正启用 Pro */
+    omsLoggedIn: oms.loggedIn,
+    omsUsername: oms.username,
+    omsExpiresAt: oms.expiresAt,
+    omsError: oms.error,
+    omsBound,
     revoked,
     /** 连不上停用清单：当前按免费版运行，但软件功能不禁用 */
     checkFailed,

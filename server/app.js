@@ -390,6 +390,14 @@ export function buildApp({ desktop = false } = {}) {
   app.use('/api/lan', requirePro('lan'));
   app.use('/api/night-batch', requirePro('night-batch'));
   app.use('/api/barcode', requirePro('barcode'));
+  // OMS 业务接口同样属于「条码分文件夹与产品图上传」能力，免费版不能绕过 UI 直接调。
+  // 但 /api/oms/status、/api/oms/account、/api/oms/login 必须放行，否则用户没法登录。
+  const omsProGate = requirePro('barcode');
+  app.use((req, res, next) => {
+    const p = req.path;
+    if (p === '/api/oms/resolve' || p.startsWith('/api/oms/product/')) return omsProGate(req, res, next);
+    next();
+  });
   app.use('/api/timeline', requirePro('timeline'));
   app.use(
     [

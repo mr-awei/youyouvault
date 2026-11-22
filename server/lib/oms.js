@@ -168,15 +168,29 @@ class OmsClient {
   }
 
   async status() {
-    const account = await this.loadAccount();
+    await this.loadAccount();
+    return { ...this.sessionSnapshot(), baseUrl: this.account?.baseUrl || DEFAULT_BASE_URL };
+  }
+
+  /**
+   * 同步会话快照（不触网、不读盘），给授权状态实时判断用。
+   * token 过期后 loggedIn 立刻变 false，专业版随之关闭，直到用户重新登录。
+   */
+  sessionSnapshot() {
+    const s = this.session;
     return {
-      configured: !!account,
-      username: account?.username || '',
-      baseUrl: account?.baseUrl || DEFAULT_BASE_URL,
-      loggedIn: !!this.session && this.session.expiresAt > Date.now(),
-      expiresAt: this.session?.expiresAt || 0,
+      configured: !!this.account,
+      username: this.account?.username || '',
+      loggedIn: !!s && s.expiresAt > Date.now(),
+      expiresAt: s?.expiresAt || 0,
       error: this.lastError,
     };
+  }
+
+  /** 会话失效：清掉 token，授权层会立刻退回免费版 */
+  invalidateSession(reason = 'OMS 登录已失效') {
+    this.session = null;
+    this.lastError = reason;
   }
 
   /** 登录并缓存 token；并发调用共享同一个 Promise，避免连续扫码时重复登录 */
@@ -264,12 +278,10 @@ class OmsClient {
 
     let { res, json } = await send((await this.login()).token);
     if (res.status === 401 || json?.code === 401) {
-      this.session = null;
-      ({ res, json } = await send((await this.login(true)).token));
-    }
-    if (res.status === 401 || json?.code === 401) {
-      this.lastError = 'OMS 登录已失效';
-      throw new Error('OMS 登录已失效，请重新配置账号');
+      // 网站要求重新登录 → 清掉本地 token，退回免费版。
+      // 不再静默重登：否则用户不知道会话已经失效，Pro 会在后台悄悄续上。
+      this.invalidateSession('OMS 登录已失效');
+      throw new Error('OMS 登录已失效，请重新登录');
     }
     if (!res.ok || json?.code !== 200) {
       throw new Error(json?.msg || `OMS 接口异常（HTTP ${res.status}）`);

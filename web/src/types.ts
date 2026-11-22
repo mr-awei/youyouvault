@@ -597,6 +597,13 @@ export interface LicenseStatus {
   note?: string;
   /** 未授权 / 校验失败原因 */
   reason?: string;
+  /** OMS 会话：授权手机号对应的账号是否已登录（未登录 / 过期时 Pro 关闭） */
+  omsLoggedIn?: boolean;
+  omsUsername?: string;
+  omsExpiresAt?: number;
+  omsError?: string;
+  /** OMS 账号与授权手机号是否一致 */
+  omsBound?: boolean;
   /** 购买页地址（构建时注入，可为空） */
   buyUrl?: string;
   features: LicenseFeature[];

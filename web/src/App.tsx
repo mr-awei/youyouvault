@@ -338,6 +338,7 @@ export default function App() {
         onToggleTheme={toggleTheme}
         onExportGallery={() => setExportOpen(true)}
         onShareLink={() => dialogs.setShareOpen(true)}
+        onToast={showToast}
       />
 
       <div className="app-body">

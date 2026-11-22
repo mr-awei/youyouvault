@@ -225,6 +225,18 @@ export default function LicenseCard({ onToast }: Props) {
         </div>
       )}
 
+      <div className="field">
+        <label>OMS 登录</label>
+        <div>{status.omsLoggedIn ? `已登录：${status.omsUsername || '—'}` : '未登录（会话过期需重新登录）'}</div>
+        <div className="hint">
+          {status.omsBound
+            ? 'OMS 账号与授权手机号一致，专业版已启用。'
+            : status.omsLoggedIn
+              ? `当前登录的 OMS 账号与授权手机号（${phone || '无'}）不一致，专业版未启用。`
+              : '请在右上角账号菜单点「登录 / 激活授权」用 OMS 账号登录；登录后会话过期会自动退回免费版。'}
+        </div>
+      </div>
+
       {status.verifierHealthy === false && (
         <div
           style={{

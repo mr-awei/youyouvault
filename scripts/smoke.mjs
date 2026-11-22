@@ -83,6 +83,9 @@ const server = spawn(process.execPath, ['server/index.js'], {
     TUKU_LICENSE_PUBLIC_KEY: LICENSE_PUB,
     // 冒烟不测远程停用清单，避免 CI 依赖外网
     TUKU_LICENSE_REVOKE_DISABLE: '1',
+    // 冒烟签的测试授权用的是固定手机号，不可能真去 OMS 登录；
+    // 这道 Pro 条件只在打包版强制，开发 / 冒烟可用这个开关跳过。
+    TUKU_OMS_LOGIN_DISABLE: '1',
     NO_COLOR: '1',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
