@@ -4223,5 +4223,9 @@
   "k21048b99": "Move stale files out of existing code folders (to .stale)",
   "k23b26af3": "Clean stale files",
   "k6b18e06e": "Moved {{p0}} stale files",
-  "k58179dae": "Stale files are moved to a .stale subfolder in the output directory, not deleted"
+  "k58179dae": "Stale files are moved to a .stale subfolder in the output directory, not deleted",
+  "k349884a1": "Sign in / Activate",
+  "k82826e12": "Not activated. Sign in here or paste the key issued by your administrator",
+  "k32abef73": "License details",
+  "kb0154047": "Sign in or activate to unlock Pro features"
 }

@@ -78,7 +78,9 @@ export default function TopBar({
     : status?.licensed
       ? i18n.t('k3f086416')
       : i18n.t('k0357cdb4');
-  const accountName = status?.phone || (status?.devPro ? '开发模式' : '本地账号');
+  // 只有真正写入本机授权文件的才算「登录」；开发模式 / 试用期的 Pro 不算
+  const signedIn = status?.licensedByKey === true && !status?.revoked;
+  const accountName = status?.phone || (status?.devPro ? '开发模式' : i18n.t('k63e85df1'));
   const avatarText = status?.phone ? status.phone.slice(-2) : '优';
 
   return (
@@ -148,7 +150,7 @@ export default function TopBar({
         {/* 账号：常驻右上角，设置 / 授权 / 关于软件都在这个下拉里 */}
         <div className="account-wrap" ref={accountRef}>
           <button
-            className={`avatar-btn${accountOpen ? ' avatar-btn-active' : ''}`}
+            className={`avatar-btn${accountOpen ? ' avatar-btn-active' : ''}${!signedIn ? ' avatar-btn-pending' : ''}`}
             onClick={() => setAccountOpen((v) => !v)}
             title={i18n.t('ke366ccf1')}
             data-tour="settings-btn"
@@ -170,8 +172,21 @@ export default function TopBar({
             <div className="account-menu" role="menu">
               <div className="account-head">
                 <b>{accountName}</b>
-                <span>{status?.reason || editionLabel}</span>
+                <span>{signedIn ? status?.reason || editionLabel : i18n.t('kb0154047')}</span>
               </div>
+              {!signedIn && (
+                <button
+                  className="tools-item login-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    onOpenSettings('license');
+                  }}
+                >
+                  <IconKey />
+                  <span>{i18n.t('k349884a1')}</span>
+                </button>
+              )}
               <button
                 className="tools-item"
                 role="menuitem"
@@ -183,17 +198,19 @@ export default function TopBar({
                 <IconGear />
                 <span>{i18n.t('ke366ccf1')}</span>
               </button>
-              <button
-                className="tools-item"
-                role="menuitem"
-                onClick={() => {
-                  setAccountOpen(false);
-                  onOpenSettings('license');
-                }}
-              >
-                <IconKey />
-                <span>{i18n.t('k98a315c0')}</span>
-              </button>
+              {signedIn && (
+                <button
+                  className="tools-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    onOpenSettings('license');
+                  }}
+                >
+                  <IconKey />
+                  <span>{i18n.t('k32abef73')}</span>
+                </button>
+              )}
               <button
                 className="tools-item"
                 role="menuitem"

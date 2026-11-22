@@ -113,6 +113,17 @@
   background: linear-gradient(90deg, rgba(249, 115, 22, 0.18), rgba(234, 88, 12, 0.12));
   color: var(--text);
 }
+/* 右上角账号菜单：未登录时的「登录 / 激活」入口要一眼能看到 */
+.tools-item.login-item {
+  margin-bottom: 4px;
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: #fff;
+  font-weight: 600;
+}
+.tools-item.login-item:hover {
+  background: linear-gradient(135deg, #fb923c, #f97316);
+  color: #fff;
+}
 
 /* 顶栏图标按钮（设置 / 主题切换） */
 .icon-btn {
@@ -159,6 +170,10 @@
 .avatar-btn-active {
   background: var(--panel-strong);
   border-color: rgba(249, 115, 22, 0.55);
+}
+/* 未登录：头像加一圈橙色光晕，提示这里可以登录 / 激活 */
+.avatar-btn-pending .avatar-dot {
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.4);
 }
 .avatar-dot {
   display: grid;
