@@ -182,6 +182,16 @@ export const barcodeAPI = {
       timeoutMs: LONG_TIMEOUT_MS,
     }),
 
+  /** 批量裁切台：按每张图各自的裁切框原地覆盖（条码流程里的文件夹图片尚未入库） */
+  barcodeCropRects: (
+    items: { code: string; dir: string; file: string; rect: { x: number; y: number; w: number; h: number } }[]
+  ) =>
+    request<{ items: { code: string; file: string; cropped: boolean; error?: string }[] }>('/api/barcode/crop-rects', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+      timeoutMs: LONG_TIMEOUT_MS,
+    }),
+
   /** 列出某个产品文件夹里的图片（编号前让用户自己挑前五张） */
   barcodeFolderImages: (dir: string) =>
     request<{ files: string[] }>(`/api/barcode/folder-images?${new URLSearchParams({ dir })}`),

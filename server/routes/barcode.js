@@ -614,6 +614,57 @@ export function register(app, ctx) {
     })
   );
 
+  /* 批量裁切台：按每张图各自的裁切框原地覆盖（文件夹图片还没入库、没有图库 id） */
+  app.post(
+    '/api/barcode/crop-rects',
+    asyncRoute(async (req, res) => {
+      const input = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (!input.length) return res.status(400).json({ error: '没有要裁剪的图片' });
+
+      const items = [];
+      for (const it of input) {
+        const code = String(it?.code || '').trim();
+        const file = String(it?.file || '').trim();
+        let dir;
+        try {
+          dir = assertFolder(it?.dir);
+        } catch (err) {
+          items.push({ code, file, cropped: false, error: err instanceof Error ? err.message : String(err) });
+          continue;
+        }
+        const abs = safeChildName(dir, file);
+        if (!abs) {
+          items.push({ code, file, cropped: false, error: '文件名不合法或不是图片' });
+          continue;
+        }
+        try {
+          const r = it?.rect || {};
+          const x = Math.min(1, Math.max(0, Number(r.x) || 0));
+          const y = Math.min(1, Math.max(0, Number(r.y) || 0));
+          const w = Math.min(1 - x, Math.max(0.01, Number(r.w) || 1));
+          const h = Math.min(1 - y, Math.max(0.01, Number(r.h) || 1));
+          const { width, height } = await imageSize(abs);
+          if (!width || !height) throw new Error('读不到图片尺寸');
+          const left = Math.round(x * width);
+          const top = Math.round(y * height);
+          const cw = Math.max(1, Math.min(width - left, Math.round(w * width)));
+          const ch = Math.max(1, Math.min(height - top, Math.round(h * height)));
+          const ext = path.extname(abs).toLowerCase();
+          const tmp = path.join(dir, `.crop-${Date.now()}-${items.length}${ext}`);
+          await sharp(abs, { failOn: 'none' })
+            .rotate()
+            .extract({ left, top, width: cw, height: ch })
+            .toFile(tmp);
+          await fsp.rename(tmp, abs);
+          items.push({ code, file, cropped: true, width: cw, height: ch });
+        } catch (err) {
+          items.push({ code, file, cropped: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+      res.json({ items });
+    })
+  );
+
   /* 编号前列出产品文件夹里的图片，让用户自己选哪五张排最前 */
   app.get(
     '/api/barcode/folder-images',

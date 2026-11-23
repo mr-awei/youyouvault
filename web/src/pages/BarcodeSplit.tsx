@@ -21,6 +21,7 @@ import {
 import { IconArrowUpRight, IconBarcode, IconCopy, IconFolder, IconRefresh } from '../components/Icons';
 import { getApiToken } from '../api/core';
 import { confirmDialog } from '../components/Dialogs';
+import BatchCropStudio, { type CropItem } from '../components/BatchCropStudio';
 import Select from '../components/Select';
 import i18n from '../i18n';
 import type { FolderNode } from '../types';
@@ -179,6 +180,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 直接生成报表：用户选一个「包含若干产品文件夹」的目录 */
   const [manualDir, setManualDir] = useState('');
   const [manualFolders, setManualFolders] = useState<{ name: string; files: number }[]>([]);
+  /** 第 5 步：复用图库里的批量裁切台，直接裁输出文件夹里还没入库的 eBay 图 */
+  const [cropStudioOpen, setCropStudioOpen] = useState(false);
+  const [cropStudioItems, setCropStudioItems] = useState<CropItem[]>([]);
 
   // 每个摄影师用自己的 OMS 账号：进页面先读一次配置状态
   useEffect(() => {
@@ -704,9 +708,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           .map((it) => `${it.code}（${it.notSquare.length} 张）`)
           .join('、');
         onToast(
-          `有 ${bad} 张 eBay 图不是 1:1，必须是正方形：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。请手动裁，或点「自动居中裁剪」`,
+          `有 ${bad} 张 eBay 图不是 1:1，必须是正方形：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。已打开批量裁切台，可逐张调整；也可点「自动居中裁剪」一键处理。`,
           'error'
         );
+        // 检查出不合格图片就自动打开裁切台；已经开着时不要重复弹
+        if (!cropStudioOpen) openBatchCrop(items);
       } else {
         onToast('检查完成：eBay 图都是 1:1');
       }
@@ -715,6 +721,37 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     } finally {
       setApplyMode(null);
     }
+  };
+
+  /**
+   * 第 5 步：打开项目已有的批量裁切台。
+   * 这里的图片还在输出文件夹里、没有图库 id，所以给裁切台传 dir + file，
+   * 裁切台会走 /api/barcode/crop-rects 原地覆盖，而不是图库任务。
+   */
+  const openBatchCrop = (source: BarcodeRatioItemResult[] | null = null) => {
+    // 自动打开时 ratios 的 setState 还没生效，直接传刚查到的结果，避免拿到旧值
+    const bad = (source || ratios || []).filter((it) => it.notSquare.length);
+    if (!bad.length) {
+      onToast('没有需要裁剪的图片，请先点「检查 1:1」', 'error');
+      return;
+    }
+    const items: CropItem[] = [];
+    let syntheticId = -1;
+    for (const r of bad) {
+      for (const f of r.notSquare) {
+        items.push({
+          id: syntheticId--,
+          title: `${r.code}/${f.file}`,
+          thumb: barcodeThumbUrl(r.dir, f.file, 300),
+          url: barcodeThumbUrl(r.dir, f.file, 800),
+          width: f.width,
+          height: f.height,
+          source: { dir: r.dir, file: f.file, code: r.code },
+        });
+      }
+    }
+    setCropStudioItems(items);
+    setCropStudioOpen(true);
   };
 
   /** 第 5 步补充：只裁不是 1:1 的图，居中裁成正方形并原地覆盖 */
@@ -1819,13 +1856,16 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   <button className="btn primary" onClick={runRatio} disabled={applying}>
                     {applyMode === 'ratio' ? '检查中…' : notSquareTotal ? '重新检查 1:1' : '检查 1:1'}
                   </button>
+                  <button className="btn" onClick={() => openBatchCrop()} disabled={applying}>
+                    打开批量裁切
+                  </button>
                   {notSquareTotal > 0 && (
                     <button className="btn" onClick={runCrop} disabled={applying}>
                       {applyMode === 'crop' ? '裁剪中…' : '自动居中裁剪'}
                     </button>
                   )}
                   <span className="hint">
-                    eBay 图必须 1:1；也可以自己手动裁，裁完点「重新检查 1:1」
+                    eBay 图必须 1:1；「打开批量裁切」可逐张调整裁切框，或一键自动居中裁剪，裁完点「重新检查 1:1」
                   </span>
                 </>
               )}
@@ -2091,6 +2131,19 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             </div>
           </div>
         </>
+      )}
+
+      {cropStudioOpen && (
+        <BatchCropStudio
+          items={cropStudioItems}
+          defaultRatio="1:1"
+          onToast={onToast}
+          onClose={() => setCropStudioOpen(false)}
+          onDone={() => {
+            setCropStudioOpen(false);
+            void checkRatios();
+          }}
+        />
       )}
     </div>
   );

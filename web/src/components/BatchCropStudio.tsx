@@ -4,7 +4,14 @@ import type { EditJobStatus } from '../types';
 import { api } from '../api';
 import { useJobProgress } from '../hooks/useJobProgress';
 import CropOverlay, { initialRect, type CropRect } from './CropOverlay';
-import CropSettings, { cropOutputSize, cropRatioStr, defaultCropControls, ratioWH, type CropControlState } from './CropSettings';
+import CropSettings, {
+  cropOutputSize,
+  cropRatioStr,
+  defaultCropControls,
+  ratioWH,
+  type CropControlState,
+  type CropPresetKey,
+} from './CropSettings';
 import SaveModeBlock, { SAVE_MODE_DEFAULT, type SaveModeState } from './SaveModeBlock';
 import { IconClose, IconExpand } from './Icons';
 import { confirmDialog } from './Dialogs';
@@ -18,6 +25,11 @@ export interface CropItem {
   url: string;
   width: number;
   height: number;
+  /**
+   * 条码流程专用：图片还在输出文件夹里、尚未入库，没有图库 id。
+   * 有这个字段时走 /api/barcode/crop-rects 按路径裁，不走图库的批量编辑任务。
+   */
+  source?: { dir: string; file: string; code: string };
 }
 
 /** 五档预览尺寸；默认「中小」，最小 140、最大 760 之间可无级拖动 */
@@ -104,6 +116,8 @@ interface Props {
   onToast?: (msg: string, kind?: 'info' | 'error') => void;
   /** 任务结束：刷新列表，让卡片拿到新尺寸/新缩略图 */
   onDone?: () => void;
+  /** 条码 1:1 流程传 1:1；图库里沿用原来的 4:3 默认值 */
+  defaultRatio?: CropPresetKey;
 }
 
 /**
@@ -113,9 +127,9 @@ interface Props {
  * - 「自动检测图像焦点」按显著度（轮廓 + 肤色 + 饱和度）把每张的框放到主体上
  * 处理走服务端异步任务（逐张独立 rect），进度轮询 /api/edit/job。
  */
-export default function BatchCropStudio({ items, onClose, onToast, onDone }: Props) {
+export default function BatchCropStudio({ items, onClose, onToast, onDone, defaultRatio }: Props) {
   const [cell, setCell] = useState(CELL_DEFAULT);
-  const [ctl, setCtl] = useState<CropControlState>(() => defaultCropControls('4:3'));
+  const [ctl, setCtl] = useState<CropControlState>(() => defaultCropControls(defaultRatio || '4:3'));
   const [rects, setRects] = useState<Record<number, CropRect>>({});
   const [focusBusy, setFocusBusy] = useState(false);
   const [focusDone, setFocusDone] = useState(0);
@@ -160,6 +174,12 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone }: Pro
         const i = cursor++;
         if (i >= list.length) return;
         const it = list[i];
+        // 文件夹图片没有图库 id，自动对焦接口用不了；保留用户的居中框即可
+        if (it.source) {
+          done += 1;
+          if (my === focusSeq.current) setFocusDone(done);
+          continue;
+        }
         try {
           const r = await api.imageFocus(it.id, `${rw}:${rh}`);
           if (my !== focusSeq.current) return;
@@ -185,6 +205,8 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone }: Pro
   }, [ratioStr, listKey]);
 
   const running = !!job?.running;
+  /** 条码流程：所有图片都在文件夹里，裁切原地覆盖，不走图库任务/保存方式 */
+  const folderMode = items.some((it) => it.source);
 
   // 进度走 SSE job 快照；连续 10s 收不到推送才低频兜底拉接口
   const applyStatus = useCallback(
@@ -248,6 +270,28 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone }: Pro
       if (save.saveMode === 'overwrite') {
         const ok = await confirmDialog(i18n.t('kded21324', { p0: ids.length }));
         if (!ok) return;
+      }
+      // 文件夹模式：按每张图自己的框裁，原地覆盖。没有图库任务，直接请求后收尾。
+      if (folderMode) {
+        const folderItems = itemsRef.current.filter((it) => it.source);
+        const r = await api.barcodeCropRects(
+          folderItems.map((it) => ({
+            code: it.source!.code,
+            dir: it.source!.dir,
+            file: it.source!.file,
+            rect: plan[it.id],
+          }))
+        );
+        const failed = r.items.filter((x) => !x.cropped);
+        onToast?.(
+          failed.length
+            ? `已裁剪 ${r.items.length - failed.length} 张，${failed.length} 张失败：${failed[0]?.error || ''}`
+            : `已裁剪 ${r.items.length} 张，全部完成`,
+          failed.length ? 'error' : 'info'
+        );
+        onDone?.();
+        onClose();
+        return;
       }
       const r = await api.batchEdit(ids, 'crop', {
         ratio: ratioStr,
@@ -353,16 +397,23 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone }: Pro
             onFocus={() => void runFocus(itemsRef.current, ratio.w, ratio.h)}
           />
 
-          <div className="cs-sec">
-            <div className="cs-sec-title">{i18n.t('k9b15e2d9')}</div>
-            <SaveModeBlock
-              value={save}
-              onChange={(p) => setSave((s) => ({ ...s, ...p }))}
-              disabled={running}
-              count={ids.length}
-              overwriteHint={i18n.t('k075c1f81', { p0: ids.length })}
-            />
-          </div>
+          {!folderMode && (
+            <div className="cs-sec">
+              <div className="cs-sec-title">{i18n.t('k9b15e2d9')}</div>
+              <SaveModeBlock
+                value={save}
+                onChange={(p) => setSave((s) => ({ ...s, ...p }))}
+                disabled={running}
+                count={ids.length}
+                overwriteHint={i18n.t('k075c1f81', { p0: ids.length })}
+              />
+            </div>
+          )}
+          {folderMode && (
+            <div className="hint" style={{ margin: '10px 0', lineHeight: 1.7 }}>
+              条码流程：图片还在输出文件夹里，裁完直接覆盖原文件；比例用左侧 1:1，框可逐张拖动。
+            </div>
+          )}
 
           {job && job.total > 0 && (
             <div className="job-banner cs-job">
@@ -396,9 +447,11 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone }: Pro
               <button className="btn sm primary" disabled={starting || !ids.length} onClick={start}>
                 {starting
                   ? i18n.t('kf6196bb1')
-                  : save.saveMode === 'copy'
-                    ? i18n.t('k36bd39f5', { p0: ids.length })
-                    : i18n.t('k12f2d5c1', { p0: ids.length })}
+                  : folderMode
+                    ? `裁剪 ${ids.length} 张并覆盖`
+                    : save.saveMode === 'copy'
+                      ? i18n.t('k36bd39f5', { p0: ids.length })
+                      : i18n.t('k12f2d5c1', { p0: ids.length })}
               </button>
             )}
           </div>
