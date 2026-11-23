@@ -30,6 +30,8 @@ export interface CropItem {
    * 有这个字段时走 /api/barcode/crop-rects 按路径裁，不走图库的批量编辑任务。
    */
   source?: { dir: string; file: string; code: string };
+  /** 分组键（条码流程里就是产品文件夹/编码），用于按文件夹分块显示与逐个保存 */
+  group?: string;
 }
 
 /** 五档预览尺寸；默认「中小」，最小 140、最大 760 之间可无级拖动 */
@@ -118,6 +120,8 @@ interface Props {
   onDone?: () => void;
   /** 条码 1:1 流程传 1:1；图库里沿用原来的 4:3 默认值 */
   defaultRatio?: CropPresetKey;
+  /** 按 group 分块显示，每块可单独保存（条码流程按产品文件夹分） */
+  grouped?: boolean;
 }
 
 /**
@@ -127,7 +131,7 @@ interface Props {
  * - 「自动检测图像焦点」按显著度（轮廓 + 肤色 + 饱和度）把每张的框放到主体上
  * 处理走服务端异步任务（逐张独立 rect），进度轮询 /api/edit/job。
  */
-export default function BatchCropStudio({ items, onClose, onToast, onDone, defaultRatio }: Props) {
+export default function BatchCropStudio({ items, onClose, onToast, onDone, defaultRatio, grouped }: Props) {
   const [cell, setCell] = useState(CELL_DEFAULT);
   const [ctl, setCtl] = useState<CropControlState>(() => defaultCropControls(defaultRatio || '4:3'));
   const [rects, setRects] = useState<Record<number, CropRect>>({});
@@ -148,6 +152,17 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
   const patchCtl = useCallback((p: Partial<CropControlState>) => setCtl((s) => ({ ...s, ...p })), []);
 
   const ids = useMemo(() => items.map((i) => i.id), [items]);
+  /** 条码流程按产品文件夹分块；保持 items 原有顺序 */
+  const groups = useMemo(() => {
+    if (!grouped) return [];
+    const map = new Map<string, CropItem[]>();
+    for (const it of items) {
+      const key = it.group || '';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(it);
+    }
+    return [...map.entries()].map(([key, list]) => ({ key, list }));
+  }, [grouped, items]);
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const ratioRef = useRef(ratio);
@@ -252,12 +267,15 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
     return () => window.removeEventListener('keydown', onKey, true);
   }, [running, onClose]);
 
-  const start = async () => {
+  /** subset = 只保存某个文件夹（条码流程按文件夹分块保存） */
+  const start = async (subset?: CropItem[]) => {
     if (startLock.current || starting || running) return;
-    if (!ids.length) return;
+    const list = subset && subset.length ? subset : itemsRef.current;
+    const listIds = list.map((it) => it.id);
+    if (!listIds.length) return;
     // 副本目录留空 = 每张存到各自原图旁边（后端兜底），不再拦着用户先选目录
     const plan: Record<number, CropRect> = {};
-    for (const it of itemsRef.current) {
+    for (const it of list) {
       plan[it.id] = rects[it.id] || initialRect(ratioStr, aspectOf(it));
     }
     const out = cropOutputSize(ctl);
@@ -268,12 +286,13 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
     try {
       // 批量覆盖原图：一次点错就是 N 个文件被重写，必须先确认
       if (save.saveMode === 'overwrite') {
-        const ok = await confirmDialog(i18n.t('kded21324', { p0: ids.length }));
+        const ok = await confirmDialog(i18n.t('kded21324', { p0: listIds.length }));
         if (!ok) return;
       }
       // 文件夹模式：按每张图自己的框裁，原地覆盖。没有图库任务，直接请求后收尾。
       if (folderMode) {
-        const folderItems = itemsRef.current.filter((it) => it.source);
+        const folderItems = list.filter((it) => it.source);
+        const label = subset?.length ? `「${subset[0].group || subset[0].source?.code || ''}」` : '';
         const r = await api.barcodeCropRects(
           folderItems.map((it) => ({
             code: it.source!.code,
@@ -285,15 +304,16 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
         const failed = r.items.filter((x) => !x.cropped);
         onToast?.(
           failed.length
-            ? `已裁剪 ${r.items.length - failed.length} 张，${failed.length} 张失败：${failed[0]?.error || ''}`
-            : `已裁剪 ${r.items.length} 张，全部完成`,
+            ? `已保存${label} ${r.items.length - failed.length} 张，${failed.length} 张失败：${failed[0]?.error || ''}`
+            : `已保存${label} ${r.items.length} 张，全部完成`,
           failed.length ? 'error' : 'info'
         );
         onDone?.();
-        onClose();
+        // 按文件夹逐个保存时保持窗口打开，方便接着处理下一个文件夹
+        if (!grouped) onClose();
         return;
       }
-      const r = await api.batchEdit(ids, 'crop', {
+      const r = await api.batchEdit(listIds, 'crop', {
         ratio: ratioStr,
         rects: plan,
         outWidth: out ? out.w : 0,
@@ -321,6 +341,21 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
   };
 
   const pct = job && job.total ? Math.round(((job.done + job.failed) / job.total) * 100) : 0;
+
+  const renderCells = (list: CropItem[], offset = 0) =>
+    list.map((it, i) => (
+      <CropCell
+        key={it.id}
+        item={it}
+        cell={cell}
+        ratio={ratioStr}
+        rect={rects[it.id] || initialRect(ratioStr, aspectOf(it))}
+        index={offset + i}
+        autoFocus={autoFocus}
+        onChange={(r) => setRects((p) => ({ ...p, [it.id]: r }))}
+        onFocus={() => void runFocus([it], ratio.w, ratio.h)}
+      />
+    ));
 
   return createPortal(
     <div className="crop-studio">
@@ -366,22 +401,32 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
 
       <div className="cs-main">
         <div className="cs-grid-wrap">
-          <div className="cs-grid">
-            {items.map((it, i) => (
-              <CropCell
-                key={it.id}
-                item={it}
-                cell={cell}
-                ratio={ratioStr}
-                rect={rects[it.id] || initialRect(ratioStr, aspectOf(it))}
-                index={i}
-                autoFocus={autoFocus}
-                onChange={(r) => setRects((p) => ({ ...p, [it.id]: r }))}
-                onFocus={() => void runFocus([it], ratio.w, ratio.h)}
-              />
-            ))}
-            {items.length === 0 && <p className="cs-empty">{i18n.t('k1e646b81')}</p>}
-          </div>
+          {groups.length ? (
+            groups.map((g, gi) => {
+              const offset = groups.slice(0, gi).reduce((n, x) => n + x.list.length, 0);
+              return (
+                <div className="cs-group" key={`${g.key}-${gi}`}>
+                  <div className="cs-group-head">
+                    <b>{g.key || '未分组'}</b>
+                    <span className="cs-hint">{g.list.length} 张</span>
+                    <button
+                      className="btn sm primary"
+                      disabled={starting || running}
+                      onClick={() => void start(g.list)}
+                    >
+                      保存此文件夹
+                    </button>
+                  </div>
+                  <div className="cs-grid">{renderCells(g.list, offset)}</div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="cs-grid">
+              {renderCells(items)}
+              {items.length === 0 && <p className="cs-empty">{i18n.t('k1e646b81')}</p>}
+            </div>
+          )}
         </div>
 
         <div className="cs-side">
@@ -411,7 +456,7 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
           )}
           {folderMode && (
             <div className="hint" style={{ margin: '10px 0', lineHeight: 1.7 }}>
-              条码流程：图片还在输出文件夹里，裁完直接覆盖原文件；比例用左侧 1:1，框可逐张拖动。
+              条码流程：按产品文件夹分块，每块可单独保存；裁完直接覆盖原文件，比例用左侧 1:1，框可逐张拖动。
             </div>
           )}
 
@@ -444,11 +489,11 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
                 {i18n.t('k095e938e')}
               </button>
             ) : (
-              <button className="btn sm primary" disabled={starting || !ids.length} onClick={start}>
+              <button className="btn sm primary" disabled={starting || !ids.length} onClick={() => void start()}>
                 {starting
                   ? i18n.t('kf6196bb1')
                   : folderMode
-                    ? `裁剪 ${ids.length} 张并覆盖`
+                    ? `保存全部 ${ids.length} 张并覆盖`
                     : save.saveMode === 'copy'
                       ? i18n.t('k36bd39f5', { p0: ids.length })
                       : i18n.t('k12f2d5c1', { p0: ids.length })}

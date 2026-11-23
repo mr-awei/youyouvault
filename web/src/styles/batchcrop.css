@@ -103,6 +103,30 @@
   align-content: flex-start;
 }
 
+/* 条码流程：按产品文件夹分块，每块可单独保存 */
+.cs-group {
+  margin-bottom: 18px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.cs-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
+}
+.cs-group-head b {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+}
+.cs-group-head .btn {
+  margin-left: auto;
+}
+
 .cs-cell {
   display: flex;
   flex-direction: column;

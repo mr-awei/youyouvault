@@ -746,6 +746,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           url: barcodeThumbUrl(r.dir, f.file, 800),
           width: f.width,
           height: f.height,
+          group: r.code,
           source: { dir: r.dir, file: f.file, code: r.code },
         });
       }
@@ -2137,11 +2138,15 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         <BatchCropStudio
           items={cropStudioItems}
           defaultRatio="1:1"
+          grouped
           onToast={onToast}
           onClose={() => setCropStudioOpen(false)}
           onDone={() => {
-            setCropStudioOpen(false);
-            void checkRatios();
+            // 按文件夹保存时裁切台会保持打开：复查比例并刷新分组列表（已裁完的文件夹会消失）
+            void checkRatios().then((items) => {
+              if ((items || []).some((it) => it.notSquare.length)) openBatchCrop(items);
+              else setCropStudioOpen(false);
+            });
           }}
         />
       )}
