@@ -168,6 +168,14 @@ async function main() {
   const { syncLanSetting } = await import('./lib/lan.js');
   await syncLanSetting(snapshot()).catch((err) => console.error('[lan] 恢复投送开关失败', err?.message || err));
 
+  // 上次登录过 OMS：用本机保存的账号在后台续一次会话。
+  // 不阻塞就绪（SIT 偶尔 10s 超时）；登录成功后 omsLoggedIn 变化会让前端自动刷新授权状态。
+  // 不 await、不抛错：登录失败时保持未登录 / 免费版，用户可手动重试。
+  void (async () => {
+    const { omsClient } = await import('./lib/oms.js');
+    await omsClient.restoreSession();
+  })().catch((err) => console.warn('[oms] 恢复登录失败', err?.message || err));
+
   // 主进程需要「设置」这类本地能力才能跟上服务端状态
   settingsBus.on('changed', (settings) => {
     channel.send({ type: 'settings', settings });

@@ -84,9 +84,15 @@ export default function TopBar({
       : i18n.t('k0357cdb4');
   // 只有 OMS 会话有效才算「登录」；token 过期会自动退回未登录 / 免费版。
   const signedIn = status?.omsLoggedIn === true;
-  // 没登录 OMS 时一律显示「未登录」——授权文件里的手机号不代表用户已登录
-  const accountName = status?.omsUsername || (status?.devPro ? '开发模式' : i18n.t('k63e85df1'));
-  const avatarText = status?.omsUsername ? status.omsUsername.slice(-2) : '优';
+  // 账号名只在会话有效时显示。上次登录过但会话已失效（退出/重启/过期）时，
+  // 服务端仍会带回保存的 omsUsername，直接显示就会出现「手机号 + 登录按钮」同时存在的怪状态，
+  // 也会泄露手机号。这里统一退回「未登录」。
+  const accountName = signedIn
+    ? status?.omsUsername || (status?.devPro ? '开发模式' : i18n.t('k63e85df1'))
+    : status?.devPro
+      ? '开发模式'
+      : i18n.t('k63e85df1');
+  const avatarText = signedIn && status?.omsUsername ? status.omsUsername.slice(-2) : '优';
 
   return (
     <header className="topbar" data-tour="topbar">
@@ -177,7 +183,13 @@ export default function TopBar({
             <div className="account-menu" role="menu">
               <div className="account-head">
                 <b>{accountName}</b>
-                <span>{signedIn ? status?.reason || editionLabel : i18n.t('kb0154047')}</span>
+                <span>
+                  {signedIn
+                    ? status?.reason || editionLabel
+                    : status?.omsUsername
+                      ? '登录已过期或未登录，点击重新登录'
+                      : i18n.t('kb0154047')}
+                </span>
               </div>
               {!signedIn && (
                 <button

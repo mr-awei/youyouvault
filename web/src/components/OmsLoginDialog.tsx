@@ -20,7 +20,9 @@ interface Props {
 
 export default function OmsLoginDialog({ onClose, onToast }: Props) {
   const { status, refresh } = useLicense();
-  const [username, setUsername] = useState(status?.omsUsername || '');
+  // 未登录时不要回填上次保存的手机号：会话可能已过期，回填会泄露号码，
+  // 也让「未登录」状态下看起来像是已经登录。登录有效时由下面的 omsStatus 回填。
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [baseUrl, setBaseUrl] = useState('https://sit.uyoyous.com');
   const [busy, setBusy] = useState(false);

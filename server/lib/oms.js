@@ -93,34 +93,45 @@ class OmsClient {
     /** @type {{username:string,password:string,baseUrl:string}|null} */
     this.account = null;
     this.accountLoaded = false;
+    /** 正在读账号文件的 Promise：license.js 在模块加载时就调用 loadAccount()，
+     *  恢复登录若在这期间进来，必须等同一次读取完成，不能看到「已加载但还没读到」的空账号。 */
+    this.accountLoading = null;
     /** @type {{token:string,expiresAt:number}|null} */
     this.session = null;
     /** @type {Promise<any>|null} */
     this.loginPromise = null;
     this.lastError = '';
+    /** 启动时的「记住登录」只尝试一次，避免每次状态查询都去打 OMS */
+    this.restored = false;
   }
 
   accountPath() {
     return ACCOUNT_FILE;
   }
 
-  async loadAccount() {
-    if (this.accountLoaded) return this.account;
-    this.accountLoaded = true;
-    try {
-      const raw = await fsp.readFile(ACCOUNT_FILE, 'utf8');
-      const obj = JSON.parse(raw);
-      if (obj?.username && obj?.password) {
-        this.account = {
-          username: String(obj.username).trim(),
-          password: String(obj.password),
-          baseUrl: normalizeBaseUrl(obj.baseUrl),
-        };
+  loadAccount() {
+    if (this.accountLoaded) return Promise.resolve(this.account);
+    if (this.accountLoading) return this.accountLoading;
+    this.accountLoading = (async () => {
+      try {
+        const raw = await fsp.readFile(ACCOUNT_FILE, 'utf8');
+        const obj = JSON.parse(raw);
+        if (obj?.username && obj?.password) {
+          this.account = {
+            username: String(obj.username).trim(),
+            password: String(obj.password),
+            baseUrl: normalizeBaseUrl(obj.baseUrl),
+          };
+        }
+      } catch (err) {
+        console.warn('[oms] 读取账号文件失败', err instanceof Error ? err.message : String(err));
       }
-    } catch {
-      /* 没配置过是正常状态 */
-    }
-    return this.account;
+      // 读完了才置位：启动恢复登录会在 await 这里等到真正的账号
+      this.accountLoaded = true;
+      this.accountLoading = null;
+      return this.account;
+    })();
+    return this.accountLoading;
   }
 
   async saveAccount({ username, password, baseUrl }) {
@@ -134,6 +145,7 @@ class OmsClient {
     const probe = new OmsClient();
     probe.account = { username: user, password: pass, baseUrl: base };
     probe.accountLoaded = true;
+    probe.accountLoading = Promise.resolve(probe.account);
     await probe.login(true);
 
     await fsp.mkdir(DATA_DIR, { recursive: true });
@@ -149,6 +161,7 @@ class OmsClient {
 
     this.account = { username: user, password: pass, baseUrl: base };
     this.accountLoaded = true;
+    this.accountLoading = null;
     this.session = probe.session;
     this.lastError = '';
     return this.status();
@@ -157,6 +170,7 @@ class OmsClient {
   async clearAccount() {
     this.account = null;
     this.accountLoaded = true;
+    this.accountLoading = null;
     this.session = null;
     this.lastError = '';
     try {
@@ -191,6 +205,29 @@ class OmsClient {
   invalidateSession(reason = 'OMS 登录已失效') {
     this.session = null;
     this.lastError = reason;
+  }
+
+  /**
+   * 启动时恢复登录：token 只存在内存里，程序一退出就没了；而账号密码本来就已经
+   * 保存在本机 data 目录。所以用保存的账号重新登录一次，就是「记住登录」。
+   *
+   * 注意与运行中 401 的区别：运行中会话失效必须立刻退回免费版、不静默重登；
+   * 只有「刚启动、内存里还没有任何会话」时才走这里。失败也只记录错误，
+   * 不清账号、不阻塞启动，用户仍可手动登录。
+   */
+  async restoreSession() {
+    if (this.restored) return this.session || null;
+    this.restored = true;
+    const account = await this.loadAccount();
+    if (!account) return null;
+    if (this.session && this.session.expiresAt > Date.now()) return this.session;
+    try {
+      return await this.login(true);
+    } catch (err) {
+      this.lastError = `自动恢复登录失败：${err instanceof Error ? err.message : String(err)}`;
+      console.warn('[oms] 自动恢复登录失败', this.lastError);
+      return null;
+    }
   }
 
   /** 登录并缓存 token；并发调用共享同一个 Promise，避免连续扫码时重复登录 */
