@@ -13,10 +13,13 @@
 import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import OSS from 'ali-oss';
 import { DATA_DIR } from '../config.js';
 
 const DEFAULT_BASE_URL = 'https://sit.uyoyous.com';
 const API_PREFIX = '/oms-test-api';
+/** 网页端「上传文件夹」固定把产品图放在这个前缀下，跟它保持一致便于后台核对 */
+const OSS_IMAGE_PREFIX = 'visualDesignProcess/images';
 /** OMS 前端写死的客户端 id，不是密钥，登录时必须带 */
 const CLIENT_ID = 'e5cd7e4891bf95d1d19206ce24a7b32e';
 const ACCOUNT_FILE = path.join(DATA_DIR, 'oms-account.json');
@@ -68,6 +71,25 @@ export function uniqueSalesSkus(rows) {
     }
   }
   return out;
+}
+
+/**
+ * OSS 对象 key：与 OMS 网页端「上传文件夹」完全一致。
+ * 形如 visualDesignProcess/images/2026_11_23/37641-Y10R0002-A03/<md5>.jpg。
+ * @param {string} dir 签名里的日期目录，原始格式 2026/11/23
+ * @param {string} sku 完整 SKU
+ * @param {string} hash 文件 MD5
+ * @param {string} ext 扩展名（可带点）
+ */
+export function buildOssImageKey(dir, sku, hash, ext) {
+  const day = String(dir || '')
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/\//g, '_');
+  const skuDir = String(sku || '').trim();
+  const suffix = String(ext || 'jpg')
+    .replace(/^\./, '')
+    .toLowerCase();
+  return [OSS_IMAGE_PREFIX, day, skuDir, `${hash}.${suffix}`].filter(Boolean).join('/');
 }
 
 /**
@@ -366,66 +388,139 @@ class OmsClient {
   }
 
   /**
-   * 直接上传一张图到 OSS（POST policy）。
-   * 返回 { key, url, originalName, ext }；不写库，写库由 saveProductGalleryFiles 完成。
+   * 取产品的后台名称。
+   * 已有「产品图库」记录时直接用记录名；第一次上传的新 SKU 还没有 designOss 记录，
+   * 退回「视觉拍摄 / 设计单」里的产品名。
    */
-  async uploadOssFile(filePath, originalName) {
+  async resolveProductName(sku) {
+    const s = String(sku || '').trim();
+    if (!s) return '';
+    const detail = await this.getProductGallery(s).catch(() => null);
+    if (detail?.displayName) return String(detail.displayName);
+    const mainSku = s.split('-')[0];
+    try {
+      return await this.findDesignProductName(mainSku);
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * 上传一张图到 OSS。
+   *
+   * 和 OMS 网站「上传文件夹」走同一条链路：拿 STS 签名 → ali-oss SDK 单次 PUT。
+   * 之前用 POST policy 手写表单，OMS 返回的 credential 是 `oss-cn-guangzhou`（OSS V4
+   * 实际要求 `cn-guangzhou`），改完 region 又对不上服务端算的 signature，
+   * 先后报 NoSuchBucket / signing region invalid / SignatureDoesNotMatch。
+   * SDK 自己处理 region 归一化与签名，最稳。
+   *
+   * key 必须与网页端一致：visualDesignProcess/images/2026_11_23/完整SKU/文件MD5.jpg。
+   * 返回 { key, url, originalName, ext }；写库由 saveProductGalleryFiles 完成。
+   * @param {string} filePath
+   * @param {string} originalName
+   * @param {string} sku 完整 SKU，网页端会把它作为 OSS 目录的一级
+   */
+  async uploadOssFile(filePath, originalName, sku) {
     const buf = await fsp.readFile(filePath);
-    // 后台签名 policy 的 content-length-range 上限是 10MB
     if (buf.length > 10 * 1024 * 1024) {
       throw new Error(`图片超过 OSS 10MB 限制：${path.basename(filePath)}`);
     }
     const sig = await this.rawRequest('/oms-admin/get_post_signature_for_oss_upload', { method: 'GET' });
-    if (!sig?.host || !sig?.policy || !sig?.signature) throw new Error('获取 OSS 上传签名失败');
+    if (!sig?.bucket || !sig?.accessKeyId || !sig?.accessKeySecret || !sig?.region || !sig?.token) {
+      throw new Error('获取 OSS 上传签名失败');
+    }
     const name = String(originalName || path.basename(filePath));
     const ext = (path.extname(name).slice(1) || 'jpg').toLowerCase();
     const hash = crypto.createHash('md5').update(buf).digest('hex');
-    const dir = String(sig.dir || '').replace(/^\/+|\/+$/g, '');
-    const key = dir ? `${dir}/${hash}.${ext}` : `${hash}.${ext}`;
-    const form = new FormData();
-    form.append('key', key);
-    form.append('policy', sig.policy);
-    form.append('x-oss-signature-version', sig.version);
-    form.append('x-oss-credential', sig.credential);
-    form.append('x-oss-date', sig.ossdate);
-    form.append('x-oss-security-token', sig.token);
-    form.append('x-oss-signature', sig.signature);
-    form.append('success_action_status', '200');
-    form.append('file', new Blob([buf]), name);
-    const res = await fetch(sig.host, { method: 'POST', body: form });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`OSS 上传失败（HTTP ${res.status}）${text.slice(0, 200)}`);
-    }
-    return {
-      key,
-      url: `https://image.uyoyous.com/youyou-prod/${key}`,
-      originalName: name,
-      ext,
-    };
+    const key = buildOssImageKey(sig.dir, sku, hash, ext);
+    const store = new OSS({
+      accessKeyId: sig.accessKeyId,
+      accessKeySecret: sig.accessKeySecret,
+      stsToken: sig.token,
+      bucket: sig.bucket,
+      region: sig.region,
+      secure: true,
+      // 每张图上传前都会重新取签名，这个回调实际不会被调用；
+      // 传一个空实现只是为了不让 ali-oss 每张图都打一条“建议设置 refreshSTSToken”的警告
+      refreshSTSToken: async () => ({
+        accessKeyId: sig.accessKeyId,
+        accessKeySecret: sig.accessKeySecret,
+        stsToken: sig.token,
+      }),
+    });
+    // 网页端用单次 PUT（不是分片上传）；图片都在 10MB 内，PUT 更少请求也更贴近后台记录
+    const result = await store.put(key, buf);
+    const url = result?.url || `https://${sig.bucket}.${sig.region}.aliyuncs.com/${key}`;
+    return { key, url, originalName: name, ext };
   }
 
-  /** 把刚上传的 OSS 文件写进「产品图库 → 摄影师拍摄图」 */
-  async saveProductGalleryFiles(sku, files) {
+  /**
+   * 把刚上传的 OSS 文件写进「产品图库 → 摄影师拍摄图」。
+   *
+   * 与网页端「上传文件夹」完全一致的两步：
+   *   1) addOssRecordBatch 登记 OSS 记录，换回 ossId；
+   *   2) POST /visual/designOss 只提交 { sku, ossIds: '逗号分隔', type: '1', displayName }。
+   *      type 1=拍摄图 2=设计图 3=需求图。
+   * 之前把整个 detail 连同 shootFiles 一起 PUT 是错的，服务端按 ossIds 处理。
+   */
+  async saveProductGalleryFiles(sku, files, displayName = '') {
+    const list = Array.isArray(files) ? files : [];
+    if (!list.length) return this.getProductGallery(sku);
+    // 新 SKU 第一次上传时后台还没有 designOss 记录，不能直接报错：
+    // 先传 OSS / 登记，再用 designOss POST 从零创建这条记录。
     const detail = await this.getProductGallery(sku);
-    if (!detail) throw new Error('OMS 产品图库没有这个 SKU 的记录');
-    const existing = Array.isArray(detail.shootFiles) ? detail.shootFiles : [];
-    const added = (Array.isArray(files) ? files : []).map((f) => ({
-      fileName: f.key,
-      originalName: `${sku}/${f.originalName}`,
-      fileSuffix: f.ext ? f.ext.toUpperCase() : '',
-      url: f.url,
-      service: 'aliyun',
-    }));
-    if (!added.length) return detail;
-    const body = { ...detail, shootFiles: [...existing, ...added] };
-    try {
-      await this.request('/oms-admin/visual/designOss', { method: 'PUT', data: body });
-    } catch {
-      // 部分环境用 POST 新增；PUT 失败后再试一次
-      await this.request('/oms-admin/visual/designOss', { method: 'POST', data: body });
+
+    const registered = await this.request('/oms-admin/resource/oss/addOssRecordBatch', {
+      method: 'POST',
+      data: list.map((f) => ({
+        fileName: f.key,
+        originalName: `${sku}/${f.originalName}`,
+        url: f.url,
+        // 网页端登记的是小写后缀与 bucket 名，照抄避免后台列表显示不一致
+        fileSuffix: f.ext || '',
+        service: 'youyou-prod',
+      })),
+    });
+    const records = Array.isArray(registered?.data) ? registered.data : [];
+    const ossIds = records.map((r) => String(r.ossId || '')).filter(Boolean);
+    if (!ossIds.length) throw new Error('登记 OSS 记录失败，没有拿到 ossId');
+
+    // 网页端会把当前该栏已有的 ossId 一起提交；这里保留原有关联，避免覆盖之前上传的图。
+    // 优先用 detail.ossIds（网页端提交的就是它），没有再退回 shootFiles。
+    const existing = String(detail?.ossIds || '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (!existing.length) {
+      for (const x of detail?.shootFiles || []) {
+        const id = String(x?.ossId || '');
+        if (id) existing.push(id);
+      }
     }
-    return await this.getProductGallery(sku);
+    const allIds = [...new Set([...existing, ...ossIds])];
+    let name = String(detail?.displayName || displayName || '').trim();
+    if (!name) name = await this.resolveProductName(sku).catch(() => '');
+    await this.request('/oms-admin/visual/designOss', {
+      method: 'POST',
+      data: {
+        sku,
+        ossIds: allIds.join(','),
+        type: '1',
+        displayName: name,
+      },
+    });
+    const saved = await this.getProductGallery(sku);
+    if (saved) return saved;
+    // 后台刚写完偶尔还查不到：返回与详情兼容的结构，避免前端把这次上传标成失败
+    return {
+      sku,
+      displayName: name,
+      ossIds: allIds.join(','),
+      shootFiles: [
+        ...existing.map((ossId) => ({ ossId })),
+        ...records.map((r) => ({ ossId: r.ossId, url: r.url })),
+      ],
+    };
   }
 
   /**

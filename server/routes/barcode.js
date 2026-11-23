@@ -723,7 +723,8 @@ export function register(app, ctx) {
         }
 
         const onDisk = await listImageFiles(dir);
-        // 用户选定顺序优先：选中的前 5 张排最前，其余按自然序跟随；没传 files 时维持旧行为。
+        // 用户选定顺序优先：每个产品最多 5 张排最前，其余按自然序跟随；没传 files 时维持旧行为。
+        // 前端已经限制 5 张，这里再截一次，避免手工调接口传入更多顺序。
         const requested = Array.isArray(it?.files)
           ? it.files.map((n) => String(n || '').trim()).filter(Boolean)
           : [];
@@ -732,6 +733,7 @@ export function register(app, ctx) {
           const seen = new Set();
           const picked = [];
           for (const name of requested) {
+            if (picked.length >= 5) break;
             if (!safeChildName(dir, name) || !onDisk.includes(name) || seen.has(name)) continue;
             seen.add(name);
             picked.push(name);

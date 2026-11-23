@@ -1,7 +1,7 @@
 {
   "name": "tuku-gallery",
   "productName": "youyoutuku",
-  "version": "1.5.8",
+  "version": "1.6.0",
   "private": true,
   "description": "通用本地图片管理工具 — pHash 去重 / 暗色图片库",
   "author": "图库",
@@ -51,6 +51,7 @@
     "@huggingface/transformers": "^3.8.1",
     "@webtoon/psd": "^0.4.0",
     "@zxing/library": "^0.23.0",
+    "ali-oss": "^6.23.0",
     "archiver": "^7.0.1",
     "archiver-utils": "^5.0.2",
     "call-bind-apply-helpers": "^1.0.2",

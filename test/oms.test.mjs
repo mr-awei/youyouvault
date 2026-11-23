@@ -4,7 +4,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeBaseUrl, uniqueSalesSkus } from '../server/lib/oms.js';
+import { buildOssImageKey, normalizeBaseUrl, uniqueSalesSkus } from '../server/lib/oms.js';
 
 test('normalizeBaseUrl：去掉尾部斜杠并保留协议', () => {
   assert.equal(normalizeBaseUrl('https://sit.uyoyous.com/'), 'https://sit.uyoyous.com');
@@ -34,4 +34,22 @@ test('uniqueSalesSkus：同一完整编码只保留一条，并保留产品名',
 test('uniqueSalesSkus：空输入返回空数组', () => {
   assert.deepEqual(uniqueSalesSkus(null), []);
   assert.deepEqual(uniqueSalesSkus([]), []);
+});
+
+test('buildOssImageKey：与网页端上传文件夹的路径完全一致', () => {
+  assert.equal(
+    buildOssImageKey('2026/11/23', '37641-Y10R0002-A03', 'ac015903f5c120200c479d6dd7e02c6e', 'jpg'),
+    'visualDesignProcess/images/2026_11_23/37641-Y10R0002-A03/ac015903f5c120200c479d6dd7e02c6e.jpg'
+  );
+});
+
+test('buildOssImageKey：后缀去点并转小写，SKU 去空白', () => {
+  assert.equal(
+    buildOssImageKey('2026/11/23', ' 37641-Y10R0002-A03 ', 'abc', '.JPG'),
+    'visualDesignProcess/images/2026_11_23/37641-Y10R0002-A03/abc.jpg'
+  );
+  assert.equal(
+    buildOssImageKey('/2026/11/23/', '', 'abc', 'png'),
+    'visualDesignProcess/images/2026_11_23/abc.png'
+  );
 });

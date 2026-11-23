@@ -102,6 +102,15 @@ export function parseBarcodeText(raw, barcodeText = '') {
   // 年份（2026）不能当成主 SKU，否则会拿日期去后台查
   const numerics = [...text.matchAll(numericRe)].map((m) => m[1]).filter((n) => !isYear(n));
 
+  /**
+   * 主 SKU 现场统一是 5 位。OCR 偶尔把 5 位读成 4 位（44124 → 4404），
+   * 所以同一段文本里若另有 5 位数字，优先信 5 位，而不是标签后面紧跟的那个。
+   */
+  const labeledSku = skuMatch?.[1] || '';
+  const fiveDigit = numerics.find((n) => n.length === 5);
+  const primarySku =
+    fiveDigit && labeledSku && labeledSku.length !== 5 ? fiveDigit : labeledSku || fiveDigit || numerics[0] || '';
+
   const candidates = [];
   const add = (v) => {
     const s = String(v || '').replace(/\s+/g, '').trim();
@@ -110,12 +119,12 @@ export function parseBarcodeText(raw, barcodeText = '') {
   // PO 条码不是产品编码，只做展示，不进候选
   if (barcode && !barcodeIsPo) add(barcode);
   add(codeMatch?.[0]);
-  add(skuMatch?.[1]);
+  add(labeledSku);
+  add(primarySku);
   for (const n of numerics.slice(0, 3)) add(n);
   add(poMatch?.[0]);
 
-  const code =
-    (barcode && !barcodeIsPo ? barcode : '') || codeMatch?.[0] || skuMatch?.[1] || numerics[0] || '';
+  const code = (barcode && !barcodeIsPo ? barcode : '') || codeMatch?.[0] || primarySku || '';
   return {
     code,
     candidates,
@@ -124,6 +133,23 @@ export function parseBarcodeText(raw, barcodeText = '') {
     /** barcode = 一维码内容；full = 完整编码；sku/number = 只有主 SKU，完整编码还需人工补 */
     codeSource: barcode && !barcodeIsPo ? 'barcode' : codeMatch?.[0] ? 'full' : code ? 'sku' : '',
   };
+}
+
+/**
+ * 多轮 OCR（常规 + 增强）结果里选最可信的一次。
+ * 一维码 / 完整编码最可靠；否则优先 5 位主 SKU（44124 比 4 位的 4404 更可信），
+ * 同长度时取后加入的增强轮。
+ * @param {Array<ReturnType<typeof parseBarcodeText>>} list
+ */
+export function pickBestOcrParsed(list) {
+  const all = Array.isArray(list) ? list.filter(Boolean) : [];
+  if (!all.length) return null;
+  const strong = all.find((p) => p.codeSource === 'barcode' || p.codeSource === 'full');
+  if (strong) return strong;
+  const withCode = all.filter((p) => p.code);
+  if (!withCode.length) return null;
+  const five = withCode.filter((p) => p.code.length === 5);
+  return five.length ? five[five.length - 1] : withCode[withCode.length - 1];
 }
 
 /**
@@ -426,9 +452,28 @@ function makeVariant(data, v) {
 }
 
 /**
+ * OCR 预处理三档：
+ *   - base：常规彩色，2200px，速度快，适合字大、对焦准的面单；
+ *   - sharp：灰度 + 自动对比 + 锐化，2800px。黄色贴纸上的主 SKU 字号很小，
+ *     常规档经常把 44124 读成 404 / 4404；这一档在实测里能稳定读回 44124。
+ *   - sharp2：3000px + 略强锐化，作为兜底；只有前两档都没拿到 5 位主 SKU 时才跑。
+ * 结果统一交给 pickBestOcrParsed 择优，避免只靠某一档的偶然结果。
+ */
+const OCR_VARIANTS = [
+  { tag: 'base', size: 2200, quality: 92, enhance: 'none' },
+  { tag: 'sharp', size: 2800, quality: 95, enhance: 'default' },
+  { tag: 'sharp2', size: 3000, quality: 95, enhance: 'sigma12', rescue: true },
+];
+
+/** 已经拿到 5 位主 SKU 时，不用再跑兜底档 */
+function hasFiveDigitCode(list) {
+  return list.some((p) => p?.code && p.code.length === 5);
+}
+
+/**
  * 读一张面单：一维码解码 + OCR 文字，两者互相补位。
  * Windows OCR 不认 EXIF 方向、小图识别率也差，所以先放大重编码；
- * 第一轮拿到编码就停，只有完全没编码时才继续换方向。
+ * 每个方向跑常规 + 增强两档（必要时再跑兜底档），拿到强结果就停。
  */
 async function readLabelPhoto(abs, lang) {
   let barcodeText = '';
@@ -442,34 +487,45 @@ async function readLabelPhoto(abs, lang) {
   const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'tuku-barcode-'));
   const base = path.join(tmpDir, 'shot');
   let bestText = '';
+  /** @type {Array<ReturnType<typeof parseBarcodeText>>} */
+  const parsedList = [];
   try {
     for (const angle of [0, 90, 180, 270]) {
-      const file = `${base}-${angle}.jpg`;
-      try {
-        await sharp(abs, { failOn: 'none' })
-          .rotate(angle)
-          .resize(2200, 2200, { fit: 'inside', withoutEnlargement: false })
-          .jpeg({ quality: 92 })
-          .toFile(file);
-      } catch {
-        continue;
+      for (const v of OCR_VARIANTS) {
+        // 兜底档只在还没拿到 5 位主 SKU 时才跑，正常面单少一次 OCR
+        if (v.rescue && hasFiveDigitCode(parsedList)) continue;
+        const file = `${base}-${angle}-${v.tag}.jpg`;
+        try {
+          let pipe = sharp(abs, { failOn: 'none' })
+            .rotate(angle)
+            .resize(v.size, v.size, { fit: 'inside', withoutEnlargement: false });
+          if (v.enhance === 'default') pipe = pipe.greyscale().normalise().sharpen();
+          else if (v.enhance === 'sigma12') pipe = pipe.greyscale().normalise().sharpen({ sigma: 1.2 });
+          await pipe.jpeg({ quality: v.quality }).toFile(file);
+        } catch {
+          continue;
+        }
+        let r;
+        try {
+          r = await ocrImage(file, { lang });
+        } catch {
+          r = { ok: false, text: '' };
+        }
+        await fsp.rm(file, { force: true });
+        if (!r.ok) continue;
+        const text = String(r.text || '');
+        if (text.length > bestText.length) bestText = text;
+        const parsed = parseBarcodeText(text, barcodeText);
+        parsedList.push(parsed);
+        // 一维码 / 完整编码不需要再比，直接返回
+        if (parsed.codeSource === 'barcode' || parsed.codeSource === 'full') return parsed;
       }
-      let r;
-      try {
-        r = await ocrImage(file, { lang });
-      } catch {
-        r = { ok: false, text: '' };
-      }
-      await fsp.rm(file, { force: true });
-      if (!r.ok) continue;
-      const text = String(r.text || '');
-      if (text.length > bestText.length) bestText = text;
-      const parsed = parseBarcodeText(text, barcodeText);
-      if (parsed.code) return parsed;
-      // 第一轮已经读到像样的文字（只是没有编码）就不必再转方向
-      if (text.trim().length > 8) break;
+      const best = pickBestOcrParsed(parsedList);
+      if (best) return best;
+      // 这一方向已经读到像样的文字（只是没有编码）就不必再转方向
+      if (bestText.trim().length > 8) break;
     }
-    return parseBarcodeText(bestText, barcodeText);
+    return pickBestOcrParsed(parsedList) || parseBarcodeText(bestText, barcodeText);
   } finally {
     await fsp.rm(tmpDir, { recursive: true, force: true });
   }

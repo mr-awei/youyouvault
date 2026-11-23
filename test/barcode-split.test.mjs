@@ -14,6 +14,7 @@ import {
   markDuplicates,
   naturalSort,
   parseBarcodeText,
+  pickBestOcrParsed,
   safeCodeName,
 } from '../server/lib/barcode-split.js';
 
@@ -73,6 +74,28 @@ test('parseBarcodeText：OCR 把主 SKU 认成 =SKIJ / ±SKIJ 时仍能取到数
 test('parseBarcodeText：只有 PO 号 / 日期时不给编码', () => {
   assert.equal(parseBarcodeText('26 年 10 28 日 P02610202464').code, '');
   assert.equal(parseBarcodeText('', 'PO2610202464').code, '');
+});
+
+test('parseBarcodeText：同一段里同时出现 4 位和 5 位时优先 5 位主 SKU', () => {
+  // 现场案例：44124 被 OCR 读成 4404，增强档能读回 44124
+  assert.equal(parseBarcodeText('主SKU：4404 44124 Ebay 套').code, '44124');
+  assert.equal(parseBarcodeText('26 年 11 21H P02610260230 44124 Ebay 套').code, '44124');
+});
+
+test('pickBestOcrParsed：常规档 4404 + 增强档 44124 时选 5 位', () => {
+  const base = parseBarcodeText('26 年 11 21H P02610260230 4404 Ebay 套');
+  const sharp = parseBarcodeText('26 年 11 21H P02610260230 44124 Ebay 套');
+  assert.equal(base.code, '4404');
+  assert.equal(pickBestOcrParsed([base, sharp]).code, '44124');
+});
+
+test('pickBestOcrParsed：一维码 / 完整编码优先于主 SKU', () => {
+  const sku = parseBarcodeText('主SKU 44124');
+  const full = parseBarcodeText('主SKU 44124\n45661-Y01Y0001-QD08');
+  const bc = parseBarcodeText('主SKU 44124', '45661-Y01Y0001-QD08');
+  assert.equal(pickBestOcrParsed([sku, full]).code, '45661-Y01Y0001-QD08');
+  assert.equal(pickBestOcrParsed([sku, bc]).codeSource, 'barcode');
+  assert.equal(pickBestOcrParsed([]), null);
 });
 
 test('naturalSort：数字按大小而不是字典序', () => {

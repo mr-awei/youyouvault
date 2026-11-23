@@ -92,7 +92,21 @@ export function register(app, ctx) {
       const sku = String(req.body?.sku || '').trim();
       if (!sku) return res.status(400).json({ error: '请填写完整 SKU' });
       const detail = await omsClient.getProductGallery(sku);
-      if (!detail) return res.status(404).json({ error: 'OMS 产品图库没有这个 SKU 的记录' });
+      if (!detail) {
+        // 新 SKU 第一次上传前还没有图库记录：只要 OMS 里能查到产品名，就按 0 张返回，
+        // 让前端可以继续走上传（上传时再创建记录）。
+        const name = await omsClient.resolveProductName(sku).catch(() => '');
+        if (!name) return res.status(404).json({ error: 'OMS 产品图库没有这个 SKU 的记录' });
+        return res.json({
+          ok: true,
+          sku,
+          displayName: name,
+          platform: '',
+          type: '1',
+          shootCount: 0,
+          totalCount: 0,
+        });
+      }
       const ids = String(detail.ossIds || '')
         .split(',')
         .filter(Boolean);
@@ -123,13 +137,16 @@ export function register(app, ctx) {
       if (!expectedName) return res.status(400).json({ error: '请填写记录名称后再核对' });
 
       const detail = await omsClient.getProductGallery(sku);
-      if (!detail) return res.status(404).json({ error: 'OMS 产品图库没有这个 SKU 的记录' });
-      if (normalizeName(detail.displayName) !== normalizeName(expectedName)) {
+      // 新 SKU 还没有「产品图库」记录时，用视觉拍摄 / 设计单里的产品名核对。
+      // 两边都拿不到名字才放行，首次上传会由 saveProductGalleryFiles 创建记录。
+      const omsName =
+        String(detail?.displayName || '').trim() || (await omsClient.resolveProductName(sku).catch(() => ''));
+      if (omsName && normalizeName(omsName) !== normalizeName(expectedName)) {
         return res.status(409).json({
-          error: `后台名称「${detail.displayName || '—'}」与记录名称「${expectedName}」不一致，已停止上传，请先核对`,
+          error: `后台名称「${omsName || '—'}」与记录名称「${expectedName}」不一致，已停止上传，请先核对`,
           code: 'name_mismatch',
           sku,
-          displayName: detail.displayName || '',
+          displayName: omsName,
           expectedName,
         });
       }
@@ -139,7 +156,7 @@ export function register(app, ctx) {
 
       // 后台已有同名原图就跳过，避免重复点「上传文件夹」时把同一批图再传一遍
       const existingNames = new Set(
-        (Array.isArray(detail.shootFiles) ? detail.shootFiles : [])
+        (Array.isArray(detail?.shootFiles) ? detail.shootFiles : [])
           .map((f) => String(f?.originalName || '').toLowerCase())
           .filter(Boolean)
       );
@@ -151,12 +168,12 @@ export function register(app, ctx) {
         return res.json({
           ok: true,
           sku,
-          displayName: detail.displayName || '',
+          displayName: detail?.displayName || omsName || expectedName,
           uploaded: 0,
           skipped,
           failed: [],
           total: files.length,
-          shootCount: Array.isArray(detail.shootFiles) ? detail.shootFiles.length : 0,
+          shootCount: Array.isArray(detail?.shootFiles) ? detail.shootFiles.length : 0,
         });
       }
 
@@ -164,7 +181,7 @@ export function register(app, ctx) {
       const failed = [];
       for (const f of pending) {
         try {
-          uploaded.push(await omsClient.uploadOssFile(f.abs, path.basename(f.rel)));
+          uploaded.push(await omsClient.uploadOssFile(f.abs, path.basename(f.rel), sku));
         } catch (err) {
           failed.push({
             file: f.rel,
@@ -177,7 +194,7 @@ export function register(app, ctx) {
       }
       let saved;
       try {
-        saved = await omsClient.saveProductGalleryFiles(sku, uploaded);
+        saved = await omsClient.saveProductGalleryFiles(sku, uploaded, expectedName);
       } catch (err) {
         return res.status(502).json({
           error: `图片已传到 OSS，但写回产品图库失败：${err instanceof Error ? err.message : String(err)}`,
@@ -188,7 +205,7 @@ export function register(app, ctx) {
       res.json({
         ok: true,
         sku,
-        displayName: saved?.displayName || detail.displayName || '',
+        displayName: saved?.displayName || detail?.displayName || expectedName,
         uploaded: uploaded.length,
         skipped,
         failed,

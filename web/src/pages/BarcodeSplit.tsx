@@ -127,7 +127,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [scanning, setScanning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [applyMode, setApplyMode] = useState<
-    'copy' | 'import' | 'upload' | 'ratio' | 'crop' | 'number' | 'report' | null
+    'copy' | 'import' | 'upload' | 'manual-upload' | 'ratio' | 'crop' | 'number' | 'report' | null
   >(null);
   const applying = applyMode !== null;
   const [cleanStale, setCleanStale] = useState(true);
@@ -177,9 +177,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 手动分组：当前勾选的图片（相对源目录） */
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [moveTarget, setMoveTarget] = useState('ungrouped');
-  /** 直接生成报表：用户选一个「包含若干产品文件夹」的目录 */
+  /** 直接生成报表 / 上传：用户选一个「包含若干产品文件夹」的目录 */
   const [manualDir, setManualDir] = useState('');
   const [manualFolders, setManualFolders] = useState<{ name: string; files: number }[]>([]);
+  /** 手动目录里各 SKU 的 OMS 产品名（生成 Excel / 上传核对用） */
+  const [manualNames, setManualNames] = useState<Record<string, string>>({});
   /** 第 5 步：复用图库里的批量裁切台，直接裁输出文件夹里还没入库的 eBay 图 */
   const [cropStudioOpen, setCropStudioOpen] = useState(false);
   const [cropStudioItems, setCropStudioItems] = useState<CropItem[]>([]);
@@ -286,8 +288,38 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setSelectedFiles([]);
   };
 
-  /** 直接生成报表：选一个已经整理好的日期文件夹（里面是若干产品文件夹） */
-  const pickManualReportDir = async () => {
+  /** 取手动目录里各 SKU 的 OMS 产品名；查不到就留空，不阻塞 Excel/上传 */
+  const fetchManualNames = async (folders: { name: string }[]) => {
+    const pairs = await Promise.all(
+      folders.map(async (f) => {
+        try {
+          const r = await api.omsProductLookup(f.name);
+          return [f.name, r.displayName || ''] as const;
+        } catch {
+          return [f.name, ''] as const;
+        }
+      })
+    );
+    return Object.fromEntries(pairs.filter(([, n]) => n)) as Record<string, string>;
+  };
+
+  const manualFolderPath = (name: string) =>
+    `${manualDir.replace(/[\\/]+$/, '')}\\${name}`;
+
+  /** 路径的父目录 / 末级目录名：现成文件夹要当「输出根目录 + 日期文件夹」传给后端入库 */
+  const pathParent = (p: string) => {
+    const s = p.replace(/[\\/]+$/, '');
+    const i = Math.max(s.lastIndexOf('\\'), s.lastIndexOf('/'));
+    return i > 0 ? s.slice(0, i) : s;
+  };
+  const pathBase = (p: string) => {
+    const s = p.replace(/[\\/]+$/, '');
+    const i = Math.max(s.lastIndexOf('\\'), s.lastIndexOf('/'));
+    return i >= 0 ? s.slice(i + 1) : s;
+  };
+
+  /** 选一个已经整理好的父文件夹（里面是若干 SKU 子文件夹），报表/上传共用 */
+  const pickManualReportDir = async (target: StepKey = 'report') => {
     const dir = await pickFolder();
     if (!dir) return;
     try {
@@ -298,8 +330,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       }
       setManualDir(res.dir);
       setManualFolders(res.folders);
-      setStepOverride('report');
-      onToast(`已载入 ${res.folders.length} 个产品文件夹，可直接生成报表`, 'info');
+      setManualNames({});
+      setStepOverride(target);
+      onToast(`已载入 ${res.folders.length} 个产品文件夹`, 'info');
+      // 产品名只用于 Excel/核对，后台慢慢补，失败也不影响主流程
+      void fetchManualNames(res.folders)
+        .then(setManualNames)
+        .catch(() => {});
     } catch (err) {
       onToast((err as Error).message, 'error');
     }
@@ -486,6 +523,69 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
+  /** 未扫描时：直接把「父文件夹 → 若干 SKU 子文件夹」上传到 OMS */
+  const runManualUpload = async () => {
+    if (!manualDir || !manualFolders.length) {
+      onToast('请先选择一个包含若干 SKU 子文件夹的父文件夹', 'error');
+      return;
+    }
+    setApplyMode('manual-upload');
+    setUploads({});
+    setUploadProgress({ done: 0, total: manualFolders.length });
+    let done = 0;
+    let uploadedTotal = 0;
+    let failed = 0;
+    for (const f of manualFolders) {
+      const folder = manualFolderPath(f.name);
+      setUploads((prev) => ({
+        ...prev,
+        [folder]: { state: 'uploading', uploaded: 0, skipped: 0, shootCount: 0, message: '正在上传…' },
+      }));
+      try {
+        const res = await api.omsProductUpload({ sku: f.name, dir: folder, expectedName: '' });
+        uploadedTotal += res.uploaded;
+        if (res.displayName) {
+          setManualNames((prev) => (prev[f.name] ? prev : { ...prev, [f.name]: res.displayName }));
+        }
+        setUploads((prev) => ({
+          ...prev,
+          [folder]: {
+            state: res.uploaded > 0 ? 'uploaded' : 'skipped',
+            uploaded: res.uploaded,
+            skipped: res.skipped,
+            shootCount: res.shootCount,
+            message:
+              res.uploaded > 0
+                ? `已上传 ${res.uploaded} 张到 OMS${res.skipped ? `，跳过 ${res.skipped} 张已存在` : ''}`
+                : `后台已有这 ${res.skipped} 张，未重复上传`,
+          },
+        }));
+      } catch (err) {
+        failed += 1;
+        const e = err as Error & { code?: string };
+        setUploads((prev) => ({
+          ...prev,
+          [folder]: {
+            state: e.code === 'name_mismatch' ? 'mismatch' : 'error',
+            uploaded: 0,
+            skipped: 0,
+            shootCount: 0,
+            message: e.message,
+          },
+        }));
+      } finally {
+        done += 1;
+        setUploadProgress({ done, total: manualFolders.length });
+      }
+    }
+    setUploadedOk(failed === 0);
+    onToast(
+      failed ? `已上传 ${uploadedTotal} 张；${failed} 个 SKU 上传失败，详情见列表` : `已上传 ${uploadedTotal} 张到 OMS`,
+      failed ? 'error' : 'info'
+    );
+    setApplyMode(null);
+  };
+
   /**
    * 保存后自动核对 OMS 名称并上传：名称一致才传，不一致写红色状态并停止该 SKU。
    * 不弹二次确认；用户点主按钮「保存 / 入库 / 上传」即视为同意这一步。
@@ -496,6 +596,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setUploadProgress({ done: 0, total: pending.length });
     let uploadedTotal = 0;
     let mismatch = 0;
+    let failed = 0;
     let done = 0;
     for (const r of result.results) {
       if (!r.folder) continue;
@@ -542,6 +643,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         const e = err as Error & { code?: string };
         const isMismatch = e.code === 'name_mismatch';
         if (isMismatch) mismatch += 1;
+        else failed += 1;
         setUploads((prev) => ({
           ...prev,
           [r.folder]: {
@@ -557,7 +659,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         setUploadProgress({ done, total: pending.length });
       }
     }
-    return { uploadedTotal, mismatch };
+    return { uploadedTotal, mismatch, failed };
   };
 
   /** 页面必须处理完的报错/警告；为空才允许点保存/入库/上传 */
@@ -596,15 +698,22 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         })
       : [];
 
-  /** 已复制出来的编码文件夹：后续检查 / 编号 / 入库 / 上传都围绕它们 */
-  const outputFolders = (applied?.results || [])
-    .filter((r) => r.folder)
-    .map((r) => ({
-      sourceIndex: r.sourceIndex,
-      code: r.code,
-      folder: r.folder,
-      subfolder: r.subfolder || '',
-    }));
+  /** 已复制出来的编码文件夹：后续检查 / 编号 / 入库 / 上传都围绕它们；没扫描时用现成文件夹顶上 */
+  const outputFolders = applied
+    ? applied.results
+        .filter((r) => r.folder)
+        .map((r) => ({
+          sourceIndex: r.sourceIndex,
+          code: r.code,
+          folder: r.folder,
+          subfolder: r.subfolder || '',
+        }))
+    : manualFolders.map((f, i) => ({
+        sourceIndex: i,
+        code: f.name,
+        folder: manualFolderPath(f.name),
+        subfolder: '',
+      }));
 
   /** 第 4 步：创建本地文件夹（只复制，不移动原图） */
   const runSave = async () => {
@@ -680,20 +789,22 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
-  /** 文件夹变化后重置勾选：默认 eBay，用户手动改过的保留 */
+  /** 文件夹变化后重置勾选：默认 eBay，用户手动改过的保留；现成文件夹没有平台信息，全部勾上 */
   useEffect(() => {
     setRatioInclude((prev) => {
       const next: Record<string, boolean> = {};
       for (const f of outputFolders) {
-        next[f.folder] = prev[f.folder] ?? (platformOf(f.code) === 'eBay');
+        next[f.folder] = prev[f.folder] ?? (applied ? platformOf(f.code) === 'eBay' : true);
       }
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applied]);
+  }, [applied, manualDir]);
 
-  /** 第 5 步：检查 1:1。默认只查 eBay 组，用户可勾选其它文件夹一起查 */
-  const ebayFolders = outputFolders.filter((f) => ratioInclude[f.folder] ?? platformOf(f.code) === 'eBay');
+  /** 第 5 步：检查 1:1。默认只查 eBay 组，用户可勾选其它文件夹一起查；现成文件夹全部参与 */
+  const ebayFolders = applied
+    ? outputFolders.filter((f) => ratioInclude[f.folder] ?? platformOf(f.code) === 'eBay')
+    : outputFolders;
   const checkRatios = async () => {
     const items = ebayFolders.map((f) => ({ code: f.code, dir: f.folder }));
     if (!items.length) {
@@ -722,14 +833,16 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           .map((it) => `${it.code}（${it.notSquare.length} 张）`)
           .join('、');
         onToast(
-          `有 ${bad} 张 eBay 图不是 1:1，必须是正方形：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。已打开批量裁切台，可逐张调整；也可点「自动居中裁剪」一键处理。`,
+          `有 ${bad} 张${applied ? ' eBay' : ''}图不是 1:1，必须是正方形：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。已打开批量裁切台，可逐张调整；也可点「自动居中裁剪」一键处理。`,
           'error'
         );
         // 检查出不合格图片就自动打开裁切台；已经开着时不要重复弹
         if (!cropStudioOpen) openBatchCrop(items);
       } else {
         onToast(
-          `检查完成：所选 ${items.length} 个文件夹里都是 1:1；未勾选的文件夹不参与检查，可展开「参与检查的文件夹」勾选。`
+          applied
+            ? `检查完成：所选 ${items.length} 个文件夹里都是 1:1；未勾选的文件夹不参与检查，可展开「参与检查的文件夹」勾选。`
+            : `检查完成：所选 ${items.length} 个文件夹里都是 1:1。`
         );
       }
     } catch (err) {
@@ -809,6 +922,31 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
+  /**
+   * 读取每个产品文件夹的图片并初始化前五张。
+   * 编号步骤的产品图行和「选择前五张」面板共用这份数据与选择顺序。
+   */
+  const ensureNumberFiles = async () => {
+    if (!outputFolders.length) return;
+    const pairs = await Promise.all(
+      outputFolders.map(async (f) => {
+        const r = await api.barcodeFolderImages(f.folder);
+        return [f.folder, r.files] as const;
+      })
+    );
+    setNumberFiles(Object.fromEntries(pairs));
+    setNumberPicks((prev) => {
+      const next = { ...prev };
+      for (const [dir, files] of pairs) {
+        // 编号后文件名会变成 1.jpg…，旧选择已经失效；只保留仍存在的文件名，
+        // 否则重开面板会显示 0 张已选、而顺序又提交不上去。
+        const valid = (next[dir] || []).filter((n) => files.includes(n)).slice(0, 5);
+        next[dir] = valid.length ? valid : files.slice(0, 5);
+      }
+      return next;
+    });
+  };
+
   /** 第 6 步：图片编号，编号直接作为最终文件名 */
   const openNumberPicker = async () => {
     if (!outputFolders.length) {
@@ -817,18 +955,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
     setApplyMode('number');
     try {
-      const pairs = await Promise.all(
-        outputFolders.map(async (f) => {
-          const r = await api.barcodeFolderImages(f.folder);
-          return [f.folder, r.files] as const;
-        })
-      );
-      setNumberFiles(Object.fromEntries(pairs));
-      setNumberPicks((prev) => {
-        const next = { ...prev };
-        for (const [dir, files] of pairs) if (!next[dir]?.length) next[dir] = files.slice(0, 5);
-        return next;
-      });
+      await ensureNumberFiles();
       setPickerOpen(true);
     } catch (err) {
       onToast((err as Error).message, 'error');
@@ -870,6 +997,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setNumbered(res.results);
       setPickerOpen(false);
       setNumberFiles({});
+      // 编号已经把文件改成 1.jpg…，旧文件名不再存在，留着只会让下次选择错位
+      setNumberPicks({});
       setImported(null);
       setImportSkipped(false);
       setUploadSkipped(false);
@@ -890,12 +1019,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
-  /** 第 7 步：把已编号的文件夹登记进图库 */
+  /** 第 7 步：把已编号的文件夹登记进图库（扫描建的文件夹、现成文件夹都支持） */
   const runImport = async () => {
-    if (!scan) return;
+    if (!scan && !manualDir) return;
     setImportSkipped(false);
     if (!outputFolders.length) {
-      onToast('还没有创建文件夹', 'error');
+      onToast('还没有可入库的文件夹', 'error');
       return;
     }
     if (!numbered) {
@@ -909,21 +1038,26 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         code,
         folder: f.folder,
         subfolder: f.subfolder,
-        productName: edit?.productName || '',
+        productName: edit?.productName || manualNames[f.code] || '',
         mainSku: edit?.mainSku || code.match(/^(\d{4,6})/)?.[1] || '',
       };
     });
+    // 现成文件夹没有「输出根目录/日期」这两层：把它的父目录当根、它本身当日期文件夹，
+    // 后端只允许入库这两层下面的文件夹，传别的会被拒。
+    const importRoot = scan ? rootDir.trim() : pathParent(manualDir);
+    const importDateFolder = scan ? dateFolder.trim() || date : pathBase(manualDir);
     setApplyMode('import');
     try {
       const result = await api.barcodeImport({
-        root: rootDir.trim(),
+        root: importRoot,
         date,
-        dateFolder: dateFolder.trim() || date,
+        dateFolder: importDateFolder,
         parentFolderId: folderId,
         groups,
       });
       setImported(result);
-      setStepOverride(null);
+      // 现成文件夹模式没有「构图」这条自动路径，清掉 override 会被拉回构图；停在本步点「下一步」
+      if (scan) setStepOverride(null);
       setUploadedOk(false);
       setReported(false);
       onLibraryChanged();
@@ -945,7 +1079,15 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   /** 第 8 步：核对 OMS 名称并上传（本轮不测，保留完整实现） */
   const runUpload = async () => {
-    if (!scan) return;
+    // 没扫描时只面对现成文件夹：直接按 SKU 文件夹名上传，没有产品名可比对
+    if (!scan) {
+      if (!manualDir || !manualFolders.length) {
+        onToast('还没有可上传的文件夹', 'error');
+        return;
+      }
+      await runManualUpload();
+      return;
+    }
     setUploadSkipped(false);
     if (flowIssues.length) {
       onToast('页面还有报错/警告，先处理完再继续', 'error');
@@ -962,13 +1104,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setApplyMode('upload');
     try {
       const up = await uploadAppliedGroups(applied);
-      setUploadedOk(up.mismatch === 0);
-      onToast(
-        up.mismatch
-          ? `上传 ${up.uploadedTotal} 张；有 ${up.mismatch} 个 SKU 名称不一致，已停止等待核对`
-          : `已上传 ${up.uploadedTotal} 张到 OMS`,
-        up.mismatch ? 'error' : 'info'
-      );
+      setUploadedOk(up.mismatch === 0 && up.failed === 0);
+      const summary = [`已上传 ${up.uploadedTotal} 张到 OMS`];
+      if (up.mismatch) summary.push(`${up.mismatch} 个 SKU 名称不一致`);
+      if (up.failed) summary.push(`${up.failed} 个 SKU 上传失败，详情见列表`);
+      onToast(summary.join('；'), up.mismatch || up.failed ? 'error' : 'info');
     } catch (err) {
       onToast((err as Error).message, 'error');
     } finally {
@@ -1009,7 +1149,24 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
     setApplyMode('report');
     try {
-      const blob = await api.omsProductReport({ date: shootDate, rows: reportRows });
+      let rows = reportRows;
+      // 手动选父文件夹时，报表里的品名来自 OMS；缺的现场补一次
+      if (!scan && manualDir && manualFolders.length) {
+        const missing = manualFolders.filter((f) => !manualNames[f.name]);
+        let names = manualNames;
+        if (missing.length) {
+          const extra = await fetchManualNames(missing);
+          names = { ...manualNames, ...extra };
+          setManualNames(names);
+        }
+        rows = manualFolders.map((f) => ({
+          sku: f.name,
+          name: names[f.name] || '',
+          platform: platformOf(f.name),
+          category: '产品/视频拍摄',
+        }));
+      }
+      const blob = await api.omsProductReport({ date: shootDate, rows });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1059,7 +1216,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const manualReportRows = manualDir
     ? manualFolders.map((f) => ({
         sku: f.name,
-        name: '',
+        name: manualNames[f.name] || '',
         platform: platformOf(f.name),
         category: '产品/视频拍摄',
       }))
@@ -1095,9 +1252,52 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     upload: uploadedOk || uploadSkipped,
     report: reported,
   };
-  const autoCurrentKey: StepKey = STEP_DEFS.find((s) => !stepDone[s.key])?.key ?? 'report';
+  // 没扫描、直接用现成文件夹时，前 4 步（识别/查询/核对/创建）本来就不用做，自动步骤从「构图」往后找，
+  // 否则一旦清掉 stepOverride 就会被拉回「识别主 SKU」看空白。
+  const SKIPPED_WHEN_MANUAL: StepKey[] = ['scan', 'resolve', 'review', 'copy'];
+  const autoCurrentKey: StepKey =
+    STEP_DEFS.find((s) => !stepDone[s.key] && (scan || !SKIPPED_WHEN_MANUAL.includes(s.key)))?.key ??
+    'report';
   const currentKey: StepKey = stepOverride ?? autoCurrentKey;
   const notSquareTotal = (ratios || []).reduce((n, it) => n + it.notSquare.length, 0);
+
+  /** 进入某一步前必须齐备的东西；返回空串表示可以进入 */
+  const canEnterStep = (key: StepKey): string => {
+    if (key === 'scan') {
+      return manualDir && !scan
+        ? '当前用的是已选文件夹，不需要识别主 SKU；要重新扫描请先清除已选文件夹'
+        : '';
+    }
+    if (key === 'resolve' || key === 'review' || key === 'copy') {
+      return scan && scan.groups.length ? '' : '请先扫描原始照片，识别出产品分组';
+    }
+    if (key === 'ratio' || key === 'number' || key === 'import') {
+      return outputFolders.length ? '' : '请先创建产品文件夹（输出目录里至少有一个 SKU 子文件夹）';
+    }
+    if (key === 'upload' || key === 'report') {
+      return outputFolders.length || (manualDir && manualFolders.length)
+        ? ''
+        : '请先选择一个包含若干 SKU 子文件夹的父文件夹，或先扫描并创建文件夹';
+    }
+    return '';
+  };
+
+  /** 步骤条跳转：材料不齐只提示，不切过去 */
+  const goStep = (key: StepKey) => {
+    const missing = canEnterStep(key);
+    if (missing) {
+      onToast(missing, 'error');
+      return;
+    }
+    setStepOverride(key);
+  };
+
+  // 进入「图片编号」步骤就把产品文件夹的图片读进来，产品图行直接显示 1..5 的数字角标
+  useEffect(() => {
+    if (currentKey !== 'number' || !outputFolders.length) return;
+    void ensureNumberFiles().catch((err) => onToast((err as Error).message, 'error'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentKey, applied]);
 
   /** 复制成可直接粘贴进 Excel 的表格：日期/时长/进度/工作成果跨行合并（无表头，整体居中） */
   const copyReportTable = async () => {
@@ -1424,7 +1624,64 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         )}
       </div>
 
-      {/* 没有扫描结果，但用户选了「已整理好的文件夹」：直接给报表和文件夹截图 */}
+      {/* 九步流程条：未扫描也显示；材料不齐时点进去只提示缺什么，不切换 */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {STEP_DEFS.map((s, i) => {
+          // 还没扫描 / 没载入文件夹时，别把「什么都不用做」的步骤显示成绿色已完成；
+          // 用现成文件夹时，前四步（识别/查询/核对/创建）本来就不走，也不打勾
+          const skipped = !scan && !!manualDir && SKIPPED_WHEN_MANUAL.includes(s.key);
+          const done = stepDone[s.key] && (!!scan || !!manualDir) && !skipped;
+          const active = s.key === currentKey;
+          const blocked = canEnterStep(s.key);
+          return (
+            <button
+              key={s.key}
+              type="button"
+              title={blocked || `跳到「${s.title}」`}
+              onClick={() => goStep(s.key)}
+              style={{
+                padding: '3px 10px',
+                borderRadius: 999,
+                fontSize: 12,
+                cursor: blocked && !active ? 'not-allowed' : 'pointer',
+                border: `1px solid ${
+                  active ? 'var(--accent, #4c8dff)' : done ? 'var(--ok, #3c9d5d)' : 'var(--line)'
+                }`,
+                color: active ? 'var(--accent, #4c8dff)' : done ? 'var(--ok, #3c9d5d)' : 'var(--muted)',
+                background: active ? 'rgba(76, 141, 255, 0.12)' : 'transparent',
+                fontWeight: active ? 600 : 400,
+                opacity: blocked && !active ? 0.6 : 1,
+              }}
+            >
+              {done ? '✓' : i + 1} {s.title}
+            </button>
+          );
+        })}
+        {stepOverride && stepOverride !== autoCurrentKey && (
+          <button
+            className="btn ghost sm"
+            onClick={() => setStepOverride(null)}
+            title={`自动步骤是「${STEP_DEFS.find((s) => s.key === autoCurrentKey)?.title || ''}」`}
+          >
+            回到当前步骤
+          </button>
+        )}
+        {STEP_DEFS.findIndex((s) => s.key === currentKey) < STEP_DEFS.length - 1 && (
+          <button
+            className="btn sm"
+            onClick={() => {
+              const i = STEP_DEFS.findIndex((s) => s.key === currentKey);
+              const next = STEP_DEFS[i + 1];
+              if (next) goStep(next.key);
+            }}
+            title="跳到下一步（材料不齐会提示）"
+          >
+            下一步 →
+          </button>
+        )}
+      </div>
+
+      {/* 没有扫描结果：第 1 步的动作直接摆在这里，别只留一个报表入口 */}
       {!scan && !scanning && !manualDir && (
         <div className="empty">
           <div className="big">
@@ -1432,21 +1689,35 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           </div>
           <h3>{i18n.t('k0d14616d')}</h3>
           <div className="hint">{i18n.t('k6fb164de')}</div>
-          <button
-            className="btn"
-            style={{ marginTop: 14 }}
-            onClick={() => void pickManualReportDir()}
-            disabled={!isDesktop}
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              justifyContent: 'center',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              marginTop: 14,
+            }}
           >
-            <IconFolder /> 已有整理好的文件夹？直接生成 Excel + 文件夹截图
-          </button>
+            <button className="btn primary" onClick={() => void runScan()} disabled={!srcDir.trim()}>
+              <IconBarcode /> 开始识别
+            </button>
+            <button className="btn" onClick={() => void pickManualReportDir()} disabled={!isDesktop}>
+              <IconFolder /> 已有整理好的文件夹？直接生成 Excel + 文件夹截图
+            </button>
+          </div>
+          <div className="hint" style={{ marginTop: 10 }}>
+            {srcDir.trim()
+              ? '识别后用条码把照片分好组，第 2~9 步点上面的步骤条进去做。'
+              : '先在上方「源目录」选好拍摄当天所有照片的文件夹，再点「开始识别」。'}
+          </div>
         </div>
       )}
 
       {!scan && manualDir && (
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-            <b>直接生成报表</b>
+            <b style={{ fontSize: 13 }}>已选文件夹</b>
             <span className="hint">
               {manualDir} · {manualFolders.length} 个产品文件夹
             </span>
@@ -1479,21 +1750,31 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               </span>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn primary" onClick={() => void runReport()} disabled={applying}>
-              {applyMode === 'report' ? '生成中…' : '生成 Excel'}
-            </button>
-            <button className="btn sm" onClick={copyReportTable}>
-              复制表格
-            </button>
-            <button className="btn sm" onClick={() => void copyFolderShot()}>
-              复制文件夹截图
-            </button>
-            <button className="btn sm" onClick={() => downloadFile(omsProductFolderShotUrl(manualDir))}>
-              下载文件夹截图
-            </button>
+          {Object.keys(uploads).length > 0 && (
+            <div style={{ display: 'grid', gap: 4 }}>
+              {Object.entries(uploads).map(([dir, u]) => (
+                <div key={dir} className="hint" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'ui-monospace, Consolas, monospace' }}>{pathBase(dir)}</span>
+                  <span
+                    style={{
+                      color:
+                        u.state === 'mismatch' || u.state === 'error'
+                          ? 'var(--danger, #d9534f)'
+                          : u.state === 'uploaded' || u.state === 'skipped'
+                            ? 'var(--ok, #3c9d5d)'
+                            : 'var(--muted)',
+                      fontWeight: u.state === 'mismatch' ? 600 : 400,
+                    }}
+                  >
+                    {u.message}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="hint" style={{ marginTop: 4 }}>
+            这几个文件夹已经够用了：底部操作条按当前步骤给操作（构图 / 编号 / 入库 / 上传 / 生成 Excel），不用重新扫描。
           </div>
-          {reported && <div className="hint" style={{ marginTop: 8 }}>已生成工作日报-{shootDate}.xlsx</div>}
         </div>
       )}
 
@@ -1577,21 +1858,29 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             </div>
           </div>
 
-          {scan.groups.map((g, i) => (
-            <GroupRow
-              key={`${g.barcodeFile}-${i}`}
-              index={i}
-              group={g}
-              dir={scan.dir}
-              edit={edits[i] || { code: g.code, skip: false }}
-              omsBaseUrl={oms?.baseUrl || ''}
-              onRetryOms={queryOms}
-              onToast={onToast}
-              selectedFiles={selectedFiles}
-              onToggleFile={toggleSelectFile}
-              onChange={(next) => setEdits((prev) => prev.map((e, j) => (j === i ? next : e)))}
-            />
-          ))}
+          {scan.groups.map((g, i) => {
+            const out = outputFolders.find((f) => f.sourceIndex === i);
+            return (
+              <GroupRow
+                key={`${g.barcodeFile}-${i}`}
+                index={i}
+                group={g}
+                dir={scan.dir}
+                edit={edits[i] || { code: g.code, skip: false }}
+                omsBaseUrl={oms?.baseUrl || ''}
+                onRetryOms={queryOms}
+                onToast={onToast}
+                selectedFiles={selectedFiles}
+                onToggleFile={toggleSelectFile}
+                onChange={(next) => setEdits((prev) => prev.map((e, j) => (j === i ? next : e)))}
+                numberMode={currentKey === 'number' && !!out}
+                numberFolder={out?.folder || ''}
+                numberFiles={out ? numberFiles[out.folder] || [] : []}
+                numberPicks={out ? numberPicks[out.folder] || [] : []}
+                onToggleNumber={out ? (name) => toggleNumberPick(out.folder, name) : undefined}
+              />
+            );
+          })}
 
           {scan.ungrouped.length > 0 && (
             <div className="card" style={{ marginBottom: 12, borderColor: 'var(--warn, #d08b2c)' }}>
@@ -1759,7 +2048,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               </div>
             </div>
           )}
+        </>
+      )}
 
+      {/* 底部操作条：扫描流程和「现成文件夹」流程共用同一个，位置和样式才一致 */}
+      {(scan || manualDir) && (
           <div
             className="card"
             style={{
@@ -1792,64 +2085,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 {flowIssues.length > 4 ? ` 等 ${flowIssues.length} 项` : ''}
               </div>
             )}
-            {/* 九步流程条：做完打勾，当前步骤高亮；点任意步骤可直接跳过去 */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-              {STEP_DEFS.map((s, i) => {
-                const done = stepDone[s.key];
-                const active = s.key === currentKey;
-                return (
-                  <button
-                    key={s.key}
-                    type="button"
-                    title={`跳到「${s.title}」`}
-                    onClick={() => setStepOverride(s.key)}
-                    style={{
-                      padding: '3px 10px',
-                      borderRadius: 999,
-                      fontSize: 12,
-                      cursor: 'pointer',
-                      border: `1px solid ${
-                        active ? 'var(--accent, #4c8dff)' : done ? 'var(--ok, #3c9d5d)' : 'var(--line)'
-                      }`,
-                      color: active
-                        ? 'var(--accent, #4c8dff)'
-                        : done
-                          ? 'var(--ok, #3c9d5d)'
-                          : 'var(--muted)',
-                      background: active ? 'rgba(76, 141, 255, 0.12)' : 'transparent',
-                      fontWeight: active ? 600 : 400,
-                    }}
-                  >
-                    {done ? '✓' : i + 1} {s.title}
-                  </button>
-                );
-              })}
-              {stepOverride && stepOverride !== autoCurrentKey && (
-                <button
-                  className="btn ghost sm"
-                  onClick={() => setStepOverride(null)}
-                  title={`自动步骤是「${STEP_DEFS.find((s) => s.key === autoCurrentKey)?.title || ''}」`}
-                >
-                  回到当前步骤
-                </button>
-              )}
-              {STEP_DEFS.findIndex((s) => s.key === currentKey) < STEP_DEFS.length - 1 && (
-                <button
-                  className="btn sm"
-                  onClick={() => {
-                    const i = STEP_DEFS.findIndex((s) => s.key === currentKey);
-                    const next = STEP_DEFS[i + 1];
-                    if (next) setStepOverride(next.key);
-                  }}
-                  title="跳到下一步（方便从任意步骤继续）"
-                >
-                  下一步 →
-                </button>
-              )}
-            </div>
-
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              {currentKey === 'scan' && (
+              {currentKey === 'scan' && !manualDir && (
                 <button className="btn primary" onClick={runScan} disabled={scanning || !srcDir.trim()}>
                   <IconBarcode /> {scanning ? '识别中…' : '开始识别'}
                 </button>
@@ -1953,7 +2190,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   <button className="btn primary" onClick={() => void runNumber()} disabled={applying}>
                     {applyMode === 'number' ? '编号中…' : numbered ? '重新编号' : '开始编号'}
                   </button>
-                  <span className="hint">每个产品自己挑前 5 张；不挑就按文件名顺序。</span>
+                  <span className="hint">直接点上方产品图按顺序编号（最多 5 张）；也可点「选择前五张」放大挑选。</span>
                 </>
               )}
 
@@ -1978,7 +2215,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {currentKey === 'upload' && (
                 <>
                   <button className="btn primary" onClick={runUpload} disabled={applying}>
-                    {applyMode === 'upload' ? '上传中…' : '上传 OMS'}
+                    {applyMode === 'upload' || applyMode === 'manual-upload' ? '上传中…' : '上传 OMS'}
                   </button>
                   <button
                     className="btn ghost"
@@ -2030,7 +2267,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               )}
             </div>
 
-            {currentKey === 'report' && manualDir && (
+            {/* 纯现成文件夹模式正文里已经列过这些文件夹，这里只给「扫描 + 现成文件夹」同时存在时看 */}
+            {currentKey === 'report' && manualDir && !!scan && (
               <div className="card" style={{ marginTop: 10, marginBottom: 10 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
                   <b style={{ fontSize: 12.5 }}>已选文件夹</b>
@@ -2110,7 +2348,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                             <button
                               key={name}
                               type="button"
-                              title={name}
+                              title={
+                                order >= 0
+                                  ? `${name}（第 ${order + 1} 张，点击取消）`
+                                  : `${name}（点击选中，按点击顺序编号）`
+                              }
+                              aria-label={order >= 0 ? `${name}，第 ${order + 1} 张` : name}
+                              aria-pressed={order >= 0}
                               onClick={() => toggleNumberPick(f.folder, name)}
                               style={{
                                 position: 'relative',
@@ -2178,7 +2422,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {currentKey === 'number' &&
                 (numbered
                   ? `已编号 ${numbered.reduce((n, r) => n + r.files.length, 0)} 张（1.jpg、2.jpg…）`
-                  : '逐个产品选前五张，按所选顺序重命名成 1.jpg…；不选则按文件名顺序。')}
+                  : '产品图行上直接按点击顺序选前五张（数字角标 1~5），再开始编号。')}
               {currentKey === 'import' &&
                 (imported
                   ? `已入库 ${imported.importedTotal} 张`
@@ -2205,7 +2449,6 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {i18n.t('k948019e4')}
             </div>
           </div>
-        </>
       )}
 
       {cropStudioOpen && (
@@ -2241,6 +2484,14 @@ interface GroupRowProps {
   /** 手动分组：当前勾选的图片（相对源目录） */
   selectedFiles: string[];
   onToggleFile: (file: string) => void;
+  /** 图片编号模式：产品图行改成按顺序选前五张（数字角标），不再是手动分组勾选 */
+  numberMode?: boolean;
+  /** 该组对应的输出文件夹（缩略图与编号面板保持一致，裁切后也能看到新图） */
+  numberFolder?: string;
+  /** 该组对应的输出文件夹里的图片（与编号面板同一份数据） */
+  numberFiles?: string[];
+  numberPicks?: string[];
+  onToggleNumber?: (name: string) => void;
 }
 
 /** 一个条码组：条码缩略图 + 可编辑编码 + 候选 + 产品缩略图 */
@@ -2255,7 +2506,14 @@ function GroupRow({
   onChange,
   selectedFiles,
   onToggleFile,
+  numberMode = false,
+  numberFolder = '',
+  numberFiles = [],
+  numberPicks = [],
+  onToggleNumber,
 }: GroupRowProps) {
+  // 编号步骤优先展示输出文件夹里的图（可能已裁切），与编号面板完全一致
+  const shownFiles = numberMode && numberFiles.length ? numberFiles : group.files;
   const [preview, setPreview] = useState(false);
   // 每次双击都换一个 v：服务端换新后，浏览器不会继续用旧的 240px 缓存
   const [previewNonce, setPreviewNonce] = useState(0);
@@ -2527,16 +2785,24 @@ function GroupRow({
             </div>
           )}
 
-          {/* 这一组的全部产品图都展示出来，不再截断 12 张；点图可勾选后手动改分组 */}
+          {/* 编号步骤：产品图行直接按点击顺序选前五张（数字角标）；其它步骤：勾选后手动改分组 */}
           <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-            {group.files.map((f) => {
-              const on = selectedFiles.includes(f);
+            {shownFiles.map((f) => {
+              const order = numberMode ? numberPicks.indexOf(f) : -1;
+              const on = numberMode ? order >= 0 : selectedFiles.includes(f);
+              const thumbDir = numberMode && numberFolder ? numberFolder : dir;
+              const title = numberMode
+                ? order >= 0
+                  ? `${f}（第 ${order + 1} 张，点击取消）`
+                  : `${f}（点击选中，按点击顺序编号；最多 5 张）`
+                : `${f}${on ? '（已选，点击取消）' : '（点击选中，再在上方选择目标组）'}`;
               return (
                 <button
                   key={f}
                   type="button"
-                  title={`${f}${on ? '（已选，点击取消）' : '（点击选中，再在上方选择目标组）'}`}
-                  onClick={() => onToggleFile(f)}
+                  title={title}
+                  aria-pressed={on}
+                  onClick={() => (numberMode ? onToggleNumber?.(f) : onToggleFile(f))}
                   style={{
                     position: 'relative',
                     width: 56,
@@ -2550,7 +2816,7 @@ function GroupRow({
                   }}
                 >
                   <img
-                    src={barcodeThumbUrl(dir, f)}
+                    src={barcodeThumbUrl(thumbDir, f)}
                     alt=""
                     loading="lazy"
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
@@ -2561,18 +2827,21 @@ function GroupRow({
                         position: 'absolute',
                         top: 2,
                         left: 2,
-                        width: 16,
-                        height: 16,
-                        borderRadius: 8,
+                        minWidth: numberMode ? 18 : 16,
+                        height: numberMode ? 18 : 16,
+                        borderRadius: 9,
+                        padding: numberMode ? '0 3px' : 0,
+                        boxSizing: 'border-box',
                         background: 'var(--accent, #4f8cff)',
                         color: '#fff',
-                        fontSize: 10,
+                        fontSize: numberMode ? 11 : 10,
                         fontWeight: 700,
+                        lineHeight: 1,
                         display: 'grid',
                         placeItems: 'center',
                       }}
                     >
-                      ✓
+                      {numberMode ? order + 1 : '✓'}
                     </span>
                   )}
                 </button>
@@ -2581,8 +2850,10 @@ function GroupRow({
           </div>
 
           <div className="hint" style={{ marginTop: 6 }}>
-            {i18n.t('k8b4a55fe', { p0: group.files.length })}
-            {group.files.length > 0 ? ` · ${group.files[0]} … ${group.files[group.files.length - 1]}` : ''}
+            {numberMode
+              ? `已选前五张 ${numberPicks.length}/5，数字角标就是最终编号`
+              : i18n.t('k8b4a55fe', { p0: group.files.length })}
+            {shownFiles.length > 0 ? ` · ${shownFiles[0]} … ${shownFiles[shownFiles.length - 1]}` : ''}
           </div>
 
           {group.rawText && (
