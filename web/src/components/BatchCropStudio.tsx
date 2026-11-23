@@ -96,7 +96,8 @@ function CropCell({
         <span className="cs-name" title={item.title}>
           {item.title}
         </span>
-        <span className="cs-size">
+        <span className="cs-size" title={item.source ? `原图 ${item.width}×${item.height}` : undefined}>
+          {item.source ? `${item.width}×${item.height} → ` : ''}
           {outW}×{outH}
         </span>
         <button
@@ -304,7 +305,10 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
         const failed = r.items.filter((x) => !x.cropped);
         onToast?.(
           failed.length
-            ? `已保存${label} ${r.items.length - failed.length} 张，${failed.length} 张失败：${failed[0]?.error || ''}`
+            ? `已保存${label} ${r.items.length - failed.length} 张；${failed.length} 张未生效（多为文件被资源管理器占用）：${failed
+                .slice(0, 3)
+                .map((x) => `${x.file}：${x.error || '未知错误'}`)
+                .join('；')}${failed.length > 3 ? ' 等' : ''}`
             : `已保存${label} ${r.items.length} 张，全部完成`,
           failed.length ? 'error' : 'info'
         );

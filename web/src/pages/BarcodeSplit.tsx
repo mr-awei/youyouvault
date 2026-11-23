@@ -183,6 +183,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 第 5 步：复用图库里的批量裁切台，直接裁输出文件夹里还没入库的 eBay 图 */
   const [cropStudioOpen, setCropStudioOpen] = useState(false);
   const [cropStudioItems, setCropStudioItems] = useState<CropItem[]>([]);
+  /** 参与 1:1 检查/裁切的文件夹；默认只选 eBay，用户可手动勾选其它平台 */
+  const [ratioInclude, setRatioInclude] = useState<Record<string, boolean>>({});
 
   // 每个摄影师用自己的 OMS 账号：进页面先读一次配置状态
   useEffect(() => {
@@ -678,8 +680,20 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }
   };
 
-  /** 第 5 步：检查 1:1。只有 eBay 组需要；只提示，不自动改图 */
-  const ebayFolders = outputFolders.filter((f) => platformOf(f.code) === 'eBay');
+  /** 文件夹变化后重置勾选：默认 eBay，用户手动改过的保留 */
+  useEffect(() => {
+    setRatioInclude((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const f of outputFolders) {
+        next[f.folder] = prev[f.folder] ?? (platformOf(f.code) === 'eBay');
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applied]);
+
+  /** 第 5 步：检查 1:1。默认只查 eBay 组，用户可勾选其它文件夹一起查 */
+  const ebayFolders = outputFolders.filter((f) => ratioInclude[f.folder] ?? platformOf(f.code) === 'eBay');
   const checkRatios = async () => {
     const items = ebayFolders.map((f) => ({ code: f.code, dir: f.folder }));
     if (!items.length) {
@@ -714,12 +728,17 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         // 检查出不合格图片就自动打开裁切台；已经开着时不要重复弹
         if (!cropStudioOpen) openBatchCrop(items);
       } else {
-        onToast('检查完成：eBay 图都是 1:1');
+        onToast(
+          `检查完成：所选 ${items.length} 个文件夹里都是 1:1；未勾选的文件夹不参与检查，可展开「参与检查的文件夹」勾选。`
+        );
       }
     } catch (err) {
       onToast((err as Error).message, 'error');
     } finally {
       setApplyMode(null);
+      // 用户可能是点了步骤条「回到构图」才停在这里的；检查完就交还给自动流程，
+      // 否则即使已经全部 1:1，currentKey 仍被 override 钉在构图，看起来像卡死。
+      setStepOverride(null);
     }
   };
 
@@ -769,17 +788,24 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       );
       setCropReport(res.items);
       const cropped = res.items.reduce((n, it) => n + it.cropped.length, 0);
-      const failed = res.items.reduce((n, it) => n + it.errors.length, 0);
+      const failedItems = res.items.flatMap((it) => it.errors);
       // 裁完再核一次，确认真的都是 1:1
-      await checkRatios();
+      const after = await checkRatios();
+      const stillBad = (after || []).reduce((n, it) => n + it.notSquare.length, 0);
       onToast(
-        failed ? `已裁剪 ${cropped} 张，${failed} 张失败（可在结果里查看）` : `已裁剪 ${cropped} 张，全部为 1:1`,
-        failed ? 'error' : 'info'
+        failedItems.length || stillBad
+          ? `已裁剪 ${cropped} 张；${failedItems.length} 张写入失败${stillBad ? `，复查仍有 ${stillBad} 张非 1:1` : ''}：${failedItems
+              .slice(0, 3)
+              .map((e) => `${e.file}：${e.error}`)
+              .join('；')}`
+          : `已裁剪 ${cropped} 张，全部为 1:1`,
+        failedItems.length || stillBad ? 'error' : 'info'
       );
     } catch (err) {
       onToast((err as Error).message, 'error');
     } finally {
       setApplyMode(null);
+      setStepOverride(null);
     }
   };
 
@@ -1807,6 +1833,19 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   回到当前步骤
                 </button>
               )}
+              {STEP_DEFS.findIndex((s) => s.key === currentKey) < STEP_DEFS.length - 1 && (
+                <button
+                  className="btn sm"
+                  onClick={() => {
+                    const i = STEP_DEFS.findIndex((s) => s.key === currentKey);
+                    const next = STEP_DEFS[i + 1];
+                    if (next) setStepOverride(next.key);
+                  }}
+                  title="跳到下一步（方便从任意步骤继续）"
+                >
+                  下一步 →
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1866,8 +1905,43 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                     </button>
                   )}
                   <span className="hint">
-                    eBay 图必须 1:1；「打开批量裁切」可逐张调整裁切框，或一键自动居中裁剪，裁完点「重新检查 1:1」
+                    勾选的文件夹按 1:1 检查；「打开批量裁切」可逐张调整裁切框，或一键自动居中裁剪，裁完点「重新检查 1:1」
                   </span>
+                  <details style={{ flexBasis: '100%' }}>
+                    <summary className="hint" style={{ cursor: 'pointer' }}>
+                      参与检查的文件夹（默认 eBay，可勾选其它平台）：{ebayFolders.length}/{outputFolders.length}
+                    </summary>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {outputFolders.map((f) => {
+                        const platform = platformOf(f.code) || '未识别';
+                        return (
+                          <label
+                            key={f.folder}
+                            className="hint"
+                            title={f.folder}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '3px 8px',
+                              border: '1px solid var(--border)',
+                              borderRadius: 999,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!ratioInclude[f.folder]}
+                              onChange={(e) =>
+                                setRatioInclude((prev) => ({ ...prev, [f.folder]: e.target.checked }))
+                              }
+                            />
+                            {f.code} · {platform}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </details>
                 </>
               )}
 
@@ -2146,6 +2220,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             void checkRatios().then((items) => {
               if ((items || []).some((it) => it.notSquare.length)) openBatchCrop(items);
               else setCropStudioOpen(false);
+              setStepOverride(null);
             });
           }}
         />

@@ -19,6 +19,26 @@ import { suggestDateFolder } from '../lib/barcode-naming.js';
 const RASTER = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * 原子替换文件：Windows 上资源管理器/预览窗格可能正占着原图，
+ * rename 会报 EBUSY/EPERM。重试几次让「部分图片裁切没生效」不再悄悄发生；
+ * 始终失败的会作为该文件的错误返回，前端会列出文件名。
+ */
+async function replaceImage(tmp, abs) {
+  let last;
+  for (let i = 0; i < 6; i++) {
+    try {
+      await fsp.rename(tmp, abs);
+      return;
+    } catch (err) {
+      last = err;
+      if (!['EBUSY', 'EPERM', 'EACCES', 'ENOTEMPTY'].includes(err?.code)) throw err;
+      await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+    }
+  }
+  throw last;
+}
+
 /** 源目录只读校验：必须绝对路径且真实存在 */
 function assertSourceDir(input) {
   const raw = String(input ?? '').trim();
@@ -602,7 +622,7 @@ export function register(app, ctx) {
               .rotate()
               .extract({ left, top, width: side, height: side })
               .toFile(tmp);
-            await fsp.rename(tmp, abs);
+            await replaceImage(tmp, abs);
             cropped.push(String(name));
           } catch (err) {
             errors.push({ file: String(name), error: err instanceof Error ? err.message : String(err) });
@@ -655,7 +675,7 @@ export function register(app, ctx) {
             .rotate()
             .extract({ left, top, width: cw, height: ch })
             .toFile(tmp);
-          await fsp.rename(tmp, abs);
+          await replaceImage(tmp, abs);
           items.push({ code, file, cropped: true, width: cw, height: ch });
         } catch (err) {
           items.push({ code, file, cropped: false, error: err instanceof Error ? err.message : String(err) });
