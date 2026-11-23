@@ -165,8 +165,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     count: number;
     samples: string[];
   } | null>(null);
-  /** 日期文件夹下一级分类：不分组 / 按平台 / 固定名字 */
-  const [subMode, setSubMode] = useState<'none' | 'platform' | 'custom'>('none');
+  /** 日期文件夹下一级分类：默认不开，用户勾选后才插入这一层 */
+  const [subEnabled, setSubEnabled] = useState(false);
+  const [subMode, setSubMode] = useState<'platform' | 'custom'>('platform');
   const [subEbay, setSubEbay] = useState('eBay');
   const [subOther, setSubOther] = useState('非eBay');
   const [subCustom, setSubCustom] = useState('产品图');
@@ -234,9 +235,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     if (dir) apply(dir);
   };
 
-  /** 日期文件夹下一级分类名：按平台分时 eBay / 非eBay，其余为空 */
+  /** 日期文件夹下一级分类名：没勾选时一律为空（日期/编码两层） */
   const subfolderFor = (code: string) => {
-    if (subMode === 'none') return '';
+    if (!subEnabled) return '';
     if (subMode === 'custom') return subCustom.trim();
     return platformOf(code) === 'eBay' ? subEbay.trim() : subOther.trim();
   };
@@ -1287,50 +1288,63 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           {!dateFolderHint?.learned && <span className="hint">可直接改成你习惯的写法，例如 20261123</span>}
         </div>
 
-        {/* 日期文件夹下一级分类：eBay / 非eBay，或固定名字 */}
+        {/* 日期文件夹下一级分类：可选，默认不勾选（日期/编码两层） */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-          <span style={{ width: 88, color: 'var(--muted)', fontSize: 12.5 }}>日期下一级</span>
-          <Select
-            style={{ width: 240 }}
-            value={subMode}
-            onChange={(v) => setSubMode(v as 'none' | 'platform' | 'custom')}
-            options={[
-              { value: 'none', label: '不分组（日期/编码）' },
-              { value: 'platform', label: '按平台分（eBay / 非eBay）' },
-              { value: 'custom', label: '固定分类名' },
-            ]}
-          />
-          {subMode === 'platform' && (
-            <>
-              <input
-                className="input"
-                style={{ width: 130 }}
-                value={subEbay}
-                onChange={(e) => setSubEbay(e.target.value)}
-                placeholder="eBay"
-              />
-              <input
-                className="input"
-                style={{ width: 130 }}
-                value={subOther}
-                onChange={(e) => setSubOther(e.target.value)}
-                placeholder="非eBay"
-              />
-            </>
-          )}
-          {subMode === 'custom' && (
+          <label
+            className="hint"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, width: 88, cursor: 'pointer' }}
+          >
             <input
-              className="input"
-              style={{ width: 180 }}
-              value={subCustom}
-              onChange={(e) => setSubCustom(e.target.value)}
-              placeholder="例如：白底图"
+              type="checkbox"
+              checked={subEnabled}
+              onChange={(e) => setSubEnabled(e.target.checked)}
             />
+            日期下一级
+          </label>
+          {subEnabled && (
+            <>
+              <Select
+                style={{ width: 240 }}
+                value={subMode}
+                onChange={(v) => setSubMode(v as 'platform' | 'custom')}
+                options={[
+                  { value: 'platform', label: '按平台分（eBay / 非eBay）' },
+                  { value: 'custom', label: '固定分类名' },
+                ]}
+              />
+              {subMode === 'platform' && (
+                <>
+                  <input
+                    className="input"
+                    style={{ width: 130 }}
+                    value={subEbay}
+                    onChange={(e) => setSubEbay(e.target.value)}
+                    placeholder="eBay"
+                  />
+                  <input
+                    className="input"
+                    style={{ width: 130 }}
+                    value={subOther}
+                    onChange={(e) => setSubOther(e.target.value)}
+                    placeholder="非eBay"
+                  />
+                </>
+              )}
+              {subMode === 'custom' && (
+                <input
+                  className="input"
+                  style={{ width: 180 }}
+                  value={subCustom}
+                  onChange={(e) => setSubCustom(e.target.value)}
+                  placeholder="例如：白底图"
+                />
+              )}
+            </>
           )}
           <span className="hint">
             将生成：{rootDir.trim() || '输出根目录'}/{dateFolder.trim() || shootDate}
-            {subMode === 'platform' ? `/${subEbay || 'eBay'} 或 /${subOther || '非eBay'}` : ''}
-            {subMode === 'custom' ? `/${subCustom || '分类'}` : ''}/编码
+            {subEnabled && subMode === 'platform' ? `/${subEbay || 'eBay'} 或 /${subOther || '非eBay'}` : ''}
+            {subEnabled && subMode === 'custom' ? `/${subCustom || '分类'}` : ''}/编码
           </span>
         </div>
 

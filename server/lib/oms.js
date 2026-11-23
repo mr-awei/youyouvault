@@ -124,7 +124,10 @@ class OmsClient {
           };
         }
       } catch (err) {
-        console.warn('[oms] 读取账号文件失败', err instanceof Error ? err.message : String(err));
+        // 没配置过账号是正常状态，别在启动日志里刷 ENOENT；其它错误才值得记
+        if (err?.code !== 'ENOENT') {
+          console.warn('[oms] 读取账号文件失败', err instanceof Error ? err.message : String(err));
+        }
       }
       // 读完了才置位：启动恢复登录会在 await 这里等到真正的账号
       this.accountLoaded = true;
