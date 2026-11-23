@@ -11,8 +11,10 @@
  * 逆向看到的是压缩后的代码；真正的调试用源码在 .obfuscate-backup 里。
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { transform } from 'esbuild';
 import JavaScriptObfuscator from 'javascript-obfuscator';
@@ -47,6 +49,8 @@ const OBFUSCATOR_OPTIONS = {
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const backupDir = path.join(BACKUP_ROOT, stamp);
+const RELEASE_DIR = path.join(ROOT, 'release-build');
+const UNPACKED_DIR = path.join(RELEASE_DIR, 'win-unpacked');
 
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -127,9 +131,63 @@ function restore() {
   console.log('[secure] 已还原源码');
 }
 
-function runBuild() {
+/**
+ * 清理 electron-builder 的中间目录 win-unpacked。
+ *
+ * Windows 上这个目录里的 app.asar 经常被别的进程短暂占用（杀毒扫描、刚装过的
+ * 应用在跑、甚至编辑器把它当文本打开）。electron-builder 自己只会 unlink 一次，
+ * 撞上就 EBUSY 整个打包失败（见用户报的 "unlink ... app.asar"）。
+ * 这里先带退避重试；实在删不掉就换一个全新的输出目录，不打断打包。
+ *
+ * @returns {Promise<string|null>} 备用输出目录（相对 ROOT），null = 用默认 release-build
+ */
+async function prepareOutput() {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      fs.rmSync(UNPACKED_DIR, { recursive: true, force: true });
+      return null;
+    } catch (err) {
+      // 不存在也算清理成功；EBUSY/EPERM 才重试
+      if (err?.code === 'ENOENT') return null;
+      if (!['EBUSY', 'EPERM', 'ENOTEMPTY', 'EACCES'].includes(err?.code)) throw err;
+      await delay(500);
+    }
+  }
+  // 注意不能只在仓库里换个目录名：占用者往往是编辑器/索引器，
+  // 它会继续盯着 E:\youyouvault 下新建的 app.asar，照样 EPERM。
+  // 放到系统临时目录（工作区之外）才真正绕开。
+  const fallback = path.join(os.tmpdir(), `tuku-build-${stamp}`);
+  console.warn(`[secure] win-unpacked 仍被占用，改用系统临时目录：${fallback}`);
+  return fallback;
+}
+
+/** 备用目录打出来的安装包 copy 回 release-build，发布脚本/文档里的路径不用改 */
+function collectArtifacts(outputDir) {
+  const from = path.isAbsolute(outputDir) ? outputDir : path.join(ROOT, outputDir);
+  if (!fs.existsSync(from)) return;
+  fs.mkdirSync(RELEASE_DIR, { recursive: true });
+  for (const name of fs.readdirSync(from)) {
+    if (!/\.(exe|blockmap|yml|yaml|dll)$/i.test(name)) continue;
+    const src = path.join(from, name);
+    // 旧文件可能同样被占用；copy 失败只警告，安装包本身已经成功产出
+    try {
+      fs.copyFileSync(src, path.join(RELEASE_DIR, name));
+      console.log(`[secure] 已归集安装包：${name}`);
+    } catch (err) {
+      console.warn(`[secure] 复制 ${name} 失败（可手动从 ${outputDir} 取）：${err.message}`);
+    }
+  }
+  try {
+    fs.rmSync(from, { recursive: true, force: true });
+  } catch {
+    /* 临时目录没删掉不影响安装包 */
+  }
+}
+
+function runBuild(outputDir) {
   return new Promise((resolve, reject) => {
     const args = ['run', 'dist', '--', '--publish', 'never'];
+    if (outputDir) args.push(`--config.directories.output=${outputDir.replace(/\\/g, '/')}`);
     // Windows 下 npm 是 .cmd，Node 18.20+ 禁止无 shell 直接 spawn（EINVAL）。
     // 优先用 node 直接执行 npm-cli.js，找不到再退回 shell。
     const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
@@ -149,14 +207,21 @@ function runBuild() {
 const skip = /^(1|true|on)$/i.test(String(process.env.TUKU_SKIP_OBFUSCATE || '')) || process.argv.includes('--debug');
 if (skip) {
   console.log('[secure] TUKU_SKIP_OBFUSCATE=1：本次为调试包，不做混淆');
-  runBuild().catch((err) => {
+  const outputDir = await prepareOutput();
+  try {
+    await runBuild(outputDir);
+    if (outputDir) collectArtifacts(outputDir);
+  } catch (err) {
     console.error(err.message);
     process.exit(1);
-  });
+  }
 } else {
   await obfuscate();
+  let outputDir;
   try {
-    await runBuild();
+    outputDir = await prepareOutput();
+    await runBuild(outputDir);
+    if (outputDir) collectArtifacts(outputDir);
   } finally {
     restore();
   }
