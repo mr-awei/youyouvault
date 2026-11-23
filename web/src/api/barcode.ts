@@ -48,6 +48,8 @@ export interface BarcodeApplyGroup {
   productName?: string;
   /** 5 位主 SKU：入库时作为标签写到该组每一张图片 */
   mainSku?: string;
+  /** 日期文件夹下的分类子目录（如 eBay / 非eBay）；空 = 直接放日期文件夹 */
+  subfolder?: string;
 }
 
 export interface BarcodeApplyResult {
@@ -55,6 +57,8 @@ export interface BarcodeApplyResult {
   sourceIndex: number;
   /** 实际使用的文件夹名（重复编码会带 -2） */
   code: string;
+  /** 实际使用的分类子目录（空 = 日期文件夹直属） */
+  subfolder?: string;
   folder: string;
   copied: number;
   skipped: number;
@@ -146,6 +150,8 @@ export const barcodeAPI = {
     dir: string;
     root: string;
     date: string;
+    /** 日期文件夹名；不传 = 用 date。支持用户自定义 / 从同级目录学习（20261123） */
+    dateFolder?: string;
     groups: BarcodeApplyGroup[];
     /** 复制完成后是否登记进当前图库 */
     importToLibrary?: boolean;
@@ -192,12 +198,32 @@ export const barcodeAPI = {
   barcodeImport: (payload: {
     root: string;
     date: string;
+    dateFolder?: string;
     parentFolderId?: number | null;
-    groups: { code: string; folder: string; productName?: string; mainSku?: string }[];
+    groups: { code: string; folder: string; productName?: string; mainSku?: string; subfolder?: string }[];
   }) =>
     request<BarcodeImportResponse>('/api/barcode/import', {
       method: 'POST',
       body: JSON.stringify(payload),
       timeoutMs: LONG_TIMEOUT_MS,
     }),
+
+  /** 学习输出根目录已有的日期命名格式（20261123 / 2026-11-23 …） */
+  barcodeDateFolder: (root: string, date: string) =>
+    request<{
+      ok: boolean;
+      date: string;
+      name: string;
+      learned: boolean;
+      key: string;
+      label: string;
+      count: number;
+      samples: string[];
+    }>(`/api/barcode/date-folder?${new URLSearchParams({ root, date })}`),
+
+  /** 列出一级子文件夹与图片数：直接选一个已整理好的文件夹生成报表 */
+  barcodeSubfolders: (dir: string) =>
+    request<{ ok: boolean; dir: string; folders: { name: string; files: number }[] }>(
+      `/api/barcode/subfolders?${new URLSearchParams({ dir })}`
+    ),
 };

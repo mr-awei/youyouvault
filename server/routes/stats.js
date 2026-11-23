@@ -616,7 +616,8 @@ export function register(app, ctx) {
     asyncRoute(async (req, res) => {
       const net = saveNetwork(req.body || {});
       const applied = await applyProxy();
-      res.json({ ...net, applied });
+      // modes 必须一起回：前端保存后会用它重设下拉框，缺了就只剩「请选择」
+      res.json({ ...net, applied, modes: PROXY_MODES });
     })
   );
 

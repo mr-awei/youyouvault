@@ -234,10 +234,12 @@ export async function collectImages(dir) {
 /**
  * 黄色送货单 = 条码照片。缩到 64px 只统计比例，避免整图解码。
  *
- * 现场面单经常是浅黄 / 过曝的黄，蓝色通道会跑到 120~150；旧阈值要求 b < 100，
+ * 现场面单经常是浅黄 / 过曝的黄，也可能因为曝光不足偏暗；旧阈值要求 b < 100，
  * 结果一张占画面 30% 的黄色面单只算出 1.3%，被判成产品图（整组多分/漏分）。
- * 这里放宽到「浅黄」：r/g 明显高于 b，且 r、g 都足够亮；比例阈值取 8%，
- * 实测产品图（白底、蓝盒、金属件）都接近 0%，不会误判。
+ * 这里用两档：
+ *   - 严格档：正常曝光下的浅黄；
+ *   - 宽松档：偏暗 / 偏灰的黄色（r、g 仍明显高于 b）；
+ * 白底产品图的黄色占比实测都 < 8%，所以阈值保持 8%，避免把暖白背景误判成面单。
  */
 export async function isBarcodeImage(abs) {
   const { data, info } = await sharp(abs, { failOn: 'none' })
@@ -254,7 +256,9 @@ export async function isBarcodeImage(abs) {
     const g = data[i + 1];
     const b = data[i + 2];
     total++;
-    if (r > 160 && g > 140 && b < 200 && r - b > 40 && g - b > 25 && r >= g - 15) yellow++;
+    const strict = r > 160 && g > 140 && b < 200 && r - b > 40 && g - b > 25 && r >= g - 15;
+    const relaxed = r > 110 && g > 95 && b < 210 && r - b > 28 && g - b > 16 && r >= g - 22;
+    if (strict || relaxed) yellow++;
   }
   return total > 0 && yellow / total >= 0.08;
 }
@@ -320,26 +324,41 @@ function quietly(fn) {
 
 /**
  * 解码面单一维码（Code128 为主）。
- * 条码只占画面一部分，直接扫整图经常找不到起点，所以先灰度 + 二值化再交给 zxing；
- * 阈值 130/150/170 覆盖偏暗 / 正常 / 偏亮；仍失败再换 90° 方向（竖拍的照片）。
+ * 条码只占画面一部分，直接扫整图经常找不到起点，所以先灰度再二值化再交给 zxing。
+ * 现场照片曝光差异很大：
+ *   - 过暗：整体亮度低，固定阈值会把条码和背景一起压黑；
+ *   - 过亮：黄色面单接近纯白，固定阈值会把条码吃掉。
+ * 因此每个方向先试「原始灰度」「对比度拉伸」，再试 7 档阈值（90~210）。
+ * 图像预处理只在每个方向做一次，后面的变体在内存里生成，避免 30 多次 sharp 调用。
  */
 export async function decodeBarcodeImage(abs) {
   for (const angle of [0, 90, 180, 270]) {
-    for (const threshold of [130, 150, 170]) {
-      let raw;
-      try {
-        raw = await sharp(abs, { failOn: 'none' })
-          .rotate(angle)
-          .greyscale()
-          .threshold(threshold)
-          .resize(1800, 1800, { fit: 'inside', withoutEnlargement: false })
-          .ensureAlpha()
-          .raw()
-          .toBuffer({ resolveWithObject: true });
-      } catch {
-        continue;
-      }
-      const source = new RGBLuminanceSource(new Uint8ClampedArray(raw.data), raw.info.width, raw.info.height);
+    let raw;
+    try {
+      raw = await sharp(abs, { failOn: 'none' })
+        .rotate(angle)
+        .greyscale()
+        .resize(1800, 1800, { fit: 'inside', withoutEnlargement: false })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    } catch {
+      continue;
+    }
+    const variants = [
+      { kind: 'normal' },
+      { kind: 'stretch' },
+      { kind: 'threshold', threshold: 130 },
+      { kind: 'threshold', threshold: 150 },
+      { kind: 'threshold', threshold: 110 },
+      { kind: 'threshold', threshold: 170 },
+      { kind: 'threshold', threshold: 90 },
+      { kind: 'threshold', threshold: 190 },
+      { kind: 'threshold', threshold: 210 },
+    ];
+    for (const v of variants) {
+      const pixels = makeVariant(raw.data, v);
+      const source = new RGBLuminanceSource(pixels, raw.info.width, raw.info.height);
       const bitmap = new BinaryBitmap(new HybridBinarizer(source));
       try {
         const result = quietly(() => new MultiFormatReader().decode(bitmap, DECODE_HINTS));
@@ -351,6 +370,59 @@ export async function decodeBarcodeImage(abs) {
     }
   }
   return null;
+}
+
+/**
+ * 生成一个解码变体。data 是 sharp 输出的 RGBA 灰度图（R=G=B）。
+ * @param {Buffer} data
+ * @param {{ kind: string, threshold?: number }} v
+ */
+function makeVariant(data, v) {
+  const out = new Uint8ClampedArray(data.length);
+  if (v.kind === 'normal') {
+    out.set(data);
+    return out;
+  }
+  if (v.kind === 'stretch') {
+    // 找 1%~99% 的亮度范围做拉伸，避免个别高光/阴影把对比度吃掉
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < data.length; i += 4) hist[data[i]]++;
+    const total = Math.floor(data.length / 4);
+    const lowCut = total * 0.01;
+    const highCut = total * 0.99;
+    let acc = 0;
+    let lo = 0;
+    let hi = 255;
+    for (let i = 0; i < 256; i++) {
+      acc += hist[i];
+      if (acc >= lowCut) {
+        lo = i;
+        break;
+      }
+    }
+    acc = 0;
+    for (let i = 0; i < 256; i++) {
+      acc += hist[i];
+      if (acc >= highCut) {
+        hi = i;
+        break;
+      }
+    }
+    const span = Math.max(1, hi - lo);
+    for (let i = 0; i < data.length; i += 4) {
+      const value = Math.max(0, Math.min(255, Math.round(((data[i] - lo) * 255) / span)));
+      out[i] = out[i + 1] = out[i + 2] = value;
+      out[i + 3] = 255;
+    }
+    return out;
+  }
+  const threshold = Number(v.threshold) || 128;
+  for (let i = 0; i < data.length; i += 4) {
+    const value = data[i] >= threshold ? 255 : 0;
+    out[i] = out[i + 1] = out[i + 2] = value;
+    out[i + 3] = 255;
+  }
+  return out;
 }
 
 /**

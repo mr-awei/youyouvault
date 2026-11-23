@@ -105,7 +105,8 @@ export default function NetworkSection({
           onClick={async () => {
             if (!net) return;
             const saved = await api.saveNetwork(net);
-            setNet(saved);
+            // 保存接口不一定带回 modes（旧服务端）；保留原有选项，避免下拉框变空
+            setNet((prev) => ({ ...saved, modes: saved.modes?.length ? saved.modes : prev?.modes }));
             onToast(saved.applied ? i18n.t('ka33117e3') : i18n.t('kcddb3839'));
           }}
         >

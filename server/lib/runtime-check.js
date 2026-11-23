@@ -29,8 +29,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { URL } from 'node:url';
 import { DATA_DIR } from '../config.js';
+
+/**
+ * 本文件是 ESM：直接写 `require(...)` 会抛 `require is not defined`。
+ * 原生模块探针又必须走 require（import 会在模块加载阶段就触发二进制链），
+ * 所以用 createRequire 造一个当前模块作用域的 require。
+ */
+const require = createRequire(import.meta.url);
 
 /** 安装器缓存目录：下载完放这里，避免每次重新下 */
 const CACHE_DIR = path.join(DATA_DIR, '.installer-cache');
@@ -71,10 +79,9 @@ const NATIVE_PROBES = [
     label: 'ONNX Runtime',
     desc: 'AI 语义搜图 / AI 超分 的推理引擎；依赖 VC++ Runtime + DirectML / CPU。',
     probe: () => {
-      const { createRequire } = require('node:module');
-      const req = createRequire(import.meta.url);
-      const ort = req('onnxruntime-node');
+      const ort = require('onnxruntime-node');
       // 成功加载 ≠ 能建会话，但能加载说明 DLL 链完整
+      // @ts-expect-error onnxruntime-node 的类型没有导出 version / env.versions；运行时才有
       return { ok: true, version: String(ort?.version || ort?.env?.versions?.onnx || 'ok') };
     },
   },

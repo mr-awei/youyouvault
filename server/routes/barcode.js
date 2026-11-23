@@ -13,7 +13,8 @@ import { db, getLibraryGeneration } from '../db.js';
 import { ensureFolderUnderParent, linkImageToFolder } from '../folders.js';
 import { ingest, setTags } from '../library.js';
 import { assertWritableDir } from '../lib/safe-path.js';
-import { naturalSort, safeCodeName, scanDir } from '../lib/barcode-split.js';
+import { naturalCompare, naturalSort, safeCodeName, scanDir } from '../lib/barcode-split.js';
+import { suggestDateFolder } from '../lib/barcode-naming.js';
 
 const RASTER = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -64,6 +65,58 @@ async function listImageFiles(dir) {
       .filter((e) => e.isFile() && RASTER.has(path.extname(e.name).toLowerCase()))
       .map((e) => e.name)
   );
+}
+
+/**
+ * 收集输出根目录附近的目录名，用来学习日期命名格式。
+ * 现场常见的两种结构：
+ *   D:\李伟\11月\20261103          （日期在根目录下一级）
+ *   D:\李伟\2026\20261103          （根目录本身是月份/年份）
+ * 所以同时看根目录名、直接子级、以及子级里的下一层；最多 600 个名字，避免大库卡住。
+ */
+async function collectNamingSamples(root) {
+  /** @type {string[]} */
+  const out = [path.basename(root)];
+  let visited = 0;
+  const walk = async (dir, depth) => {
+    if (visited > 600) return;
+    let entries;
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    let dirs = 0;
+    for (const e of entries) {
+      if (visited++ > 600) return;
+      if (e.name.startsWith('.')) continue;
+      out.push(e.name);
+      if (e.isDirectory() && depth < 1 && dirs < 40) {
+        dirs++;
+        await walk(path.join(dir, e.name), depth + 1);
+      }
+    }
+  };
+  await walk(root, 0);
+  return out;
+}
+
+/** 列出目录下的一级子文件夹及图片数（直接选择「已整理好的日期文件夹」生成报表用） */
+async function listSubfolders(dir) {
+  const entries = await fsp.readdir(dir, { withFileTypes: true });
+  const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.'));
+  const out = [];
+  for (const e of dirs) {
+    let files = 0;
+    try {
+      files = (await listImageFiles(path.join(dir, e.name))).length;
+    } catch {
+      /* 无权限/读失败按 0 张处理 */
+    }
+    out.push({ name: e.name, files });
+  }
+  out.sort((a, b) => naturalCompare(a.name, b.name));
+  return out;
 }
 
 /**
@@ -238,6 +291,40 @@ export function register(app, ctx) {
     })
   );
 
+  /* 学习输出根目录已有的日期命名格式（20261114 / 2026-11-14 …） */
+  app.get(
+    '/api/barcode/date-folder',
+    asyncRoute(async (req, res) => {
+      const date = String(req.query?.date || '').trim();
+      if (!DATE_RE.test(date)) return res.status(400).json({ error: '日期格式必须是 YYYY-MM-DD' });
+      const raw = String(req.query?.root || '').trim();
+      if (!raw) return res.status(400).json({ error: '缺少输出根目录' });
+      let root;
+      try {
+        root = assertFolder(raw, '输出根目录');
+      } catch {
+        // 目录还没建也能给默认值，不阻塞用户
+        return res.json({ ok: true, date, name: date, learned: false, key: '', label: '', count: 0, samples: [] });
+      }
+      const names = await collectNamingSamples(root);
+      res.json({ ok: true, date, ...suggestDateFolder(names, date) });
+    })
+  );
+
+  /* 列出一级子文件夹与图片数：用户选一个「已整理好的日期文件夹」直接生成报表 */
+  app.get(
+    '/api/barcode/subfolders',
+    asyncRoute(async (req, res) => {
+      let dir;
+      try {
+        dir = assertFolder(req.query?.dir, '文件夹');
+      } catch (err) {
+        return res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+      }
+      res.json({ ok: true, dir, folders: await listSubfolders(dir) });
+    })
+  );
+
   /* 按确认后的编码复制产品图 */
   app.post(
     '/api/barcode/apply',
@@ -267,12 +354,14 @@ export function register(app, ctx) {
         parentFolderId = pid;
       }
 
-      const dateDir = path.join(root, date);
+      const dateFolderName = safeCodeName(req.body?.dateFolder) || date;
+      const dateDir = path.join(root, dateFolderName);
       await fsp.mkdir(dateDir, { recursive: true });
-      // 入库层级：当前选中的文件夹 / 拍摄日期 / 编码；只建虚拟夹，不移动已复制的文件
-      const dateFolderId = importToLibrary ? ensureFolderUnderParent(parentFolderId, date) : null;
+      // 入库层级：当前选中的文件夹 / 日期文件夹 /（可选分类）/ 编码；只建虚拟夹，不移动已复制的文件
+      const dateFolderId = importToLibrary ? ensureFolderUnderParent(parentFolderId, dateFolderName) : null;
 
-      const used = new Set();
+      /** 每个分类子目录单独判重：eBay / 非eBay 下可以出现同名编码 */
+      const usedBySub = new Map();
       const results = [];
       let totalCopied = 0;
       let importedTotal = 0;
@@ -300,8 +389,16 @@ export function register(app, ctx) {
           });
           continue;
         }
+        const sub = safeCodeName(g.subfolder);
+        const subKey = sub.toLowerCase();
+        let used = usedBySub.get(subKey);
+        if (!used) {
+          used = new Set();
+          usedBySub.set(subKey, used);
+        }
         const folderName = uniqueFolderName(code, used);
-        const folder = path.join(dateDir, folderName);
+        const folderBase = sub ? path.join(dateDir, sub) : dateDir;
+        const folder = path.join(folderBase, folderName);
         await fsp.mkdir(folder, { recursive: true });
 
         let copied = 0;
@@ -340,7 +437,7 @@ export function register(app, ctx) {
         let cleaned = 0;
         const cleanErrors = [];
         if (cleanStale) {
-          const r = await moveStaleFiles(folder, destFiles, dateDir, folderName);
+          const r = await moveStaleFiles(folder, destFiles, folderBase, folderName);
           cleaned = r.moved;
           cleanErrors.push(...r.errors);
           cleanedTotal += cleaned;
@@ -352,7 +449,8 @@ export function register(app, ctx) {
         let libraryFolderId = null;
         if (importToLibrary && dateFolderId) {
           try {
-            libraryFolderId = ensureFolderUnderParent(dateFolderId, folderName);
+            const subFolderId = sub ? ensureFolderUnderParent(dateFolderId, sub) : dateFolderId;
+            libraryFolderId = ensureFolderUnderParent(subFolderId, folderName);
             const mainSku =
               cleanTag(g.mainSku) || (String(g.code || '').match(/^(\d{4,6})/)?.[1] || '');
             const tags = [
@@ -380,6 +478,7 @@ export function register(app, ctx) {
         results.push({
           sourceIndex,
           code: folderName,
+          subfolder: sub,
           folder,
           copied,
           skipped,
@@ -623,10 +722,11 @@ export function register(app, ctx) {
         parentFolderId = pid;
       }
 
-      const dateDir = path.join(root, date);
+      const dateFolderName = safeCodeName(req.body?.dateFolder) || date;
+      const dateDir = path.join(root, dateFolderName);
       await fsp.mkdir(dateDir, { recursive: true });
-      // 图库层级：当前选中的文件夹 / 拍摄日期 / 编码
-      const dateFolderId = ensureFolderUnderParent(parentFolderId, date);
+      // 图库层级：当前选中的文件夹 / 日期文件夹 /（可选分类）/ 编码
+      const dateFolderId = ensureFolderUnderParent(parentFolderId, dateFolderName);
 
       const results = [];
       let importedTotal = 0;
@@ -684,7 +784,9 @@ export function register(app, ctx) {
             importErrors.push({ file: '', error: '文件夹里没有图片' });
           } else {
             const folderName = path.basename(folder);
-            libraryFolderId = ensureFolderUnderParent(dateFolderId, folderName);
+            const sub = safeCodeName(g.subfolder);
+            const subFolderId = sub ? ensureFolderUnderParent(dateFolderId, sub) : dateFolderId;
+            libraryFolderId = ensureFolderUnderParent(subFolderId, folderName);
             const mainSku = cleanTag(g.mainSku) || (String(g.code || '').match(/^(\d{4,6})/)?.[1] || '');
             const tags = [
               ...new Set(

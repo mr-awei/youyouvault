@@ -21,6 +21,7 @@ import {
 import { IconArrowUpRight, IconBarcode, IconCopy, IconFolder, IconRefresh } from '../components/Icons';
 import { getApiToken } from '../api/core';
 import { confirmDialog } from '../components/Dialogs';
+import Select from '../components/Select';
 import i18n from '../i18n';
 import type { FolderNode } from '../types';
 
@@ -156,6 +157,27 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [omsBase, setOmsBase] = useState('https://sit.uyoyous.com');
   const [omsBusy, setOmsBusy] = useState(false);
   const [omsQuerying, setOmsQuerying] = useState(false);
+  /** 日期文件夹名：默认跟 date 一致，会从输出根目录的同级目录学习命名格式 */
+  const [dateFolder, setDateFolder] = useState('');
+  const [dateFolderHint, setDateFolderHint] = useState<{
+    learned: boolean;
+    label: string;
+    count: number;
+    samples: string[];
+  } | null>(null);
+  /** 日期文件夹下一级分类：不分组 / 按平台 / 固定名字 */
+  const [subMode, setSubMode] = useState<'none' | 'platform' | 'custom'>('none');
+  const [subEbay, setSubEbay] = useState('eBay');
+  const [subOther, setSubOther] = useState('非eBay');
+  const [subCustom, setSubCustom] = useState('产品图');
+  /** 用户手动跳到某一步；null = 自动跟随第一个未完成步骤 */
+  const [stepOverride, setStepOverride] = useState<StepKey | null>(null);
+  /** 手动分组：当前勾选的图片（相对源目录） */
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [moveTarget, setMoveTarget] = useState('ungrouped');
+  /** 直接生成报表：用户选一个「包含若干产品文件夹」的目录 */
+  const [manualDir, setManualDir] = useState('');
+  const [manualFolders, setManualFolders] = useState<{ name: string; files: number }[]>([]);
 
   // 每个摄影师用自己的 OMS 账号：进页面先读一次配置状态
   useEffect(() => {
@@ -184,9 +206,96 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     return () => clearInterval(timer);
   }, [scanning]);
 
+  // 输出根目录 / 日期变化时，学习同级目录的日期命名（20261123 vs 2026-11-23）
+  useEffect(() => {
+    if (!rootDir.trim() || !date) return;
+    const timer = setTimeout(() => {
+      api
+        .barcodeDateFolder(rootDir.trim(), date)
+        .then((r) => {
+          if (!r?.name) return;
+          setDateFolder(r.name);
+          setDateFolderHint({
+            learned: !!r.learned,
+            label: r.label || '',
+            count: r.count || 0,
+            samples: r.samples || [],
+          });
+        })
+        .catch(() => {
+          /* 学习失败不影响手填 */
+        });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [rootDir, date]);
+
   const chooseDir = async (apply: (v: string) => void) => {
     const dir = await pickFolder();
     if (dir) apply(dir);
+  };
+
+  /** 日期文件夹下一级分类名：按平台分时 eBay / 非eBay，其余为空 */
+  const subfolderFor = (code: string) => {
+    if (subMode === 'none') return '';
+    if (subMode === 'custom') return subCustom.trim();
+    return platformOf(code) === 'eBay' ? subEbay.trim() : subOther.trim();
+  };
+
+  const toggleSelectFile = (file: string) => {
+    setSelectedFiles((prev) =>
+      prev.includes(file) ? prev.filter((f) => f !== file) : [...prev, file]
+    );
+  };
+
+  /** 手动分组：把勾选的图片移到未分组 / 指定组 / 新建组，保持原有拍摄顺序 */
+  const moveSelectedFiles = (target: 'ungrouped' | 'new' | number) => {
+    if (!scan || !selectedFiles.length) return;
+    const moving = new Set(selectedFiles);
+    const order = [...scan.groups.flatMap((g) => g.files), ...scan.ungrouped];
+    const files = order.filter((f) => moving.has(f));
+    if (!files.length) return;
+    setScan((prev) => {
+      if (!prev) return prev;
+      const groups = prev.groups.map((g) => ({ ...g, files: g.files.filter((f) => !moving.has(f)) }));
+      let ungrouped = prev.ungrouped.filter((f) => !moving.has(f));
+      if (target === 'ungrouped') {
+        ungrouped = [...ungrouped, ...files];
+      } else if (target === 'new') {
+        groups.push({
+          code: '',
+          candidates: [],
+          rawText: '',
+          barcodeText: '',
+          barcodeFile: '',
+          files,
+          warnings: [{ code: 'manual', text: '手动新建的分组，请填写编码和产品名' }],
+        });
+      } else if (groups[target]) {
+        groups[target] = { ...groups[target], files: [...groups[target].files, ...files] };
+      }
+      return { ...prev, groups, ungrouped };
+    });
+    if (target === 'new') setEdits((prev) => [...prev, { code: '', skip: false }]);
+    setSelectedFiles([]);
+  };
+
+  /** 直接生成报表：选一个已经整理好的日期文件夹（里面是若干产品文件夹） */
+  const pickManualReportDir = async () => {
+    const dir = await pickFolder();
+    if (!dir) return;
+    try {
+      const res = await api.barcodeSubfolders(dir);
+      if (!res.folders.length) {
+        onToast('这个文件夹里没有子文件夹，请选择包含若干产品文件夹的目录', 'error');
+        return;
+      }
+      setManualDir(res.dir);
+      setManualFolders(res.folders);
+      setStepOverride('report');
+      onToast(`已载入 ${res.folders.length} 个产品文件夹，可直接生成报表`, 'info');
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    }
   };
 
   /** 用 5 位主 SKU 查 OMS 待拍摄完整编码，并合并进编码框 */
@@ -331,6 +440,10 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setUploadSkipped(false);
     setUploadedOk(false);
     setReported(false);
+    setStepOverride(null);
+    setSelectedFiles([]);
+    setManualDir('');
+    setManualFolders([]);
     try {
       const result = await api.barcodeScan(srcDir.trim());
       setScan(result);
@@ -343,6 +456,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         }))
       );
       setDate((prev) => prev || result.date);
+      setDateFolder((prev) => prev || result.date);
       if (!result.groups.length) onToast(i18n.t('k07190065'));
       // 已配置 OMS 时顺手换成完整编码并补产品名（只取「待拍摄」）
       if (oms?.configured) {
@@ -451,11 +565,6 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       else if (!full) flowIssues.push(`#${i + 1} 未选完整编码（当前 ${code}）`);
       if (!String(edit?.productName || '').trim()) flowIssues.push(`#${i + 1} 产品名为空`);
       if (!g.files.length) flowIssues.push(`#${i + 1} 没有产品图`);
-      for (const w of g.warnings) {
-        if (w.code === 'empty' || w.code === 'consecutive') {
-          flowIssues.push(`#${i + 1} ${w.text}`);
-        }
-      }
       if (!full && (edit?.omsState === 'empty' || edit?.omsState === 'error')) {
         flowIssues.push(`#${i + 1} OMS 没查到完整编码 / 查询失败`);
       }
@@ -475,6 +584,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             skip: !!edits[i]?.skip,
             productName: edits[i]?.productName || '',
             mainSku: edits[i]?.mainSku || code.match(/^(\d{4,6})/)?.[1] || '',
+            subfolder: subfolderFor(code),
           };
         })
       : [];
@@ -482,7 +592,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 已复制出来的编码文件夹：后续检查 / 编号 / 入库 / 上传都围绕它们 */
   const outputFolders = (applied?.results || [])
     .filter((r) => r.folder)
-    .map((r) => ({ sourceIndex: r.sourceIndex, code: r.code, folder: r.folder }));
+    .map((r) => ({
+      sourceIndex: r.sourceIndex,
+      code: r.code,
+      folder: r.folder,
+      subfolder: r.subfolder || '',
+    }));
 
   /** 第 4 步：创建本地文件夹（只复制，不移动原图） */
   const runSave = async () => {
@@ -506,11 +621,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         dir: scan.dir,
         root: rootDir.trim(),
         date,
+        dateFolder: dateFolder.trim() || date,
         groups,
         importToLibrary: false,
         cleanStale,
       });
       setApplied(result);
+      setStepOverride(null);
       // 文件夹重建后，后面的检查结果全部作废
       setRatios(null);
       setCropReport(null);
@@ -726,6 +843,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       return {
         code,
         folder: f.folder,
+        subfolder: f.subfolder,
         productName: edit?.productName || '',
         mainSku: edit?.mainSku || code.match(/^(\d{4,6})/)?.[1] || '',
       };
@@ -735,10 +853,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       const result = await api.barcodeImport({
         root: rootDir.trim(),
         date,
+        dateFolder: dateFolder.trim() || date,
         parentFolderId: folderId,
         groups,
       });
       setImported(result);
+      setStepOverride(null);
       setUploadedOk(false);
       setReported(false);
       onLibraryChanged();
@@ -794,11 +914,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   /** 文件夹截图复制成剪贴板图片，可直接粘到 Excel「工作成果」列；不支持时退回下载 */
   const copyFolderShot = async () => {
-    if (!outputDateDir) {
-      onToast('请先选择输出根目录', 'error');
+    const shotDir = manualDir || outputDateDir;
+    if (!shotDir) {
+      onToast('请先选择输出根目录，或在报表步骤选择已整理好的文件夹', 'error');
       return;
     }
-    const url = omsProductFolderShotUrl(outputDateDir);
+    const url = omsProductFolderShotUrl(shotDir);
     try {
       const token = await getApiToken();
       const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
@@ -833,6 +954,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       setReported(true);
+      setStepOverride('report');
       onToast(`已生成工作日报：工作日报-${shootDate}.xlsx`);
     } catch (err) {
       onToast((err as Error).message, 'error');
@@ -852,7 +974,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     });
   };
 
-  const reportRows = scan
+  const scanReportRows = scan
     ? scan.groups
         .map((g, i) => {
           const edit = edits[i];
@@ -868,12 +990,24 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         })
         .filter((r): r is { sku: string; name: string; platform: string; category: string } => !!r)
     : [];
+  /** 直接选一个已整理好的文件夹时，用它下面的子文件夹名当 SKU 生成报表 */
+  const manualReportRows = manualDir
+    ? manualFolders.map((f) => ({
+        sku: f.name,
+        name: '',
+        platform: platformOf(f.name),
+        category: '产品/视频拍摄',
+      }))
+    : [];
+  const reportRows = manualReportRows.length ? manualReportRows : scanReportRows;
 
   const shootDate = date || new Date().toISOString().slice(0, 10);
   const outputDateDir =
     applied?.dateDir ||
     (rootDir.trim()
-      ? `${rootDir.trim().replace(/[\\/]+$/, '')}${rootDir.includes('\\') ? '\\' : '/'}${shootDate}`
+      ? `${rootDir.trim().replace(/[\\/]+$/, '')}${rootDir.includes('\\') ? '\\' : '/'}${
+          dateFolder.trim() || shootDate
+        }`
       : '');
 
   /** 各步骤完成状态：当前步骤 = 第一个没完成的 */
@@ -896,32 +1030,18 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     upload: uploadedOk || uploadSkipped,
     report: reported,
   };
-  const currentKey: StepKey = STEP_DEFS.find((s) => !stepDone[s.key])?.key ?? 'report';
+  const autoCurrentKey: StepKey = STEP_DEFS.find((s) => !stepDone[s.key])?.key ?? 'report';
+  const currentKey: StepKey = stepOverride ?? autoCurrentKey;
   const notSquareTotal = (ratios || []).reduce((n, it) => n + it.notSquare.length, 0);
 
-  /** 复制成可直接粘贴进 Excel 的表格：日期/时长/进度/工作成果跨行合并 */
+  /** 复制成可直接粘贴进 Excel 的表格：日期/时长/进度/工作成果跨行合并（无表头，整体居中） */
   const copyReportTable = async () => {
     if (!reportRows.length) {
       onToast('没有可复制的 SKU', 'error');
       return;
     }
-    const header = [
-      '日期',
-      '今日完成工作',
-      '运营',
-      'SKU',
-      '品名',
-      '平台',
-      '类别',
-      '拍摄时长/h',
-      '包装/安装/拆卸/h',
-      '任务总工作时长/h',
-      '进度',
-      '工作成果',
-      '主管/组长/带教',
-    ];
     const mainCount = reportRows.length;
-    const aoa: string[][] = [header];
+    const aoa: string[][] = [];
     reportRows.forEach((r, i) => {
       aoa.push([
         i === 0 ? shootDate : '',
@@ -947,30 +1067,33 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
-    const rowsHtml: string[] = [
-      `<tr>${header.map((h) => `<th>${esc(h)}</th>`).join('')}</tr>`,
-    ];
+    const cell = 'text-align:center;vertical-align:middle;';
+    const rowsHtml: string[] = [];
     reportRows.forEach((r, i) => {
       let cells = '';
       if (i === 0) {
-        cells += `<td rowspan="${mainCount}">${esc(shootDate)}</td>`;
-        cells += `<td rowspan="${mainCount}">${esc(`产品拍摄*${mainCount}`)}</td>`;
+        cells += `<td rowspan="${mainCount}" style="${cell}">${esc(shootDate)}</td>`;
+        cells += `<td rowspan="${mainCount}" style="${cell}">${esc(`产品拍摄*${mainCount}`)}</td>`;
       }
-      cells += `<td></td><td>${esc(r.sku)}</td><td>${esc(r.name)}</td><td>${esc(r.platform)}</td><td>${esc(r.category)}</td>`;
+      cells += `<td style="${cell}"></td><td style="${cell}">${esc(r.sku)}</td><td style="${cell}">${esc(
+        r.name
+      )}</td><td style="${cell}">${esc(r.platform)}</td><td style="${cell}">${esc(r.category)}</td>`;
       if (i === 0) {
-        cells += `<td rowspan="${mainCount}">待填</td>`;
-        cells += `<td rowspan="${mainCount}">待填</td>`;
-        cells += `<td rowspan="${mainCount}">待填</td>`;
-        cells += `<td rowspan="${mainCount}">100%</td>`;
-        cells += `<td rowspan="${mainCount}">文件夹截图</td>`;
+        cells += `<td rowspan="${mainCount}" style="${cell}">待填</td>`;
+        cells += `<td rowspan="${mainCount}" style="${cell}">待填</td>`;
+        cells += `<td rowspan="${mainCount}" style="${cell}">待填</td>`;
+        cells += `<td rowspan="${mainCount}" style="${cell}">100%</td>`;
+        cells += `<td rowspan="${mainCount}" style="${cell}">文件夹截图</td>`;
       }
-      cells += '<td></td>';
+      cells += `<td style="${cell}"></td>`;
       rowsHtml.push(`<tr>${cells}</tr>`);
     });
     rowsHtml.push(
-      '<tr><td></td><td>图片上传</td><td></td><td></td><td></td><td></td><td>其它</td><td></td><td></td><td>待填</td><td>100%</td><td>文件夹截图</td><td></td></tr>'
+      `<tr><td style="${cell}"></td><td style="${cell}">图片上传</td><td style="${cell}"></td><td style="${cell}"></td><td style="${cell}"></td><td style="${cell}"></td><td style="${cell}">其它</td><td style="${cell}"></td><td style="${cell}"></td><td style="${cell}">待填</td><td style="${cell}">100%</td><td style="${cell}">文件夹截图</td><td style="${cell}"></td></tr>`
     );
-    const html = `<html><body><table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:'Microsoft YaHei',Arial,sans-serif;font-size:12px">${rowsHtml.join('')}</table></body></html>`;
+    const html = `<html><body><table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:'Microsoft YaHei',Arial,sans-serif;font-size:12px;text-align:center;vertical-align:middle">${rowsHtml.join(
+      ''
+    )}</table></body></html>`;
     const tsv = aoa.map((r) => r.join('\t')).join('\n');
     try {
       const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
@@ -1141,6 +1264,76 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           <span className="hint">{i18n.t('k0600844a')}</span>
         </div>
 
+        {/* 日期文件夹名：自动学习同级目录格式，也允许用户直接改 */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <span style={{ width: 88, color: 'var(--muted)', fontSize: 12.5 }}>日期文件夹</span>
+          <input
+            className="input"
+            style={{ width: 220 }}
+            value={dateFolder}
+            onChange={(e) => setDateFolder(e.target.value)}
+            placeholder={shootDate}
+          />
+          {dateFolderHint?.learned && (
+            <span className="hint">
+              已按同级目录学习：{dateFolderHint.label}
+              {dateFolderHint.samples.length
+                ? `（现有 ${dateFolderHint.samples.slice(0, 4).join('、')}${
+                    dateFolderHint.count > 4 ? ' 等' : ''
+                  }）`
+                : ''}
+            </span>
+          )}
+          {!dateFolderHint?.learned && <span className="hint">可直接改成你习惯的写法，例如 20261123</span>}
+        </div>
+
+        {/* 日期文件夹下一级分类：eBay / 非eBay，或固定名字 */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <span style={{ width: 88, color: 'var(--muted)', fontSize: 12.5 }}>日期下一级</span>
+          <Select
+            style={{ width: 240 }}
+            value={subMode}
+            onChange={(v) => setSubMode(v as 'none' | 'platform' | 'custom')}
+            options={[
+              { value: 'none', label: '不分组（日期/编码）' },
+              { value: 'platform', label: '按平台分（eBay / 非eBay）' },
+              { value: 'custom', label: '固定分类名' },
+            ]}
+          />
+          {subMode === 'platform' && (
+            <>
+              <input
+                className="input"
+                style={{ width: 130 }}
+                value={subEbay}
+                onChange={(e) => setSubEbay(e.target.value)}
+                placeholder="eBay"
+              />
+              <input
+                className="input"
+                style={{ width: 130 }}
+                value={subOther}
+                onChange={(e) => setSubOther(e.target.value)}
+                placeholder="非eBay"
+              />
+            </>
+          )}
+          {subMode === 'custom' && (
+            <input
+              className="input"
+              style={{ width: 180 }}
+              value={subCustom}
+              onChange={(e) => setSubCustom(e.target.value)}
+              placeholder="例如：白底图"
+            />
+          )}
+          <span className="hint">
+            将生成：{rootDir.trim() || '输出根目录'}/{dateFolder.trim() || shootDate}
+            {subMode === 'platform' ? `/${subEbay || 'eBay'} 或 /${subOther || '非eBay'}` : ''}
+            {subMode === 'custom' ? `/${subCustom || '分类'}` : ''}/编码
+          </span>
+        </div>
+
         {!isDesktop && (
           <div className="hint" style={{ marginTop: 10 }}>
             {i18n.t('k3589bd0e')}
@@ -1153,13 +1346,76 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         )}
       </div>
 
-      {!scan && !scanning && (
+      {/* 没有扫描结果，但用户选了「已整理好的文件夹」：直接给报表和文件夹截图 */}
+      {!scan && !scanning && !manualDir && (
         <div className="empty">
           <div className="big">
             <IconBarcode size={42} />
           </div>
           <h3>{i18n.t('k0d14616d')}</h3>
           <div className="hint">{i18n.t('k6fb164de')}</div>
+          <button
+            className="btn"
+            style={{ marginTop: 14 }}
+            onClick={() => void pickManualReportDir()}
+            disabled={!isDesktop}
+          >
+            <IconFolder /> 已有整理好的文件夹？直接生成 Excel + 文件夹截图
+          </button>
+        </div>
+      )}
+
+      {!scan && manualDir && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+            <b>直接生成报表</b>
+            <span className="hint">
+              {manualDir} · {manualFolders.length} 个产品文件夹
+            </span>
+            <button className="btn sm" onClick={() => void pickManualReportDir()} disabled={applying}>
+              重新选择
+            </button>
+            <button
+              className="btn ghost sm"
+              onClick={() => {
+                setManualDir('');
+                setManualFolders([]);
+              }}
+            >
+              清除
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {manualFolders.map((f) => (
+              <span
+                key={f.name}
+                className="hint"
+                style={{
+                  padding: '2px 8px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 999,
+                  fontFamily: 'ui-monospace, Consolas, monospace',
+                }}
+              >
+                {f.name} · {f.files} 张
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn primary" onClick={() => void runReport()} disabled={applying}>
+              {applyMode === 'report' ? '生成中…' : '生成 Excel'}
+            </button>
+            <button className="btn sm" onClick={copyReportTable}>
+              复制表格
+            </button>
+            <button className="btn sm" onClick={() => void copyFolderShot()}>
+              复制文件夹截图
+            </button>
+            <button className="btn sm" onClick={() => downloadFile(omsProductFolderShotUrl(manualDir))}>
+              下载文件夹截图
+            </button>
+          </div>
+          {reported && <div className="hint" style={{ marginTop: 8 }}>已生成工作日报-{shootDate}.xlsx</div>}
         </div>
       )}
 
@@ -1182,6 +1438,67 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             </span>
           </div>
 
+          {/* 手动分组：条码过明过暗识别失败、或自动分组切错时，用户自己勾选图片改归属 */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+              <b style={{ fontSize: 13 }}>手动调整分组</b>
+              <span className="hint">
+                点下面的产品缩略图勾选（可多选），再选择目标组移入；条码照片本身不参与移动。
+              </span>
+              <span className="hint" style={{ marginLeft: 'auto' }}>
+                已选 {selectedFiles.length} 张
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Select
+                style={{ width: 260 }}
+                value={moveTarget}
+                onChange={setMoveTarget}
+                options={[
+                  { value: 'ungrouped', label: '未分组（首个条码之前）' },
+                  ...scan.groups.map((g, i) => ({
+                    value: String(i),
+                    label: `#${i + 1} ${edits[i]?.code || g.code || g.barcodeFile || '未命名'}`,
+                  })),
+                  { value: 'new', label: '＋ 新建分组' },
+                ]}
+              />
+              <button
+                className="btn primary sm"
+                disabled={!selectedFiles.length}
+                onClick={() => {
+                  const target =
+                    moveTarget === 'ungrouped' || moveTarget === 'new' ? moveTarget : Number(moveTarget);
+                  moveSelectedFiles(target);
+                }}
+              >
+                移入所选组
+              </button>
+              <button
+                className="btn sm"
+                disabled={!selectedFiles.length}
+                onClick={() => moveSelectedFiles('new')}
+              >
+                新建分组并移入
+              </button>
+              <button
+                className="btn ghost sm"
+                disabled={!selectedFiles.length}
+                onClick={() => setSelectedFiles([])}
+              >
+                清空选择
+              </button>
+              {scan.ungrouped.length > 0 && (
+                <button
+                  className="btn ghost sm"
+                  onClick={() => setSelectedFiles((prev) => [...new Set([...prev, ...scan.ungrouped])])}
+                >
+                  选中全部未分组
+                </button>
+              )}
+            </div>
+          </div>
+
           {scan.groups.map((g, i) => (
             <GroupRow
               key={`${g.barcodeFile}-${i}`}
@@ -1192,6 +1509,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               omsBaseUrl={oms?.baseUrl || ''}
               onRetryOms={queryOms}
               onToast={onToast}
+              selectedFiles={selectedFiles}
+              onToggleFile={toggleSelectFile}
               onChange={(next) => setEdits((prev) => prev.map((e, j) => (j === i ? next : e)))}
             />
           ))}
@@ -1212,15 +1531,55 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 {i18n.t('kbf5fa0a4')}
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {scan.ungrouped.map((f) => (
-                  <img
-                    key={f}
-                    src={barcodeThumbUrl(scan.dir, f)}
-                    alt=""
-                    loading="lazy"
-                    style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, background: 'var(--bg2)' }}
-                  />
-                ))}
+                {scan.ungrouped.map((f) => {
+                  const on = selectedFiles.includes(f);
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      title={on ? '点击取消选择' : '点击选中，再在上方选择目标组'}
+                      onClick={() => toggleSelectFile(f)}
+                      style={{
+                        position: 'relative',
+                        width: 64,
+                        height: 64,
+                        padding: 0,
+                        border: on ? '2px solid var(--accent, #4f8cff)' : '1px solid var(--border)',
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        background: 'var(--bg2)',
+                      }}
+                    >
+                      <img
+                        src={barcodeThumbUrl(scan.dir, f)}
+                        alt=""
+                        loading="lazy"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                      {on && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: 3,
+                            left: 3,
+                            width: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            background: 'var(--accent, #4f8cff)',
+                            color: '#fff',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            display: 'grid',
+                            placeItems: 'center',
+                          }}
+                        >
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1355,18 +1714,22 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 {flowIssues.length > 4 ? ` 等 ${flowIssues.length} 项` : ''}
               </div>
             )}
-            {/* 九步流程条：做完打勾，当前步骤高亮 */}
+            {/* 九步流程条：做完打勾，当前步骤高亮；点任意步骤可直接跳过去 */}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
               {STEP_DEFS.map((s, i) => {
                 const done = stepDone[s.key];
                 const active = s.key === currentKey;
                 return (
-                  <span
+                  <button
                     key={s.key}
+                    type="button"
+                    title={`跳到「${s.title}」`}
+                    onClick={() => setStepOverride(s.key)}
                     style={{
                       padding: '3px 10px',
                       borderRadius: 999,
                       fontSize: 12,
+                      cursor: 'pointer',
                       border: `1px solid ${
                         active ? 'var(--accent, #4c8dff)' : done ? 'var(--ok, #3c9d5d)' : 'var(--line)'
                       }`,
@@ -1380,9 +1743,18 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                     }}
                   >
                     {done ? '✓' : i + 1} {s.title}
-                  </span>
+                  </button>
                 );
               })}
+              {stepOverride && stepOverride !== autoCurrentKey && (
+                <button
+                  className="btn ghost sm"
+                  onClick={() => setStepOverride(null)}
+                  title={`自动步骤是「${STEP_DEFS.find((s) => s.key === autoCurrentKey)?.title || ''}」`}
+                >
+                  回到当前步骤
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1493,33 +1865,31 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               )}
 
               {currentKey === 'report' && (
-                <button className="btn primary" onClick={runReport} disabled={applying}>
-                  {applyMode === 'report' ? '生成中…' : '生成 Excel'}
-                </button>
-              )}
-
-              {currentKey === 'report' && (
-                <button className="btn sm" onClick={copyReportTable}>
-                  复制表格
-                </button>
-              )}
-
-              {currentKey === 'report' && (
                 <>
+                  <button className="btn primary" onClick={runReport} disabled={applying}>
+                    {applyMode === 'report' ? '生成中…' : '生成 Excel'}
+                  </button>
+                  <button className="btn sm" onClick={copyReportTable}>
+                    复制表格
+                  </button>
                   <button className="btn sm" onClick={() => void copyFolderShot()}>
                     复制文件夹截图
                   </button>
                   <button
                     className="btn sm"
                     onClick={() => {
-                      if (!outputDateDir) {
-                        onToast('请先选择输出根目录', 'error');
+                      const shotDir = manualDir || outputDateDir;
+                      if (!shotDir) {
+                        onToast('请先选择输出根目录，或选择已整理好的文件夹', 'error');
                         return;
                       }
-                      downloadFile(omsProductFolderShotUrl(outputDateDir));
+                      downloadFile(omsProductFolderShotUrl(shotDir));
                     }}
                   >
                     下载文件夹截图
+                  </button>
+                  <button className="btn ghost sm" onClick={() => void pickManualReportDir()} disabled={applying}>
+                    选择已整理好的文件夹
                   </button>
                 </>
               )}
@@ -1530,6 +1900,43 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 </button>
               )}
             </div>
+
+            {currentKey === 'report' && manualDir && (
+              <div className="card" style={{ marginTop: 10, marginBottom: 10 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                  <b style={{ fontSize: 12.5 }}>已选文件夹</b>
+                  <span className="hint">
+                    {manualDir} · {manualFolders.length} 个产品文件夹
+                  </span>
+                  <button
+                    className="btn ghost sm"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={() => {
+                      setManualDir('');
+                      setManualFolders([]);
+                    }}
+                  >
+                    清除
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {manualFolders.map((f) => (
+                    <span
+                      key={f.name}
+                      className="hint"
+                      style={{
+                        padding: '2px 8px',
+                        border: '1px solid var(--border)',
+                        borderRadius: 999,
+                        fontFamily: 'ui-monospace, Consolas, monospace',
+                      }}
+                    >
+                      {f.name} · {f.files} 张
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {currentKey === 'number' && pickerOpen && (
               <div
@@ -1648,7 +2055,10 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   ? `已入库 ${imported.importedTotal} 张`
                   : `登记到图库：${activeFolder?.name || activeLibName || '图库根'}`)}
               {currentKey === 'upload' && '核对 OMS 名称后上传；名称不一致会停下等你确认。'}
-              {currentKey === 'report' && `生成 工作日报-${shootDate}.xlsx，时长列留空。`}
+              {currentKey === 'report' &&
+                (manualDir
+                  ? `按已选文件夹（${manualFolders.length} 个）生成 工作日报-${shootDate}.xlsx；文件夹截图来自 ${manualDir}。`
+                  : `生成 工作日报-${shootDate}.xlsx，时长列留空。`)}
             </div>
 
             {cropReport && cropReport.some((it) => it.cropped.length) && (
@@ -1681,10 +2091,24 @@ interface GroupRowProps {
   onRetryOms: () => void;
   onToast: (msg: string, kind?: 'info' | 'error') => void;
   onChange: (next: GroupEdit) => void;
+  /** 手动分组：当前勾选的图片（相对源目录） */
+  selectedFiles: string[];
+  onToggleFile: (file: string) => void;
 }
 
 /** 一个条码组：条码缩略图 + 可编辑编码 + 候选 + 产品缩略图 */
-function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, onChange }: GroupRowProps) {
+function GroupRow({
+  index,
+  group,
+  dir,
+  edit,
+  omsBaseUrl,
+  onRetryOms,
+  onToast,
+  onChange,
+  selectedFiles,
+  onToggleFile,
+}: GroupRowProps) {
   const [preview, setPreview] = useState(false);
   // 每次双击都换一个 v：服务端换新后，浏览器不会继续用旧的 240px 缓存
   const [previewNonce, setPreviewNonce] = useState(0);
@@ -1756,19 +2180,37 @@ function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, on
     <div className="card" style={{ marginBottom: 12, opacity: edit.skip ? 0.55 : 1 }}>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
         <div style={{ flex: '0 0 120px' }}>
-          <img
-            src={barcodeThumbUrl(dir, group.barcodeFile)}
-            alt=""
-            loading="lazy"
-            title={i18n.t('kdf093f7d')}
-            onDoubleClick={() => {
-              setPreviewNonce(Date.now());
-              setPreview(true);
-            }}
-            style={{ ...thumbStyle, cursor: 'zoom-in' }}
-          />
+          {group.barcodeFile ? (
+            <img
+              src={barcodeThumbUrl(dir, group.barcodeFile)}
+              alt=""
+              loading="lazy"
+              title={i18n.t('kdf093f7d')}
+              onDoubleClick={() => {
+                setPreviewNonce(Date.now());
+                setPreview(true);
+              }}
+              style={{ ...thumbStyle, cursor: 'zoom-in' }}
+            />
+          ) : (
+            <div
+              style={{
+                ...thumbStyle,
+                display: 'grid',
+                placeItems: 'center',
+                textAlign: 'center',
+                fontSize: 12,
+                color: 'var(--muted)',
+                border: '1px dashed var(--border-strong)',
+              }}
+            >
+              手动分组
+              <br />
+              无条码照片
+            </div>
+          )}
           <div className="hint" style={{ marginTop: 4 }}>
-            {i18n.t('k48ccc6a5')} · {i18n.t('kdf093f7d')}
+            {group.barcodeFile ? `${i18n.t('k48ccc6a5')} · ${i18n.t('kdf093f7d')}` : '手动新建的分组'}
           </div>
           {group.barcodeText ? (
             <div className="hint" style={{ marginTop: 2, wordBreak: 'break-all', color: 'var(--text)' }}>
@@ -1938,17 +2380,57 @@ function GroupRow({ index, group, dir, edit, omsBaseUrl, onRetryOms, onToast, on
             </div>
           )}
 
-          {/* 这一组的全部产品图都展示出来，不再截断 12 张 */}
+          {/* 这一组的全部产品图都展示出来，不再截断 12 张；点图可勾选后手动改分组 */}
           <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-            {group.files.map((f) => (
-              <img
-                key={f}
-                src={barcodeThumbUrl(dir, f)}
-                alt=""
-                loading="lazy"
-                style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, background: 'var(--bg2)' }}
-              />
-            ))}
+            {group.files.map((f) => {
+              const on = selectedFiles.includes(f);
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  title={`${f}${on ? '（已选，点击取消）' : '（点击选中，再在上方选择目标组）'}`}
+                  onClick={() => onToggleFile(f)}
+                  style={{
+                    position: 'relative',
+                    width: 56,
+                    height: 56,
+                    padding: 0,
+                    border: on ? '2px solid var(--accent, #4f8cff)' : '1px solid var(--border)',
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    background: 'var(--bg2)',
+                  }}
+                >
+                  <img
+                    src={barcodeThumbUrl(dir, f)}
+                    alt=""
+                    loading="lazy"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  {on && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 2,
+                        left: 2,
+                        width: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        background: 'var(--accent, #4f8cff)',
+                        color: '#fff',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        display: 'grid',
+                        placeItems: 'center',
+                      }}
+                    >
+                      ✓
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           <div className="hint" style={{ marginTop: 6 }}>
