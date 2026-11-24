@@ -20,6 +20,62 @@ const RASTER = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * 输出目录监听。
+ *
+ * 用户创建完文件夹后常会直接去资源管理器改名/删图，页面里的路径就过期了，
+ * 后面的编号、入库、上传全对着旧数据报错（「请填写记录名称后再核对」这类看不出原因的错）。
+ * 这里对「输出根目录/日期」这层挂一个 fs.watch，变化后经 SSE 通知页面重新读盘。
+ */
+const dirWatchers = new Map();
+
+function watchOutputDir(dir, broadcast) {
+  if (!dir || typeof broadcast !== 'function' || dirWatchers.has(dir)) return;
+  let watcher;
+  try {
+    watcher = fs.watch(dir, { recursive: true }, () => {
+      const entry = dirWatchers.get(dir);
+      if (!entry) return;
+      if (entry.timer) clearTimeout(entry.timer);
+      // 复制/改名会连着来一串事件，合并成一次通知
+      entry.timer = setTimeout(() => {
+        entry.timer = null;
+        try {
+          broadcast('barcode', { dir, event: 'change' });
+        } catch {
+          /* 广播失败不影响主流程 */
+        }
+      }, 500);
+    });
+  } catch {
+    return; // 目录还不存在 / 平台不支持递归监听：静默退化成手动刷新
+  }
+  watcher.on('error', () => {
+    try {
+      watcher.close();
+    } catch {
+      /* ignore */
+    }
+    dirWatchers.delete(dir);
+  });
+  // 别让监听句柄拖住进程退出（单测 / 命令行跑完就该结束）
+  watcher.unref?.();
+  dirWatchers.set(dir, { watcher, timer: null });
+  // 只保留最近 3 个目录，避免切换拍摄日期后越挂越多
+  while (dirWatchers.size > 3) {
+    const [oldDir, entry] = dirWatchers.entries().next().value || [];
+    if (!oldDir) break;
+    if (entry.timer) clearTimeout(entry.timer);
+    try {
+      entry.watcher.close();
+    } catch {
+      /* ignore */
+    }
+    dirWatchers.delete(oldDir);
+  }
+}
+
+
+/**
  * 原子替换文件：Windows 上资源管理器/预览窗格可能正占着原图，
  * rename 会报 EBUSY/EPERM。重试几次让「部分图片裁切没生效」不再悄悄发生；
  * 始终失败的会作为该文件的错误返回，前端会列出文件名。
@@ -163,18 +219,6 @@ function safeChildName(dir, name) {
   return isInside(dir, abs) ? abs : '';
 }
 
-/** 同批编码重复时依次加 -2 / -3；Windows 文件夹名大小写不敏感，统一按小写判重 */
-function uniqueFolderName(base, used) {
-  let name = base;
-  let n = 2;
-  while (used.has(name.toLowerCase())) {
-    name = `${base}-${n}`;
-    n++;
-  }
-  used.add(name.toLowerCase());
-  return name;
-}
-
 /**
  * 找一个不覆盖已有文件的落点。
  * 同名同大小视为「之前已经复制过」，直接跳过；同名不同大小则加 (2)。
@@ -298,7 +342,9 @@ async function importImageToFolder(absPath, folderId, tags, generation) {
 }
 
 export function register(app, ctx) {
-  const { asyncRoute } = ctx;
+  const { asyncRoute, sseBroadcast } = ctx;
+  /** 输出目录一有外部改动就推给前端（同一目录只挂一次监听） */
+  const notifyOnChange = (dir) => watchOutputDir(dir, sseBroadcast);
 
   /* 扫描源目录：判黄 + OCR + 分组，不写任何文件 */
   app.post(
@@ -341,6 +387,8 @@ export function register(app, ctx) {
       } catch (err) {
         return res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
       }
+      // 用户选定「已整理好的文件夹」后也盯着它：外部改名/删图要能同步回页面
+      notifyOnChange(dir);
       res.json({ ok: true, dir, folders: await listSubfolders(dir) });
     })
   );
@@ -377,11 +425,17 @@ export function register(app, ctx) {
       const dateFolderName = safeCodeName(req.body?.dateFolder) || date;
       const dateDir = path.join(root, dateFolderName);
       await fsp.mkdir(dateDir, { recursive: true });
+      // 从这一刻起盯着这个日期目录：用户去资源管理器改文件夹，页面要能收到通知
+      notifyOnChange(dateDir);
       // 入库层级：当前选中的文件夹 / 日期文件夹 /（可选分类）/ 编码；只建虚拟夹，不移动已复制的文件
       const dateFolderId = importToLibrary ? ensureFolderUnderParent(parentFolderId, dateFolderName) : null;
 
-      /** 每个分类子目录单独判重：eBay / 非eBay 下可以出现同名编码 */
-      const usedBySub = new Map();
+      /**
+       * 同编码合并到同一个文件夹（不再加 -2 后缀）。
+       * 合并后「清理旧文件」必须等所有组都复制完、按文件夹做一次，
+       * 否则第二组会把第一组刚复制进来的图当成旧文件移走。
+       */
+      const folderDest = new Map();
       const results = [];
       let totalCopied = 0;
       let importedTotal = 0;
@@ -410,13 +464,8 @@ export function register(app, ctx) {
           continue;
         }
         const sub = safeCodeName(g.subfolder);
-        const subKey = sub.toLowerCase();
-        let used = usedBySub.get(subKey);
-        if (!used) {
-          used = new Set();
-          usedBySub.set(subKey, used);
-        }
-        const folderName = uniqueFolderName(code, used);
+        // 同编码直接落到同一个文件夹：重复的图按「同名同大小」跳过，不同的图并进来
+        const folderName = code;
         const folderBase = sub ? path.join(dateDir, sub) : dateDir;
         const folder = path.join(folderBase, folderName);
         await fsp.mkdir(folder, { recursive: true });
@@ -453,15 +502,10 @@ export function register(app, ctx) {
           }
         }
         totalCopied += copied;
-
-        let cleaned = 0;
-        const cleanErrors = [];
-        if (cleanStale) {
-          const r = await moveStaleFiles(folder, destFiles, folderBase, folderName);
-          cleaned = r.moved;
-          cleanErrors.push(...r.errors);
-          cleanedTotal += cleaned;
-        }
+        // 记到合并表：同编码的多个组要等全部复制完再统一清理旧文件
+        const slot = folderDest.get(folder) || { destFiles: [], folderBase, folderName, row: null };
+        for (const dest of destFiles) slot.destFiles.push(dest);
+        folderDest.set(folder, slot);
 
         let imported = 0;
         let importSkipped = 0;
@@ -495,7 +539,7 @@ export function register(app, ctx) {
         importedTotal += imported;
         importSkippedTotal += importSkipped;
 
-        results.push({
+        const row = {
           sourceIndex,
           code: folderName,
           subfolder: sub,
@@ -507,9 +551,22 @@ export function register(app, ctx) {
           importSkipped,
           importErrors,
           libraryFolderId,
-          cleaned,
-          cleanErrors,
-        });
+          cleaned: 0,
+          cleanErrors: [],
+        };
+        if (!slot.row) slot.row = row;
+        results.push(row);
+      }
+
+      // 合并后按文件夹清一次：destFiles 取并集，第一组的图不会被第二组挪走
+      if (cleanStale) {
+        for (const [folder, slot] of folderDest) {
+          const r = await moveStaleFiles(folder, [...new Set(slot.destFiles)], slot.folderBase, slot.folderName);
+          cleanedTotal += r.moved;
+          if (!slot.row) continue;
+          slot.row.cleaned = r.moved;
+          slot.row.cleanErrors = r.errors;
+        }
       }
 
       res.json({
@@ -798,6 +855,7 @@ export function register(app, ctx) {
       const dateFolderName = safeCodeName(req.body?.dateFolder) || date;
       const dateDir = path.join(root, dateFolderName);
       await fsp.mkdir(dateDir, { recursive: true });
+      notifyOnChange(dateDir);
       // 图库层级：当前选中的文件夹 / 日期文件夹 /（可选分类）/ 编码
       const dateFolderId = ensureFolderUnderParent(parentFolderId, dateFolderName);
 

@@ -21,6 +21,7 @@ import {
 import { IconArrowUpRight, IconBarcode, IconCopy, IconFolder, IconRefresh } from '../components/Icons';
 import { getApiToken } from '../api/core';
 import { confirmDialog } from '../components/Dialogs';
+import { subscribeEvents } from '../events';
 import BatchCropStudio, { type CropItem } from '../components/BatchCropStudio';
 import Select from '../components/Select';
 import i18n from '../i18n';
@@ -56,6 +57,12 @@ interface UploadOutcome {
   skipped: number;
   shootCount: number;
   message: string;
+}
+
+/** 本地日期（不用 toISOString，凌晨 0-8 点会被算成前一天） */
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** 完整编码形如 45661-Y01Y0001-QD08；只有主 SKU 时没有连字符段 */
@@ -121,7 +128,8 @@ function omsPageUrl(baseUrl: string, mainSku?: string) {
 export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLibName, onLibraryChanged }: Props) {
   const [srcDir, setSrcDir] = useState('');
   const [rootDir, setRootDir] = useState('');
-  const [date, setDate] = useState('');
+  // 默认今天：拍摄日期是必填项，留空会在创建文件夹 / 入库时被后端拒绝
+  const [date, setDate] = useState(() => localToday());
   const [scan, setScan] = useState<BarcodeScanResult | null>(null);
   const [edits, setEdits] = useState<GroupEdit[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -290,21 +298,38 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   /** 取手动目录里各 SKU 的 OMS 产品名；查不到就留空，不阻塞 Excel/上传 */
   const fetchManualNames = async (folders: { name: string }[]) => {
-    const pairs = await Promise.all(
-      folders.map(async (f) => {
+    // 并发 4：几十个文件夹时一次性打满 OMS 既慢又容易被限流
+    const out: Record<string, string> = {};
+    const queue = [...folders];
+    const worker = async () => {
+      for (;;) {
+        const f = queue.shift();
+        if (!f) return;
         try {
           const r = await api.omsProductLookup(f.name);
-          return [f.name, r.displayName || ''] as const;
+          if (r.displayName) out[f.name] = r.displayName;
         } catch {
-          return [f.name, ''] as const;
+          /* 查不到就留空，不阻塞其它 SKU */
         }
-      })
-    );
-    return Object.fromEntries(pairs.filter(([, n]) => n)) as Record<string, string>;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker));
+    return out;
   };
 
   const manualFolderPath = (name: string) =>
     `${manualDir.replace(/[\\/]+$/, '')}\\${name}`;
+
+  /** 重新读已选文件夹：用户在资源管理器里增删/改名后同步列表，别拿旧名字去上传 */
+  const refreshManualFolders = async () => {
+    if (!manualDir) return;
+    try {
+      const res = await api.barcodeSubfolders(manualDir);
+      setManualFolders(res.folders);
+    } catch {
+      /* 目录被删 / 无权限：保留旧列表，下一步操作会给明确报错 */
+    }
+  };
 
   /** 路径的父目录 / 末级目录名：现成文件夹要当「输出根目录 + 日期文件夹」传给后端入库 */
   const pathParent = (p: string) => {
@@ -529,6 +554,17 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       onToast('请先选择一个包含若干 SKU 子文件夹的父文件夹', 'error');
       return;
     }
+    // 上传前补齐 OMS 产品名：后端拿它做名称核对，传空名字会被直接拒掉
+    let names = manualNames;
+    const missingNames = manualFolders.filter((f) => !names[f.name]);
+    if (missingNames.length) {
+      try {
+        names = { ...names, ...(await fetchManualNames(missingNames)) };
+        setManualNames(names);
+      } catch {
+        /* 查不到名字就按空名字交给后端：跳过核对，仍然上传 */
+      }
+    }
     setApplyMode('manual-upload');
     setUploads({});
     setUploadProgress({ done: 0, total: manualFolders.length });
@@ -542,7 +578,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         [folder]: { state: 'uploading', uploaded: 0, skipped: 0, shootCount: 0, message: '正在上传…' },
       }));
       try {
-        const res = await api.omsProductUpload({ sku: f.name, dir: folder, expectedName: '' });
+        const res = await api.omsProductUpload({
+          sku: f.name,
+          dir: folder,
+          expectedName: names[f.name] || '',
+        });
         uploadedTotal += res.uploaded;
         if (res.displayName) {
           setManualNames((prev) => (prev[f.name] ? prev : { ...prev, [f.name]: res.displayName }));
@@ -603,7 +643,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       const idx = r.sourceIndex;
       const edit = edits[idx];
       const group = scan?.groups[idx];
-      const code = String(edit?.code || group?.code || '').trim();
+      // 兜底用文件夹名（复制时就按编码命名），别因为内存里的分组丢了就判「缺编码」
+      const code = String(edit?.code || group?.code || r.code || '').trim();
       const expectedName = String(edit?.productName || '').trim();
       const base: UploadOutcome = {
         state: 'uploading',
@@ -617,11 +658,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         if (!isFullCode(code)) {
           throw Object.assign(new Error('缺少完整编码，未上传到 OMS'), { code: 'no_full_code' });
         }
-        if (!expectedName) {
-          throw Object.assign(new Error('缺少产品名，未上传到 OMS（请先填写产品名）'), {
-            code: 'no_product_name',
-          });
-        }
+        // 没填产品名也照传：后端会退回 OMS 后台名称，只在两边都能拿到名字时才核对
         const res = await api.omsProductUpload({
           sku: code,
           dir: r.folder,
@@ -662,23 +699,37 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     return { uploadedTotal, mismatch, failed };
   };
 
-  /** 页面必须处理完的报错/警告；为空才允许点保存/入库/上传 */
+  /**
+   * 待补项：只是提示，不挡后续步骤（产品名可以到上传前再补）。
+   * codeIssues 才是真缺资料——没编码 / 没产品图，创建文件夹这一步做不了。
+   */
   const flowIssues: string[] = [];
+  const codeIssues: string[] = [];
   if (scan) {
     scan.groups.forEach((g, i) => {
       const edit = edits[i];
       if (edit?.skip) return;
       const code = (edit?.code ?? g.code ?? '').trim();
       const full = isFullCode(code);
-      if (!code) flowIssues.push(`#${i + 1} 没有编码`);
-      else if (!full) flowIssues.push(`#${i + 1} 未选完整编码（当前 ${code}）`);
+      if (!code) {
+        flowIssues.push(`#${i + 1} 没有编码`);
+        codeIssues.push(`#${i + 1} 没有编码`);
+      } else if (!full) {
+        flowIssues.push(`#${i + 1} 未选完整编码（当前 ${code}）`);
+        codeIssues.push(`#${i + 1} 未选完整编码（当前 ${code}）`);
+      }
       if (!String(edit?.productName || '').trim()) flowIssues.push(`#${i + 1} 产品名为空`);
-      if (!g.files.length) flowIssues.push(`#${i + 1} 没有产品图`);
+      if (!g.files.length) {
+        flowIssues.push(`#${i + 1} 没有产品图`);
+        codeIssues.push(`#${i + 1} 没有产品图`);
+      }
       if (!full && (edit?.omsState === 'empty' || edit?.omsState === 'error')) {
         flowIssues.push(`#${i + 1} OMS 没查到完整编码 / 查询失败`);
+        codeIssues.push(`#${i + 1} OMS 没查到完整编码 / 查询失败`);
       }
       if (!full && edit?.omsState === 'multiple') {
         flowIssues.push(`#${i + 1} 有多个候选未选择完整编码`);
+        codeIssues.push(`#${i + 1} 有多个候选未选择完整编码`);
       }
     });
   }
@@ -700,14 +751,22 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   /** 已复制出来的编码文件夹：后续检查 / 编号 / 入库 / 上传都围绕它们；没扫描时用现成文件夹顶上 */
   const outputFolders = applied
-    ? applied.results
-        .filter((r) => r.folder)
-        .map((r) => ({
-          sourceIndex: r.sourceIndex,
-          code: r.code,
-          folder: r.folder,
-          subfolder: r.subfolder || '',
-        }))
+    ? // 同编码会合并到同一个文件夹，两组结果指向同一个 folder：按 folder 去重，避免后续步骤重复处理
+      [
+        ...new Map(
+          applied.results
+            .filter((r) => r.folder)
+            .map((r) => [
+              r.folder,
+              {
+                sourceIndex: r.sourceIndex,
+                code: r.code,
+                folder: r.folder,
+                subfolder: r.subfolder || '',
+              },
+            ])
+        ).values(),
+      ]
     : manualFolders.map((f, i) => ({
         sourceIndex: i,
         code: f.name,
@@ -718,8 +777,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 第 4 步：创建本地文件夹（只复制，不移动原图） */
   const runSave = async () => {
     if (!scan) return;
-    if (flowIssues.length) {
-      onToast('页面还有报错/警告，先处理完再继续', 'error');
+    // 只卡缺编码 / 没产品图；产品名留到上传前补，不挡建文件夹
+    if (codeIssues.length) {
+      onToast(`还有 ${codeIssues.length} 个组缺编码或产品图，补齐后才能创建文件夹`, 'error');
       return;
     }
     if (!rootDir.trim()) {
@@ -736,8 +796,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       const result = await api.barcodeApply({
         dir: scan.dir,
         root: rootDir.trim(),
-        date,
-        dateFolder: dateFolder.trim() || date,
+        // 日期没填就按今天：后端要求 YYYY-MM-DD，别让用户因为空日期卡在报错上
+        date: date || localToday(),
+        dateFolder: dateFolder.trim() || date || localToday(),
         groups,
         importToLibrary: false,
         cleanStale,
@@ -837,7 +898,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           'error'
         );
         // 检查出不合格图片就自动打开裁切台；已经开着时不要重复弹
-        if (!cropStudioOpen) openBatchCrop(items);
+        if (!cropStudioOpen) void openBatchCrop(items);
       } else {
         onToast(
           applied
@@ -860,11 +921,21 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
    * 这里的图片还在输出文件夹里、没有图库 id，所以给裁切台传 dir + file，
    * 裁切台会走 /api/barcode/crop-rects 原地覆盖，而不是图库任务。
    */
-  const openBatchCrop = (source: BarcodeRatioItemResult[] | null = null) => {
+  const openBatchCrop = async (source: BarcodeRatioItemResult[] | null = null) => {
     // 自动打开时 ratios 的 setState 还没生效，直接传刚查到的结果，避免拿到旧值
-    const bad = (source || ratios || []).filter((it) => it.notSquare.length);
+    let list = source || ratios;
+    if (!list) {
+      // 直接从别的步骤跳过来点「调整构图」：自动先查一遍，别让用户被提示挡回去
+      try {
+        list = await checkRatios();
+      } catch (err) {
+        onToast((err as Error).message, 'error');
+        return;
+      }
+    }
+    const bad = (list || []).filter((it) => it.notSquare.length);
     if (!bad.length) {
-      onToast('没有需要裁剪的图片，请先点「检查 1:1」', 'error');
+      onToast(list ? '没有需要裁剪的图片，全部已经是 1:1' : '还没有可检查的文件夹，请先创建产品文件夹', 'error');
       return;
     }
     const items: CropItem[] = [];
@@ -889,9 +960,19 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   /** 第 5 步补充：只裁不是 1:1 的图，居中裁成正方形并原地覆盖 */
   const runCrop = async () => {
-    const bad = (ratios || []).filter((it) => it.notSquare.length);
+    // 直接从别的步骤跳过来时还没检查过：先自动查一遍，别用「请先点检查 1:1」挡住用户
+    let list = ratios;
+    if (!list) {
+      try {
+        list = await checkRatios();
+      } catch (err) {
+        onToast((err as Error).message, 'error');
+        return;
+      }
+    }
+    const bad = (list || []).filter((it) => it.notSquare.length);
     if (!bad.length) {
-      onToast('没有需要裁剪的图片，请先点「检查 1:1」', 'error');
+      onToast(list ? '没有需要裁剪的图片，全部已经是 1:1' : '还没有可检查的文件夹，请先创建产品文件夹', 'error');
       return;
     }
     setApplyMode('crop');
@@ -1027,10 +1108,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       onToast('还没有可入库的文件夹', 'error');
       return;
     }
-    if (!numbered) {
-      onToast('请先完成图片编号，再入库', 'error');
-      return;
-    }
+    // 不检查「是否已编号」：文件夹可能上一轮就编过号（甚至是在资源管理器里手工改的），
+    // 入库只负责把现有文件登记进图库，随时可以直接跑
     const groups = outputFolders.map((f) => {
       const edit = edits[f.sourceIndex];
       const code = String(edit?.code || f.code || '').trim();
@@ -1050,8 +1129,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     try {
       const result = await api.barcodeImport({
         root: importRoot,
-        date,
-        dateFolder: importDateFolder,
+        date: date || localToday(),
+        dateFolder: importDateFolder || date || localToday(),
         parentFolderId: folderId,
         groups,
       });
@@ -1089,15 +1168,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       return;
     }
     setUploadSkipped(false);
-    if (flowIssues.length) {
-      onToast('页面还有报错/警告，先处理完再继续', 'error');
-      return;
-    }
-    if (!imported && !importSkipped) {
-      onToast('请先完成入库，再上传 OMS（或点「跳过入库」）', 'error');
-      return;
-    }
+    // 上传只依赖「有文件夹 + 编码」：不要求先入库，也不因为别的步骤有警告就卡住，
+    // 缺编码的 SKU 会在下面的结果列表里单独标出来
     if (!applied) {
+      if (manualDir && manualFolders.length) {
+        await runManualUpload();
+        return;
+      }
       onToast('还没有可上传的文件夹', 'error');
       return;
     }
@@ -1221,7 +1298,18 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         category: '产品/视频拍摄',
       }))
     : [];
-  const reportRows = manualReportRows.length ? manualReportRows : scanReportRows;
+  /** 既没扫描也没手动选文件夹时，用输出目录里已经建好的文件夹兜底：报表这一步随时能出 */
+  const folderReportRows = outputFolders.map((f) => ({
+    sku: f.code,
+    name: manualNames[f.code] || '',
+    platform: platformOf(f.code),
+    category: '产品/视频拍摄',
+  }));
+  const reportRows = manualReportRows.length
+    ? manualReportRows
+    : scanReportRows.length
+      ? scanReportRows
+      : folderReportRows;
 
   const shootDate = date || new Date().toISOString().slice(0, 10);
   const outputDateDir =
@@ -1242,7 +1330,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       scan.groups.every(
         (g, i) => !!edits[i]?.skip || !!edits[i]?.omsState || isFullCode(edits[i]?.code ?? g.code)
       ),
-    review: !!scan && scan.groups.length > 0 && flowIssues.length === 0,
+    // 核对只看「能不能建文件夹」：缺编码 / 没产品图才算没做完，产品名不挡
+    review: !!scan && scan.groups.length > 0 && codeIssues.length === 0,
     copy: outputFolders.length > 0,
     // 有不是 1:1 的图就停在这一步：用户手动裁完再检查一次即可继续
     // 没有 eBay 组时这一步无事可做，直接算完成，别让用户卡在「检查 1:1」
@@ -1274,19 +1363,23 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     if (key === 'ratio' || key === 'number' || key === 'import') {
       return outputFolders.length ? '' : '请先创建产品文件夹（输出目录里至少有一个 SKU 子文件夹）';
     }
-    if (key === 'upload' || key === 'report') {
+    if (key === 'upload') {
       return outputFolders.length || (manualDir && manualFolders.length)
         ? ''
         : '请先选择一个包含若干 SKU 子文件夹的父文件夹，或先扫描并创建文件夹';
     }
+    if (key === 'report') {
+      // 报表只认 SKU 清单：扫出来的分组、现成文件夹、已建好的文件夹，任意一种够用就能出
+      return reportRows.length ? '' : '还没有可导出的 SKU：先扫描分组，或选一个已整理好的文件夹';
+    }
     return '';
   };
 
-  /** 步骤条跳转：材料不齐只提示，不切过去 */
+  /** 步骤条跳转：材料不齐只提示，不切过去（提示用 info，不弹红色报错） */
   const goStep = (key: StepKey) => {
     const missing = canEnterStep(key);
     if (missing) {
-      onToast(missing, 'error');
+      onToast(missing, 'info');
       return;
     }
     setStepOverride(key);
@@ -1298,6 +1391,25 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     void ensureNumberFiles().catch((err) => onToast((err as Error).message, 'error'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentKey, applied]);
+
+  // 服务端盯着输出目录：用户在资源管理器里改名/删图后重新读盘，避免后续步骤拿着过期路径报错
+  useEffect(() => {
+    const activeDir = applied?.dateDir || manualDir;
+    if (!activeDir) return;
+    const off = subscribeEvents('barcode', (d) => {
+      const dir = String((d as { dir?: string })?.dir || '');
+      // 只关心当前这一步的目录（历史监听可能还在另一天的目录上）
+      if (dir && pathBase(dir).toLowerCase() !== pathBase(activeDir).toLowerCase()) return;
+      if (!scan && manualDir) void refreshManualFolders();
+      else {
+        void ensureNumberFiles().catch(() =>
+          onToast('检测到输出文件夹被外部修改（改名或删除），请回到「创建文件夹」重新生成', 'error')
+        );
+      }
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applied?.dateDir, manualDir, scan]);
 
   /** 复制成可直接粘贴进 Excel 的表格：日期/时长/进度/工作成果跨行合并（无表头，整体居中） */
   const copyReportTable = async () => {
@@ -2080,7 +2192,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   lineHeight: 1.7,
                 }}
               >
-                有 {flowIssues.length} 个问题必须先处理，处理完才能继续：
+                有 {flowIssues.length} 个待补项（缺编码 / 没产品图的会挡住创建文件夹）：
                 {flowIssues.slice(0, 4).join('；')}
                 {flowIssues.length > 4 ? ` 等 ${flowIssues.length} 项` : ''}
               </div>
@@ -2109,7 +2221,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   <button
                     className="btn primary"
                     onClick={runSave}
-                    disabled={applying || flowIssues.length > 0 || !outputDateDir}
+                    disabled={applying || codeIssues.length > 0 || !outputDateDir}
                   >
                     <IconFolder /> {applyMode === 'copy' ? '创建中…' : '创建文件夹'}
                   </button>
@@ -2409,7 +2521,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {currentKey === 'scan' && '选择源目录后开始：标签照片开组，标签本身不进产品文件夹。'}
               {currentKey === 'resolve' && '用 5 位主 SKU 到中台查「待拍摄」的完整编码；查到会自动回填产品名。'}
               {currentKey === 'review' &&
-                (flowIssues.length ? `还有 ${flowIssues.length} 个问题需要处理。` : '编码、产品名、产品图都齐了。')}
+                (codeIssues.length
+                  ? `还有 ${codeIssues.length} 个组缺编码或产品图，补齐才能创建文件夹。`
+                  : '编码和产品图都齐了（产品名可以到上传前再补）。')}
               {currentKey === 'copy' && `将复制到：${outputDateDir || '请先选择输出根目录'}`}
               {currentKey === 'ratio' &&
                 (ratios
@@ -2461,7 +2575,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           onDone={() => {
             // 按文件夹保存时裁切台会保持打开：复查比例并刷新分组列表（已裁完的文件夹会消失）
             void checkRatios().then((items) => {
-              if ((items || []).some((it) => it.notSquare.length)) openBatchCrop(items);
+              if ((items || []).some((it) => it.notSquare.length)) void openBatchCrop(items);
               else setCropStudioOpen(false);
               setStepOverride(null);
             });

@@ -95,7 +95,7 @@ export function register(app, ctx) {
       if (!detail) {
         // 新 SKU 第一次上传前还没有图库记录：只要 OMS 里能查到产品名，就按 0 张返回，
         // 让前端可以继续走上传（上传时再创建记录）。
-        const name = await omsClient.resolveProductName(sku).catch(() => '');
+        const name = await omsClient.resolveProductName(sku, null).catch(() => '');
         if (!name) return res.status(404).json({ error: 'OMS 产品图库没有这个 SKU 的记录' });
         return res.json({
           ok: true,
@@ -132,16 +132,18 @@ export function register(app, ctx) {
     asyncRoute(async (req, res) => {
       const sku = String(req.body?.sku || '').trim();
       const dir = assertDir(req.body?.dir);
+      // 记录名称可以为空：直接选本地已有文件夹上传时没有「产品名」这一步，
+      // 只有用户明确填了名称才做核对，否则按后台名称上传，别把人挡在报错里。
       const expectedName = String(req.body?.expectedName || '').trim();
       if (!sku) return res.status(400).json({ error: '请填写完整 SKU' });
-      if (!expectedName) return res.status(400).json({ error: '请填写记录名称后再核对' });
 
       const detail = await omsClient.getProductGallery(sku);
       // 新 SKU 还没有「产品图库」记录时，用视觉拍摄 / 设计单里的产品名核对。
       // 两边都拿不到名字才放行，首次上传会由 saveProductGalleryFiles 创建记录。
       const omsName =
-        String(detail?.displayName || '').trim() || (await omsClient.resolveProductName(sku).catch(() => ''));
-      if (omsName && normalizeName(omsName) !== normalizeName(expectedName)) {
+        String(detail?.displayName || '').trim() ||
+        (await omsClient.resolveProductName(sku, detail).catch(() => ''));
+      if (expectedName && omsName && normalizeName(omsName) !== normalizeName(expectedName)) {
         return res.status(409).json({
           error: `后台名称「${omsName || '—'}」与记录名称「${expectedName}」不一致，已停止上传，请先核对`,
           code: 'name_mismatch',

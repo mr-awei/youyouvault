@@ -3,6 +3,7 @@
  * 后端在 /api/events 上推送：
  *  - job：任务状态快照 { import, enhance, clip, sr, aiUp }（变化才推）
  *  - library：发生写操作（图片/设置/清单/回收站等变更）
+ *  - barcode：条码页的输出目录被外部改动（资源管理器里改名/删图）
  * 全部页面共用一条连接（引用计数），组件卸载时退订即可。
  */
 import { getApiToken } from './api';
@@ -79,7 +80,7 @@ async function ensure(): Promise<void> {
  * handler 是同步入队的，退订没有理由异步化。
  */
 export function subscribeEvents(
-  type: 'job' | 'library' | 'hello' | 'canvas',
+  type: 'job' | 'library' | 'hello' | 'canvas' | 'barcode',
   fn: Handler
 ): () => void {
   let set = handlersByType.get(type);

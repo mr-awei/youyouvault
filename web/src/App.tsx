@@ -289,6 +289,8 @@ export default function App() {
     pageRef.current = 1;
     load(1, true);
     refreshStats();
+    // 条码入库会在图库里新建「日期 / 编码」层级：不重拉文件夹树，左侧树看起来没变化
+    reloadFolders();
     followImport();
   };
 

@@ -199,7 +199,7 @@ export function groupFiles(entries) {
   return { groups, ungrouped, warnings };
 }
 
-/** 同批重复编码提示（实际加后缀发生在复制阶段，因为用户可能中途改编码） */
+/** 同批重复编码提示（复制阶段会直接并进同一个文件夹，不再加后缀） */
 export function markDuplicates(groups) {
   const seen = new Map();
   groups.forEach((g, i) => {
@@ -208,7 +208,7 @@ export function markDuplicates(groups) {
     if (seen.has(key)) {
       g.warnings.push({
         code: 'duplicate',
-        text: `与第 ${seen.get(key) + 1} 组编码相同，复制时会自动加后缀`,
+        text: `与第 ${seen.get(key) + 1} 组编码相同，照片会合并到同一个文件夹`,
       });
     } else {
       seen.set(key, i);
@@ -563,9 +563,10 @@ export async function scanDir(dir, { lang = '' } = {}) {
     if (reason) skipped.push({ file: f.rel, reason });
   });
 
-  // 只对黄色候选跑解码 + OCR：其余照片不需要，省下大量时间
+  // 只对黄色候选跑解码 + OCR：其余照片不需要，省下大量时间。
+  // 并发 3：OCR 是这条流程的主要耗时，2 路时 10 张面单要排好几轮。
   const candidates = entries.filter((e) => e.isBarcode);
-  await mapLimit(candidates, 2, async (e) => {
+  await mapLimit(candidates, 3, async (e) => {
     try {
       const parsed = await readLabelPhoto(e.abs, lang);
       // OCR 常把空格/全角读乱，先归一化再判标签特征

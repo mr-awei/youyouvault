@@ -120,3 +120,61 @@ test('保存并入库：复制、清理旧文件、建 日期/编码 层级并�
     .get(folder.id);
   assert.equal(links.c, 2, '两张图都应挂到编码文件夹');
 });
+
+test('同批重复编码合并到同一个文件夹：不加 -2 后缀，清理也不误伤另一组', async () => {
+  const source = path.join(tmp, 'source2');
+  const output = path.join(tmp, 'output2');
+  fs.mkdirSync(source, { recursive: true });
+  fs.mkdirSync(output, { recursive: true });
+  for (const name of ['A1.JPG', 'A2.JPG', 'B1.JPG']) {
+    await sharp({ create: { width: 200, height: 200, channels: 3, background: '#cccccc' } })
+      .jpeg()
+      .toFile(path.join(source, name));
+  }
+
+  const handler = handlers.get('/api/barcode/apply');
+  assert.ok(handler, 'apply handler 必须注册');
+  let status = 200;
+  let body = null;
+  const res = {
+    status(code) {
+      status = code;
+      return this;
+    },
+    json(value) {
+      body = value;
+      return this;
+    },
+  };
+  await handler(
+    {
+      body: {
+        dir: source,
+        root: output,
+        date: '2026-11-21',
+        importToLibrary: false,
+        parentFolderId: null,
+        // 合并后清理按文件夹做一次，不能把另一组刚复制进来的图当旧文件挪走
+        cleanStale: true,
+        groups: [
+          { code: '46119-Y01A0001-B02', files: ['A1.JPG', 'A2.JPG'] },
+          { code: '46119-Y01A0001-B02', files: ['B1.JPG'] },
+        ],
+      },
+    },
+    res
+  );
+
+  assert.equal(status, 200, JSON.stringify(body));
+  const dateDir = path.join(output, '2026-11-21');
+  const folders = fs.readdirSync(dateDir).filter((n) => !n.startsWith('.'));
+  assert.deepEqual(folders, ['46119-Y01A0001-B02'], '同编码必须落在同一个文件夹');
+  assert.ok(!folders.some((n) => n.endsWith('-2')), '不允许再出现 -2 后缀文件夹');
+
+  const files = fs.readdirSync(path.join(dateDir, '46119-Y01A0001-B02')).sort();
+  assert.deepEqual(files, ['A1.JPG', 'A2.JPG', 'B1.JPG'], '两组照片都要并进同一个文件夹');
+  assert.equal(body.totalCopied, 3);
+  assert.equal(body.cleanedTotal, 0, '合并清理不能把另一组的图判成旧文件');
+  assert.equal(body.results.length, 2);
+  assert.equal(body.results[0].folder, body.results[1].folder, '两组结果指向同一个文件夹');
+});

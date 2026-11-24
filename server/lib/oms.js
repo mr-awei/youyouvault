@@ -25,6 +25,10 @@ const CLIENT_ID = 'e5cd7e4891bf95d1d19206ce24a7b32e';
 const ACCOUNT_FILE = path.join(DATA_DIR, 'oms-account.json');
 /** visual_design_shoot_status：1 = 待拍摄 */
 const SHOOT_STATUS_PENDING = '1';
+/** 查询结果缓存时长：摄影师常连着点几次「查询完整编码」，2 分钟内直接复用 */
+const PENDING_TTL_MS = 120 * 1000;
+/** 产品名基本不会变，缓存久一点，减少上传时的核对请求 */
+const NAME_TTL_MS = 10 * 60 * 1000;
 
 /** 规范化 base URL：只允许 http/https，去掉尾部斜杠 */
 export function normalizeBaseUrl(input) {
@@ -125,6 +129,17 @@ class OmsClient {
     this.lastError = '';
     /** 启动时的「记住登录」只尝试一次，避免每次状态查询都去打 OMS */
     this.restored = false;
+    /** 主 SKU → 待拍摄查询结果；同一批 SKU 反复查询时不必每次都打 OMS */
+    this.pendingCache = new Map();
+    /** 完整 SKU → 后台产品名 */
+    this.nameCache = new Map();
+  }
+
+  /** 缓存条目太多时丢掉最旧的一半，避免长跑进程里无限增长 */
+  trimCache(cache) {
+    if (cache.size <= 300) return;
+    const keys = [...cache.keys()].slice(0, Math.floor(cache.size / 2));
+    for (const k of keys) cache.delete(k);
   }
 
   accountPath() {
@@ -391,18 +406,26 @@ class OmsClient {
    * 取产品的后台名称。
    * 已有「产品图库」记录时直接用记录名；第一次上传的新 SKU 还没有 designOss 记录，
    * 退回「视觉拍摄 / 设计单」里的产品名。
+   * 调用方已经查过图库时可以把 detail 传进来，省掉一次重复请求。
    */
-  async resolveProductName(sku) {
+  async resolveProductName(sku, detail) {
     const s = String(sku || '').trim();
     if (!s) return '';
-    const detail = await this.getProductGallery(s).catch(() => null);
-    if (detail?.displayName) return String(detail.displayName);
-    const mainSku = s.split('-')[0];
-    try {
-      return await this.findDesignProductName(mainSku);
-    } catch {
-      return '';
+    const cached = this.nameCache.get(s);
+    if (cached && Date.now() - cached.at < NAME_TTL_MS) return cached.value;
+    const info = detail === undefined ? await this.getProductGallery(s).catch(() => null) : detail;
+    let name = String(info?.displayName || '').trim();
+    if (!name) {
+      const mainSku = s.split('-')[0];
+      try {
+        name = await this.findDesignProductName(mainSku);
+      } catch {
+        name = '';
+      }
     }
+    this.nameCache.set(s, { at: Date.now(), value: name });
+    this.trimCache(this.nameCache);
+    return name;
   }
 
   /**
@@ -563,16 +586,26 @@ class OmsClient {
   async findPendingByMainSku(mainSku) {
     const sku = String(mainSku || '').trim();
     if (!sku) return { total: 0, rows: [] };
+    const cached = this.pendingCache.get(sku);
+    if (cached && Date.now() - cached.at < PENDING_TTL_MS) return cached.value;
+
     const visual = await this.findVisualShootingByMainSku(sku);
-    if (!visual.total) return visual;
-    const productName = await this.findDesignProductName(sku);
-    return {
-      total: visual.total,
-      rows: visual.rows.map((r) => ({ ...r, productName: r.productName || productName })),
-    };
+    let value = visual;
+    if (visual.total) {
+      // 视觉拍摄页常常已经带产品名，只有真的缺名字才多打一次设计单接口
+      const needName = visual.rows.some((r) => !r.productName);
+      const productName = needName ? await this.findDesignProductName(sku) : '';
+      value = {
+        total: visual.total,
+        rows: visual.rows.map((r) => ({ ...r, productName: r.productName || productName })),
+      };
+    }
+    this.pendingCache.set(sku, { at: Date.now(), value });
+    this.trimCache(this.pendingCache);
+    return value;
   }
 
-  /** 批量查询：并发 4，单个失败不影响其它 SKU */
+  /** 批量查询：并发 6，单个失败不影响其它 SKU */
   async resolveMany(mainSkus) {
     const list = [...new Set((Array.isArray(mainSkus) ? mainSkus : []).map((s) => String(s || '').trim()).filter(Boolean))];
     /** @type {Record<string, {total:number,rows:any[],error?:string}>} */
@@ -590,7 +623,9 @@ class OmsClient {
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(2, list.length) }, worker));
+    // 并发从 2 提到 6：10 个 SKU 的等待时间大致从 5 轮降到 2 轮；
+    // OMS 是普通 REST 接口，6 路并发对它没有压力。
+    await Promise.all(Array.from({ length: Math.min(6, list.length) }, worker));
     return results;
   }
 }
