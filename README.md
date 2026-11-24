@@ -1,6 +1,6 @@
 # 图库 TuKu
 
-[![版本](https://img.shields.io/badge/version-1.6.0-2563eb.svg)](https://github.com/mr-awei/youyouvault/releases/latest)
+[![版本](https://img.shields.io/badge/version-1.6.1-2563eb.svg)](https://github.com/mr-awei/youyouvault/releases/latest)
 [![平台](https://img.shields.io/badge/platform-Windows%2010%2F11-5b6472.svg)](#2-下载与安装)
 [![Electron](https://img.shields.io/badge/Electron-44.4.5-47848f.svg)](#6-架构与数据流)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522.5-339933.svg)](#9-常用命令)
