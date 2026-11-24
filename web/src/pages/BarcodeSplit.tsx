@@ -1108,6 +1108,16 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       onToast('还没有可入库的文件夹', 'error');
       return;
     }
+    // 缺完整编码就停下：入库会把文件夹名当编码写进图库，带着错的编码进去很难改
+    if (missingCodeSkus.length) {
+      onToast(
+        `有 ${missingCodeSkus.length} 个 SKU 缺完整编码（${missingCodeSkus.slice(0, 3).join('、')}${
+          missingCodeSkus.length > 3 ? ' 等' : ''
+        }），补齐后才能入库`,
+        'error'
+      );
+      return;
+    }
     // 不检查「是否已编号」：文件夹可能上一轮就编过号（甚至是在资源管理器里手工改的），
     // 入库只负责把现有文件登记进图库，随时可以直接跑
     const groups = outputFolders.map((f) => {
@@ -1158,6 +1168,16 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   /** 第 8 步：核对 OMS 名称并上传（本轮不测，保留完整实现） */
   const runUpload = async () => {
+    // 缺完整编码就不开传：宁可停下，也别传一半留下脏数据（现成文件夹同样检查）
+    if (missingCodeSkus.length) {
+      onToast(
+        `有 ${missingCodeSkus.length} 个 SKU 缺完整编码（${missingCodeSkus.slice(0, 3).join('、')}${
+          missingCodeSkus.length > 3 ? ' 等' : ''
+        }），补齐后才能上传`,
+        'error'
+      );
+      return;
+    }
     // 没扫描时只面对现成文件夹：直接按 SKU 文件夹名上传，没有产品名可比对
     if (!scan) {
       if (!manualDir || !manualFolders.length) {
@@ -1168,8 +1188,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       return;
     }
     setUploadSkipped(false);
-    // 上传只依赖「有文件夹 + 编码」：不要求先入库，也不因为别的步骤有警告就卡住，
-    // 缺编码的 SKU 会在下面的结果列表里单独标出来
+    // 上传只依赖「有文件夹 + 编码」：不要求先入库，也不因为别的步骤有警告就卡住
     if (!applied) {
       if (manualDir && manualFolders.length) {
         await runManualUpload();
@@ -1350,6 +1369,36 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const currentKey: StepKey = stepOverride ?? autoCurrentKey;
   const notSquareTotal = (ratios || []).reduce((n, it) => n + it.notSquare.length, 0);
 
+  /**
+   * 硬缺口：缺完整编码的 SKU、或一个产品文件夹都没有。
+   * 这两种不往下走——红条强提醒，并挡住「下一步」和跳转。
+   */
+  const missingCodeSkus: string[] = scan
+    ? scan.groups
+        .map((g, i) => {
+          const edit = edits[i];
+          if (edit?.skip) return '';
+          const code = String(edit?.code ?? g.code ?? '').trim();
+          return isFullCode(code) ? '' : code || `第 ${i + 1} 组`;
+        })
+        .filter((s) => !!s)
+    : // 现成文件夹：只有「纯主 SKU」这种明显不是完整编码的才算缺
+      manualFolders.filter((f) => !isFullCode(f.name) && !/^\d{4,6}-/.test(f.name)).map((f) => f.name);
+  const hasFolders = outputFolders.length > 0;
+  // 不同步骤只提醒跟自己有关的缺口：还没建文件夹时别在「创建文件夹」这一步报缺文件夹
+  const showMissingCode =
+    missingCodeSkus.length > 0 &&
+    (currentKey === 'copy' ||
+      currentKey === 'ratio' ||
+      currentKey === 'number' ||
+      currentKey === 'import' ||
+      currentKey === 'upload' ||
+      currentKey === 'report');
+  const showMissingFolder =
+    !hasFolders &&
+    (currentKey === 'ratio' || currentKey === 'number' || currentKey === 'import' || currentKey === 'upload' || currentKey === 'report');
+  const hasHardBlocker = missingCodeSkus.length > 0 || !hasFolders;
+
   /** 进入某一步前必须齐备的东西；返回空串表示可以进入 */
   const canEnterStep = (key: StepKey): string => {
     if (key === 'scan') {
@@ -1358,28 +1407,50 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         : '';
     }
     if (key === 'resolve' || key === 'review' || key === 'copy') {
-      return scan && scan.groups.length ? '' : '请先扫描原始照片，识别出产品分组';
+      if (!(scan && scan.groups.length)) return '请先扫描原始照片，识别出产品分组';
+      // 缺编码 / 没产品图就直接挡在「创建文件夹」门外
+      if (key === 'copy' && codeIssues.length) {
+        return `有 ${codeIssues.length} 处缺完整编码或产品图，补齐后才能创建文件夹`;
+      }
+      return '';
     }
     if (key === 'ratio' || key === 'number' || key === 'import') {
-      return outputFolders.length ? '' : '请先创建产品文件夹（输出目录里至少有一个 SKU 子文件夹）';
+      if (!outputFolders.length) return '请先创建产品文件夹（输出目录里至少有一个 SKU 子文件夹）';
+      // 入库要把文件夹名当编码写进图库，先补齐编码再进
+      if (key === 'import' && missingCodeSkus.length) {
+        return `有 ${missingCodeSkus.length} 个 SKU 缺完整编码（${missingCodeSkus.slice(0, 3).join('、')}${
+          missingCodeSkus.length > 3 ? ' 等' : ''
+        }），补齐后才能入库`;
+      }
+      return '';
     }
     if (key === 'upload') {
-      return outputFolders.length || (manualDir && manualFolders.length)
-        ? ''
-        : '请先选择一个包含若干 SKU 子文件夹的父文件夹，或先扫描并创建文件夹';
+      if (!outputFolders.length && !(manualDir && manualFolders.length)) {
+        return '请先选择一个包含若干 SKU 子文件夹的父文件夹，或先扫描并创建文件夹';
+      }
+      if (missingCodeSkus.length) {
+        return `有 ${missingCodeSkus.length} 个 SKU 缺完整编码（${missingCodeSkus.slice(0, 3).join('、')}${
+          missingCodeSkus.length > 3 ? ' 等' : ''
+        }），补齐后才能上传`;
+      }
+      return '';
     }
     if (key === 'report') {
+      // 报表要 folders 才能出编号/截图，缺文件夹一样停在这里
+      if (!outputFolders.length && !(manualDir && manualFolders.length)) {
+        return '还没有产品文件夹，先完成第 4 步「创建文件夹」再生成报表';
+      }
       // 报表只认 SKU 清单：扫出来的分组、现成文件夹、已建好的文件夹，任意一种够用就能出
       return reportRows.length ? '' : '还没有可导出的 SKU：先扫描分组，或选一个已整理好的文件夹';
     }
     return '';
   };
 
-  /** 步骤条跳转：材料不齐只提示，不切过去（提示用 info，不弹红色报错） */
+  /** 步骤条跳转：材料不齐不切过去；缺编码 / 缺文件夹算硬缺口，用红色强提醒 */
   const goStep = (key: StepKey) => {
     const missing = canEnterStep(key);
     if (missing) {
-      onToast(missing, 'info');
+      onToast(missing, hasHardBlocker ? 'error' : 'info');
       return;
     }
     setStepOverride(key);
@@ -2178,6 +2249,29 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               backdropFilter: 'blur(12px)',
             }}
           >
+            {(showMissingCode || showMissingFolder) && (
+              <div
+                style={{
+                  marginBottom: 8,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: '2px solid var(--danger, #d9534f)',
+                  background: 'rgba(217, 83, 79, 0.2)',
+                  color: 'var(--danger, #d9534f)',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  lineHeight: 1.7,
+                }}
+              >
+                {showMissingCode && (
+                  <div>
+                    缺完整编码 {missingCodeSkus.length} 个：{missingCodeSkus.slice(0, 4).join('、')}
+                    {missingCodeSkus.length > 4 ? ' 等' : ''} —— 补齐后才能继续下一步
+                  </div>
+                )}
+                {showMissingFolder && <div>还没有产品文件夹：先回第 4 步「创建文件夹」</div>}
+              </div>
+            )}
             {flowIssues.length > 0 && (
               <div
                 style={{
