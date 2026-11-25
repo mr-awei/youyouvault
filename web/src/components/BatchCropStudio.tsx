@@ -495,7 +495,9 @@ export default function BatchCropStudio({ items, onClose, onToast, onDone, defau
             ) : (
               <button className="btn sm primary" disabled={starting || !ids.length} onClick={() => void start()}>
                 {starting
-                  ? i18n.t('kf6196bb1')
+                  ? folderMode
+                    ? '裁切中…'
+                    : i18n.t('kf6196bb1')
                   : folderMode
                     ? `保存全部 ${ids.length} 张并覆盖`
                     : save.saveMode === 'copy'

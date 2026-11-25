@@ -80,7 +80,7 @@ async function ensure(): Promise<void> {
  * handler 是同步入队的，退订没有理由异步化。
  */
 export function subscribeEvents(
-  type: 'job' | 'library' | 'hello' | 'canvas' | 'barcode',
+  type: 'job' | 'library' | 'hello' | 'canvas' | 'barcode' | 'barcode-scan',
   fn: Handler
 ): () => void {
   let set = handlersByType.get(type);

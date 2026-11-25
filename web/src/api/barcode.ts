@@ -139,11 +139,19 @@ export function barcodeThumbUrl(dir: string, name: string, max = 240) {
 }
 
 export const barcodeAPI = {
-  barcodeScan: (dir: string, lang = '') =>
+  /** scanId 用于接收 SSE 进度和「停止扫描」 */
+  barcodeScan: (dir: string, lang = '', scanId = '') =>
     request<BarcodeScanResult>('/api/barcode/scan', {
       method: 'POST',
-      body: JSON.stringify({ dir, lang }),
+      body: JSON.stringify({ dir, lang, scanId }),
       timeoutMs: LONG_TIMEOUT_MS,
+    }),
+
+  /** 中途停止扫描（OCR 会在下一张前退出） */
+  barcodeScanCancel: (scanId: string) =>
+    request<{ ok: boolean; cancelled: boolean }>('/api/barcode/scan/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ scanId }),
     }),
 
   barcodeApply: (payload: {
@@ -230,6 +238,13 @@ export const barcodeAPI = {
       count: number;
       samples: string[];
     }>(`/api/barcode/date-folder?${new URLSearchParams({ root, date })}`),
+
+  /** 调整图片归属：把图片从一个产品文件夹移到另一个（入库前调整） */
+  barcodeMoveImages: (payload: { from: string; to: string; files: string[] }) =>
+    request<{ ok: boolean; moved: string[]; errors: { file: string; error: string }[] }>(
+      '/api/barcode/move-image',
+      { method: 'POST', body: JSON.stringify(payload) }
+    ),
 
   /** 列出一级子文件夹与图片数：直接选一个已整理好的文件夹生成报表 */
   barcodeSubfolders: (dir: string) =>

@@ -48,6 +48,17 @@ test('parseBarcodeText：空文本返回空编码', () => {
   assert.deepEqual(r.candidates, []);
 });
 
+test('parseBarcodeText：8 位长数字不会被当成主 SKU', () => {
+  // 黄色木雕照片上 OCR 出的价格串：之前会被当成编码开新组
+  const r = parseBarcodeText('SKU 77778666');
+  assert.equal(r.code, '', '8 位数字不是 4~6 位主 SKU');
+});
+
+test('parseBarcodeText：标签后跟 5 位主 SKU 仍然正常', () => {
+  const r = parseBarcodeText('主SKU 46193 77778666');
+  assert.equal(r.code, '46193');
+});
+
 test('parseBarcodeText：一维码内容优先作为编码', () => {
   const r = parseBarcodeText('拍照送货 26 年 10 28 日 P02610202464 45661 Ebay 套', '45661-Y01Y0001-QD08');
   assert.equal(r.code, '45661-Y01Y0001-QD08');

@@ -13,7 +13,7 @@ import { db, getLibraryGeneration } from '../db.js';
 import { ensureFolderUnderParent, linkImageToFolder } from '../folders.js';
 import { ingest, setTags } from '../library.js';
 import { assertWritableDir } from '../lib/safe-path.js';
-import { naturalCompare, naturalSort, safeCodeName, scanDir } from '../lib/barcode-split.js';
+import { naturalCompare, naturalSort, safeCodeName, scanDir, ScanCancelledError } from '../lib/barcode-split.js';
 import { suggestDateFolder } from '../lib/barcode-naming.js';
 
 const RASTER = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif']);
@@ -346,14 +346,54 @@ export function register(app, ctx) {
   /** 输出目录一有外部改动就推给前端（同一目录只挂一次监听） */
   const notifyOnChange = (dir) => watchOutputDir(dir, sseBroadcast);
 
-  /* 扫描源目录：判黄 + OCR + 分组，不写任何文件 */
+  /* 扫描源目录：判黄 + OCR + 分组，不写任何文件。
+   * 带 scanId 时通过 SSE 推「已处理 X/Y」，并可用 /api/barcode/scan/cancel 中途停掉。 */
+  const scanJobs = new Map();
   app.post(
     '/api/barcode/scan',
     asyncRoute(async (req, res) => {
       const dir = assertSourceDir(req.body?.dir);
       const lang = typeof req.body?.lang === 'string' ? req.body.lang : '';
-      const result = await scanDir(dir, { lang });
-      res.json(result);
+      const scanId = String(req.body?.scanId || '').slice(0, 64) || `scan-${Date.now()}`;
+      const job = { cancelled: false, startedAt: Date.now() };
+      scanJobs.set(scanId, job);
+      const emit = (payload) => {
+        try {
+          sseBroadcast('barcode-scan', { scanId, dir, elapsedMs: Date.now() - job.startedAt, ...payload });
+        } catch {
+          /* 广播失败不影响扫描 */
+        }
+      };
+      emit({ phase: 'start', done: 0, total: 0 });
+      try {
+        const result = await scanDir(dir, {
+          lang,
+          isCancelled: () => job.cancelled,
+          onProgress: (p) => emit(p),
+        });
+        emit({ phase: 'done', done: 1, total: 1 });
+        res.json(result);
+      } catch (err) {
+        if (err instanceof ScanCancelledError || err?.name === 'ScanCancelledError') {
+          emit({ phase: 'cancelled', done: 0, total: 0 });
+          return res.status(499).json({ error: '扫描已取消', code: 'cancelled' });
+        }
+        emit({ phase: 'error', done: 0, total: 0 });
+        throw err;
+      } finally {
+        scanJobs.delete(scanId);
+      }
+    })
+  );
+
+  /* 中途停止扫描：把对应 scanId 标记成已取消，OCR 循环会在下一张前退出 */
+  app.post(
+    '/api/barcode/scan/cancel',
+    asyncRoute(async (req, res) => {
+      const scanId = String(req.body?.scanId || '');
+      const job = scanJobs.get(scanId);
+      if (job) job.cancelled = true;
+      res.json({ ok: true, cancelled: !!job });
     })
   );
 
@@ -753,6 +793,48 @@ export function register(app, ctx) {
         return res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
       }
       res.json({ files: await listImageFiles(dir) });
+    })
+  );
+
+  /* 调整图片归属：把放错文件夹的图挪到另一个产品文件夹（入库前用最稳） */
+  app.post(
+    '/api/barcode/move-image',
+    asyncRoute(async (req, res) => {
+      const from = assertFolder(req.body?.from, '来源文件夹');
+      const to = assertFolder(req.body?.to, '目标文件夹');
+      if (from.toLowerCase() === to.toLowerCase()) {
+        return res.status(400).json({ error: '来源文件夹和目标文件夹相同' });
+      }
+      const list = (Array.isArray(req.body?.files) ? req.body.files : [req.body?.file])
+        .map((v) => String(v || ''))
+        .filter(Boolean)
+        .slice(0, 200);
+      if (!list.length) return res.status(400).json({ error: '没有选中要移动的图片' });
+
+      const moved = [];
+      const errors = [];
+      for (const raw of list) {
+        const name = path.basename(raw);
+        if (!RASTER.has(path.extname(name).toLowerCase())) {
+          errors.push({ file: name, error: '不是图片文件' });
+          continue;
+        }
+        const srcPath = path.join(from, name);
+        try {
+          const st = await fsp.stat(srcPath);
+          if (!st.isFile()) throw new Error('不是文件');
+          // 目标同名时加 (2)，绝不覆盖已有图片
+          const { dest } = await resolveDest(to, srcPath, st.size);
+          await fsp.rename(srcPath, dest);
+          moved.push(path.basename(dest));
+        } catch (err) {
+          errors.push({ file: name, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+      // 两个目录都变了：通知页面重读图片列表
+      notifyOnChange(from);
+      notifyOnChange(to);
+      res.json({ ok: true, moved, errors });
     })
   );
 

@@ -106,7 +106,9 @@ export function parseBarcodeText(raw, barcodeText = '') {
    * 主 SKU 现场统一是 5 位。OCR 偶尔把 5 位读成 4 位（44124 → 4404），
    * 所以同一段文本里若另有 5 位数字，优先信 5 位，而不是标签后面紧跟的那个。
    */
-  const labeledSku = skuMatch?.[1] || '';
+  // 标签后面可能跟一串 PO 号或价格（77778666 这种 8 位数）：主 SKU 只可能是 4~6 位
+  const rawLabeled = skuMatch?.[1] || '';
+  const labeledSku = /^\d{4,6}$/.test(rawLabeled) || /^\d{4,6}-/.test(rawLabeled) ? rawLabeled : '';
   const fiveDigit = numerics.find((n) => n.length === 5);
   const primarySku =
     fiveDigit && labeledSku && labeledSku.length !== 5 ? fiveDigit : labeledSku || fiveDigit || numerics[0] || '';
@@ -531,17 +533,31 @@ async function readLabelPhoto(abs, lang) {
   }
 }
 
+/** 用户中途点了「停止扫描」 */
+export class ScanCancelledError extends Error {
+  constructor() {
+    super('扫描已取消');
+    this.name = 'ScanCancelledError';
+  }
+}
+
 /**
  * 扫描一个拍摄目录。
  * @param {string} dir 绝对路径
- * @param {{lang?: string}} [opts]
+ * @param {{lang?: string, onProgress?: (p: {phase: string, done: number, total: number}) => void, isCancelled?: () => boolean}} [opts]
  */
-export async function scanDir(dir, { lang = '' } = {}) {
+export async function scanDir(dir, { lang = '', onProgress, isCancelled } = {}) {
+  const throwIfCancelled = () => {
+    if (isCancelled?.()) throw new ScanCancelledError();
+  };
   const files = await collectImages(dir);
   const skipped = [];
   const entries = new Array(files.length);
+  let filtered = 0;
+  onProgress?.({ phase: 'filter', done: 0, total: files.length });
 
   await mapLimit(files, 6, async (f, i) => {
+    throwIfCancelled();
     let barcode = false;
     let reason = '';
     try {
@@ -561,22 +577,38 @@ export async function scanDir(dir, { lang = '' } = {}) {
       ocrError: '',
     };
     if (reason) skipped.push({ file: f.rel, reason });
+    filtered += 1;
+    // 每 5 张报一次进度，避免几百张图刷屏
+    if (filtered % 5 === 0 || filtered === files.length) {
+      onProgress?.({ phase: 'filter', done: filtered, total: files.length });
+    }
   });
 
   // 只对黄色候选跑解码 + OCR：其余照片不需要，省下大量时间。
   // 并发 3：OCR 是这条流程的主要耗时，2 路时 10 张面单要排好几轮。
   const candidates = entries.filter((e) => e.isBarcode);
+  let ocrDone = 0;
+  onProgress?.({ phase: 'ocr', done: 0, total: candidates.length });
   await mapLimit(candidates, 3, async (e) => {
+    throwIfCancelled();
     try {
       const parsed = await readLabelPhoto(e.abs, lang);
       // OCR 常把空格/全角读乱，先归一化再判标签特征
       const normalized = toHalfWidth(parsed.rawText).toUpperCase().replace(/\s+/g, ' ');
-      const labelHint =
-        LABEL_TEXT_RE.test(normalized) || FULL_CODE_RE.test(normalized.replace(/\s+/g, ''));
+      const compactText = normalized.replace(/\s+/g, '');
+      const labelHint = LABEL_TEXT_RE.test(normalized) || FULL_CODE_RE.test(compactText);
       const decoded = !!parsed.barcodeText;
-      // 黄色包装盒 / 黄色产品也会过黄筛，但它们没有「拍照送货单 / 主SKU / PO」
-      // 字样，也解不出一维码。这类图片要退回产品图，不能让它们开新组。
-      if (!decoded && !labelHint) {
+      /**
+       * 必须有「明确的主 SKU」才算条码照片：5 位/4~6 位独立数字，或完整编码。
+       * 黄色木雕、黄色包装盒这类照片也会过黄筛，OCR 常把包装上的长串数字
+       * （77778666）读出来，之前会被当成编码开新组；这里只认 4~6 位。
+       */
+      const skuCode = String(parsed.code || '').trim();
+      const hasSku =
+        /^\d{4,6}(?:-|$)/.test(skuCode) ||
+        (Array.isArray(parsed.candidates) && parsed.candidates.some((c) => /^\d{4,6}(?:-|$)/.test(String(c).trim())));
+      // 黄色包装盒 / 黄色产品：既没有送货单字样，也没有 4~6 位主 SKU，退回产品图
+      if (!hasSku || (!decoded && !labelHint)) {
         e.isBarcode = false;
         e.code = '';
         e.codeSource = '';
@@ -592,6 +624,9 @@ export async function scanDir(dir, { lang = '' } = {}) {
       e.barcodeText = parsed.barcodeText;
     } catch (err) {
       e.ocrError = String(err instanceof Error ? err.message : err);
+    } finally {
+      ocrDone += 1;
+      onProgress?.({ phase: 'ocr', done: ocrDone, total: candidates.length });
     }
   });
 
