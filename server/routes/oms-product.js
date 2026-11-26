@@ -15,18 +15,23 @@ import { collectImages } from '../lib/barcode-split.js';
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|bmp|tiff?|heic|heif)$/i;
 
+/** 用户输入类错误：按 400 返回，别当成服务端 500 刷错误日志 */
+function userError(message) {
+  return Object.assign(new Error(message), { status: 400 });
+}
+
 function assertDir(input) {
   const raw = String(input ?? '').trim();
-  if (!raw) throw new Error('请选择文件夹');
-  if (!path.isAbsolute(raw)) throw new Error(`文件夹必须是绝对路径（收到：${raw}）`);
+  if (!raw) throw userError('请选择文件夹');
+  if (!path.isAbsolute(raw)) throw userError(`文件夹必须是绝对路径（收到：${raw}）`);
   const abs = path.resolve(raw);
   let st;
   try {
     st = fs.statSync(abs);
   } catch {
-    throw new Error(`文件夹不存在：${abs}`);
+    throw userError(`文件夹不存在：${abs}`);
   }
-  if (!st.isDirectory()) throw new Error(`不是文件夹：${abs}`);
+  if (!st.isDirectory()) throw userError(`不是文件夹：${abs}`);
   return abs;
 }
 
@@ -36,38 +41,54 @@ function normalizeName(value) {
     .toLowerCase();
 }
 
-/** 根目录下的 SKU 子文件夹；如果根目录本身就是 SKU 文件夹，返回单行 */
-async function listSkuFolders(root) {
-  const entries = await fsp.readdir(root, { withFileTypes: true });
-  const dirs = entries.filter(
-    (e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules'
-  );
-  if (!dirs.length) {
-    const files = await collectImages(root);
-    const st = await fsp.stat(root);
-    return [
-      {
-        name: path.basename(root),
-        sku: path.basename(root),
-        dir: root,
-        imageCount: files.filter((f) => IMAGE_EXT.test(f.rel)).length,
-        mtime: st.mtime.toISOString(),
-      },
-    ];
-  }
+/** 目录名像完整编码（46200-Y01Y0001-QD08）就当成 SKU 文件夹，否则当分类容器 */
+const CODE_DIR_RE = /^\d{4,6}(?:-|$)/;
+
+async function folderRow(abs) {
+  const files = await collectImages(abs);
+  const st = await fsp.stat(abs).catch(() => null);
+  const name = path.basename(abs);
+  return {
+    name,
+    sku: name,
+    dir: abs,
+    imageCount: files.filter((f) => IMAGE_EXT.test(f.rel)).length,
+    mtime: st ? st.mtime.toISOString() : '',
+  };
+}
+
+/**
+ * 列出 SKU 文件夹。默认只列根目录下一级；
+ * 开了「日期下一级分类」（日期/eBay/编码）时 SKU 在第二层，传 depth=2 穿透分类目录。
+ * 分类目录名不会是完整编码，所以按目录名判断要不要继续下钻。
+ * 根目录本身就是 SKU 文件夹（没有子目录）时，返回单行。
+ */
+export async function listSkuFolders(root, depth = 1) {
+  const readDirs = async (dir) => {
+    try {
+      const entries = await fsp.readdir(dir, { withFileTypes: true });
+      return entries.filter(
+        (e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules'
+      );
+    } catch {
+      return [];
+    }
+  };
+
   const rows = [];
-  for (const d of dirs) {
-    const abs = path.join(root, d.name);
-    const files = await collectImages(abs);
-    const st = await fsp.stat(abs).catch(() => null);
-    rows.push({
-      name: d.name,
-      sku: d.name,
-      dir: abs,
-      imageCount: files.filter((f) => IMAGE_EXT.test(f.rel)).length,
-      mtime: st ? st.mtime.toISOString() : '',
-    });
-  }
+  const walk = async (dir, level) => {
+    for (const d of await readDirs(dir)) {
+      const abs = path.join(dir, d.name);
+      const descend = level + 1 < depth && !CODE_DIR_RE.test(d.name);
+      if (descend && (await readDirs(abs)).length) {
+        await walk(abs, level + 1);
+        continue;
+      }
+      rows.push(await folderRow(abs));
+    }
+  };
+  await walk(root, 0);
+  if (!rows.length && !(await readDirs(root)).length) return [await folderRow(root)];
   rows.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }));
   return rows;
 }
@@ -248,7 +269,9 @@ export function register(app, ctx) {
     '/api/oms/product/folder-shot',
     asyncRoute(async (req, res) => {
       const root = assertDir(String(req.query.dir || ''));
-      const rows = await listSkuFolders(root);
+      // depth=2 用于「日期/分类/编码」这种层级：截图仍要列到 SKU 层
+      const depth = Math.min(2, Math.max(1, Number(req.query.depth) || 1));
+      const rows = await listSkuFolders(root, depth);
       const lineH = 34;
       const top = 54;
       const width = 900;

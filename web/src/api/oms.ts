@@ -61,9 +61,14 @@ export interface OmsProductUploadResult {
 
 const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 
-/** SKU 文件夹截图（工作成果列用） */
-export function omsProductFolderShotUrl(dir: string) {
-  return `/api/oms/product/folder-shot?${new URLSearchParams({ dir }).toString()}`;
+/**
+ * SKU 文件夹截图（工作成果列用）。
+ * depth=2：输出目录是「日期/分类/编码」时，穿透分类目录，截图里仍然是 SKU 文件夹。
+ */
+export function omsProductFolderShotUrl(dir: string, depth = 1) {
+  const q = new URLSearchParams({ dir });
+  if (depth > 1) q.set('depth', String(depth));
+  return `/api/oms/product/folder-shot?${q.toString()}`;
 }
 
 export const omsAPI = {

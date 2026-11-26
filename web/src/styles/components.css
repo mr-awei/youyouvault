@@ -889,3 +889,35 @@ select.select {
   border-radius: 99px;
   vertical-align: middle;
 }
+
+/* ============ 流程进度条（条码拆分等批量操作） ============ */
+.run-progress {
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+.run-progress > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--gradient);
+  transition: width 0.25s ease;
+}
+/* 拿不到准确总数时用滚动条：明确“还在跑”，而不是停住 */
+.run-progress.indeterminate > i {
+  width: 34%;
+  animation: run-indeterminate 1.15s ease-in-out infinite;
+}
+@keyframes run-indeterminate {
+  0% {
+    margin-left: -34%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+[data-theme='light'] .run-progress {
+  background: rgba(15, 23, 42, 0.1);
+}

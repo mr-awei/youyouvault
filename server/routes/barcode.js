@@ -95,19 +95,24 @@ async function replaceImage(tmp, abs) {
   throw last;
 }
 
+/** 用户输入类错误：按 400 返回，别当成服务端 500 刷错误日志 */
+function userError(message) {
+  return Object.assign(new Error(message), { status: 400 });
+}
+
 /** 源目录只读校验：必须绝对路径且真实存在 */
 function assertSourceDir(input) {
   const raw = String(input ?? '').trim();
-  if (!raw) throw new Error('请选择源目录');
-  if (!path.isAbsolute(raw)) throw new Error(`源目录必须是绝对路径（收到：${raw}）`);
+  if (!raw) throw userError('请选择源目录');
+  if (!path.isAbsolute(raw)) throw userError(`源目录必须是绝对路径（收到：${raw}）`);
   const resolved = path.resolve(raw);
   let st;
   try {
     st = fs.statSync(resolved);
   } catch {
-    throw new Error(`源目录不存在：${resolved}`);
+    throw userError(`源目录不存在：${resolved}`);
   }
-  if (!st.isDirectory()) throw new Error(`源目录不是文件夹：${resolved}`);
+  if (!st.isDirectory()) throw userError(`源目录不是文件夹：${resolved}`);
   return resolved;
 }
 
@@ -120,27 +125,69 @@ function isInside(parent, child) {
 /** 输出侧文件夹校验：必须是绝对路径且真实存在的目录 */
 function assertFolder(input, label = '编码文件夹') {
   const raw = String(input ?? '').trim();
-  if (!raw) throw new Error(`${label}不能为空`);
-  if (!path.isAbsolute(raw)) throw new Error(`${label}必须是绝对路径（收到：${raw}）`);
+  if (!raw) throw userError(`${label}不能为空`);
+  if (!path.isAbsolute(raw)) throw userError(`${label}必须是绝对路径（收到：${raw}）`);
   const resolved = path.resolve(raw);
   let st;
   try {
     st = fs.statSync(resolved);
   } catch {
-    throw new Error(`${label}不存在：${resolved}`);
+    throw userError(`${label}不存在：${resolved}`);
   }
-  if (!st.isDirectory()) throw new Error(`${label}不是文件夹：${resolved}`);
+  if (!st.isDirectory()) throw userError(`${label}不是文件夹：${resolved}`);
   return resolved;
 }
 
-/** 文件夹里直接包含的图片文件名（不含子目录），按自然顺序排 */
-async function listImageFiles(dir) {
-  const entries = await fsp.readdir(dir, { withFileTypes: true });
-  return naturalSort(
-    entries
-      .filter((e) => e.isFile() && RASTER.has(path.extname(e.name).toLowerCase()))
-      .map((e) => e.name)
-  );
+/**
+ * 递归列图：返回相对 dir 的路径（用 / 分隔，前端缩略图与 path.resolve 都能直接用）。
+ * 拍摄素材常按机位/批次分子目录，只读一层会把子目录里的图当成不存在。
+ */
+async function listImageFilesDeep(dir) {
+  const out = [];
+  const walk = async (absDir, relDir) => {
+    let entries;
+    try {
+      entries = await fsp.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      const rel = relDir ? `${relDir}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        await walk(path.join(absDir, e.name), rel);
+      } else if (e.isFile() && RASTER.has(path.extname(e.name).toLowerCase())) {
+        out.push(rel);
+      }
+    }
+  };
+  await walk(dir, '');
+  return naturalSort(out);
+}
+
+/** 删掉已经空了的子目录（不含 dir 自己），非空或被占用就留着 */
+async function pruneEmptyDirs(dir) {
+  const walk = async (absDir, isRoot) => {
+    let entries;
+    try {
+      entries = await fsp.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory() && !e.name.startsWith('.')) {
+        await walk(path.join(absDir, e.name), false);
+      }
+    }
+    if (!isRoot) {
+      try {
+        if (!(await fsp.readdir(absDir)).length) await fsp.rmdir(absDir);
+      } catch {
+        /* 非空 / 被占用：留在那里不影响流程 */
+      }
+    }
+  };
+  await walk(dir, true);
 }
 
 /**
@@ -185,7 +232,7 @@ async function listSubfolders(dir) {
   for (const e of dirs) {
     let files = 0;
     try {
-      files = (await listImageFiles(path.join(dir, e.name))).length;
+      files = (await listImageFilesDeep(path.join(dir, e.name))).length;
     } catch {
       /* 无权限/读失败按 0 张处理 */
     }
@@ -208,15 +255,13 @@ async function imageSize(abs) {
   return { width, height };
 }
 
-/** 请求里的文件名是否安全且确实位于 dir 内 */
-function safeChildName(dir, name) {
-  const raw = String(name ?? '').trim();
-  if (!raw || raw.includes('..') || path.isAbsolute(raw) || raw.includes('/') || raw.includes('\\')) {
-    return '';
-  }
+/** 允许子目录的相对路径（a/b/1.jpg）：递归列出的图片要能原样回读 */
+function safeChildRel(dir, name) {
+  const raw = String(name ?? '').trim().replace(/\\/g, '/');
+  if (!raw || raw.includes('..') || path.isAbsolute(raw)) return '';
   if (!RASTER.has(path.extname(raw).toLowerCase())) return '';
   const abs = path.resolve(dir, raw);
-  return isInside(dir, abs) ? abs : '';
+  return isInside(dir, abs) && abs !== path.resolve(dir) ? abs : '';
 }
 
 /**
@@ -528,7 +573,12 @@ export function register(app, ctx) {
               errors.push({ file: String(rel), error: '不是文件' });
               continue;
             }
-            const { dest, same } = await resolveDest(folder, src, st.size);
+            // 源目录是多级嵌套时保留相对子目录，避免不同机位的同名文件互相覆盖
+            const relDir = path.dirname(String(rel));
+            const destDir =
+              relDir && relDir !== '.' && relDir !== '/' ? path.join(folder, relDir) : folder;
+            if (destDir !== folder) await fsp.mkdir(destDir, { recursive: true });
+            const { dest, same } = await resolveDest(destDir, src, st.size);
             if (same) {
               skipped++;
               destFiles.push(dest);
@@ -647,11 +697,13 @@ export function register(app, ctx) {
         }
 
         const names =
-          Array.isArray(it?.files) && it.files.length ? it.files.map(String) : await listImageFiles(dir);
+          Array.isArray(it?.files) && it.files.length
+            ? it.files.map(String)
+            : await listImageFilesDeep(dir);
         const notSquare = [];
         const errors = [];
         for (const name of names) {
-          const abs = safeChildName(dir, name);
+          const abs = safeChildRel(dir, name);
           if (!abs) {
             errors.push({ file: String(name), error: '文件名不合法或不是图片' });
             continue;
@@ -694,11 +746,13 @@ export function register(app, ctx) {
         }
 
         const names =
-          Array.isArray(it?.files) && it.files.length ? it.files.map(String) : await listImageFiles(dir);
+          Array.isArray(it?.files) && it.files.length
+            ? it.files.map(String)
+            : await listImageFilesDeep(dir);
         const cropped = [];
         const errors = [];
         for (const name of names) {
-          const abs = safeChildName(dir, name);
+          const abs = safeChildRel(dir, name);
           if (!abs) {
             errors.push({ file: String(name), error: '文件名不合法或不是图片' });
             continue;
@@ -749,7 +803,7 @@ export function register(app, ctx) {
           items.push({ code, file, cropped: false, error: err instanceof Error ? err.message : String(err) });
           continue;
         }
-        const abs = safeChildName(dir, file);
+        const abs = safeChildRel(dir, file);
         if (!abs) {
           items.push({ code, file, cropped: false, error: '文件名不合法或不是图片' });
           continue;
@@ -792,7 +846,7 @@ export function register(app, ctx) {
       } catch (err) {
         return res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
       }
-      res.json({ files: await listImageFiles(dir) });
+      res.json({ files: await listImageFilesDeep(dir) });
     })
   );
 
@@ -814,21 +868,22 @@ export function register(app, ctx) {
       const moved = [];
       const errors = [];
       for (const raw of list) {
-        const name = path.basename(raw);
-        if (!RASTER.has(path.extname(name).toLowerCase())) {
-          errors.push({ file: name, error: '不是图片文件' });
+        // 允许 a/b/1.jpg 这种子目录相对路径：编号前也可能把机位子目录里的图换组
+        const rel = String(raw || '').trim().replace(/\\/g, '/');
+        const srcPath = safeChildRel(from, rel);
+        if (!srcPath) {
+          errors.push({ file: rel, error: '文件名不合法或不是图片' });
           continue;
         }
-        const srcPath = path.join(from, name);
         try {
           const st = await fsp.stat(srcPath);
           if (!st.isFile()) throw new Error('不是文件');
-          // 目标同名时加 (2)，绝不覆盖已有图片
+          // 目标同名时加 (2)，绝不覆盖已有图片；子目录里的图落到目标夹根，后续编号会统一摊平
           const { dest } = await resolveDest(to, srcPath, st.size);
           await fsp.rename(srcPath, dest);
           moved.push(path.basename(dest));
         } catch (err) {
-          errors.push({ file: name, error: err instanceof Error ? err.message : String(err) });
+          errors.push({ file: rel, error: err instanceof Error ? err.message : String(err) });
         }
       }
       // 两个目录都变了：通知页面重读图片列表
@@ -861,7 +916,7 @@ export function register(app, ctx) {
           continue;
         }
 
-        const onDisk = await listImageFiles(dir);
+        const onDisk = await listImageFilesDeep(dir);
         // 用户选定顺序优先：每个产品最多 5 张排最前，其余按自然序跟随；没传 files 时维持旧行为。
         // 前端已经限制 5 张，这里再截一次，避免手工调接口传入更多顺序。
         const requested = Array.isArray(it?.files)
@@ -873,7 +928,7 @@ export function register(app, ctx) {
           const picked = [];
           for (const name of requested) {
             if (picked.length >= 5) break;
-            if (!safeChildName(dir, name) || !onDisk.includes(name) || seen.has(name)) continue;
+            if (!safeChildRel(dir, name) || !onDisk.includes(name) || seen.has(name)) continue;
             seen.add(name);
             picked.push(name);
           }
@@ -882,7 +937,8 @@ export function register(app, ctx) {
         const errors = [];
         const temps = [];
         const stamp = Date.now();
-        // 两段式改名：先全部改成临时名，避免 1.jpg 已存在时互相覆盖
+        // 两段式改名：先全部改成临时名，避免 1.jpg 已存在时互相覆盖。
+        // 源里可能有多级子目录：最终都落到编码夹根（1.jpg…N.jpg），保证入库/上传的顺序唯一可靠
         try {
           for (let i = 0; i < names.length; i++) {
             const name = names[i];
@@ -895,6 +951,8 @@ export function register(app, ctx) {
             await fsp.rename(temps[i].tmp, path.join(dir, target));
             temps[i].tmp = '';
           }
+          // 图片都提到根了，把空出来的子目录清掉，别在输出里留下空壳
+          await pruneEmptyDirs(dir);
         } catch (err) {
           errors.push({ file: '', error: err instanceof Error ? err.message : String(err) });
           // 尽力恢复：还没落到最终名的临时文件改回原名
@@ -907,7 +965,7 @@ export function register(app, ctx) {
             }
           }
         }
-        results.push({ code, dir, files: await listImageFiles(dir), errors });
+        results.push({ code, dir, files: await listImageFilesDeep(dir), errors });
       }
       res.json({ results });
     })
@@ -992,7 +1050,7 @@ export function register(app, ctx) {
         const importErrors = [];
         let libraryFolderId = null;
         try {
-          const names = await listImageFiles(folder);
+          const names = await listImageFilesDeep(folder);
           if (!names.length) {
             importErrors.push({ file: '', error: '文件夹里没有图片' });
           } else {

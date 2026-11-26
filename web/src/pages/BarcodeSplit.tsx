@@ -16,10 +16,12 @@ import {
   type BarcodeRatioItemResult,
   type BarcodeScanResult,
   type OmsDesignRow,
+  type OmsProductUploadResult,
   type OmsStatus,
 } from '../api';
 import { IconArrowUpRight, IconBarcode, IconCopy, IconFolder, IconRefresh } from '../components/Icons';
 import { getApiToken } from '../api/core';
+import { buildWorkReportTable } from '../lib/work-report-table';
 import { confirmDialog } from '../components/Dialogs';
 import { subscribeEvents } from '../events';
 import BatchCropStudio, { type CropItem } from '../components/BatchCropStudio';
@@ -59,6 +61,37 @@ interface UploadOutcome {
   message: string;
 }
 
+/**
+ * 上传结果 → 列表行状态。
+ * 部分图片失败（后端 200 但 failed 非空）也要报出来，否则「已上传 N 张」会让人以为全传完了。
+ */
+function describeUpload(res: OmsProductUploadResult): { outcome: UploadOutcome; failedParts: number } {
+  const failedList = Array.isArray(res.failed) ? res.failed : [];
+  const failedParts = failedList.length;
+  const parts = [
+    res.uploaded > 0 ? `已上传 ${res.uploaded} 张到 OMS` : `后台已有这 ${res.skipped} 张，未重复上传`,
+  ];
+  if (res.uploaded > 0 && res.skipped) parts.push(`跳过 ${res.skipped} 张已存在`);
+  if (failedParts) {
+    parts.push(
+      `${failedParts} 张失败：${failedList
+        .slice(0, 2)
+        .map((f) => `${f.file}：${f.error}`)
+        .join('；')}`
+    );
+  }
+  return {
+    failedParts,
+    outcome: {
+      state: failedParts ? 'error' : res.uploaded > 0 ? 'uploaded' : 'skipped',
+      uploaded: res.uploaded,
+      skipped: res.skipped,
+      shootCount: res.shootCount,
+      message: parts.join('；'),
+    },
+  };
+}
+
 /** 本地日期（不用 toISOString，凌晨 0-8 点会被算成前一天） */
 function localToday(): string {
   const d = new Date();
@@ -72,11 +105,15 @@ function isFullCode(code: string) {
   return FULL_CODE_RE.test(String(code || '').trim());
 }
 
-/** 三段式 SKU：第二段以 Y01 开头算 eBay，其余非 eBay；非三段式留空 */
+/**
+ * 平台判定：只看第二段的第 2、3 位，不管开头字母是什么——
+ * 02 / 05 是非 eBay，其余（01、10、06、07、99…）一律 eBay，都要做 1:1。
+ * 没有第二段（只有主 SKU）也按 eBay 处理。
+ */
 function platformOf(code: string) {
-  const m = String(code || '').trim().match(/^\d{4,6}-([A-Z0-9]+)-[A-Z0-9]+$/i);
-  if (!m) return '';
-  return /^Y01/i.test(m[1]) ? 'eBay' : '非eBay';
+  const seg = String(code || '').trim().split('-')[1] || '';
+  const flag = seg.toUpperCase().slice(1, 3);
+  return flag === '02' || flag === '05' ? '非eBay' : 'eBay';
 }
 
 /** 九个固定步骤：识别 → 查询 → 核对 → 建夹 → 构图 → 编号 → 入库 → 上传 → 报表 */
@@ -96,7 +133,7 @@ const STEP_DEFS: { key: StepKey; title: string }[] = [
   { key: 'resolve', title: '查询完整编码' },
   { key: 'review', title: '核对编码' },
   { key: 'copy', title: '创建文件夹' },
-  { key: 'ratio', title: 'eBay 构图' },
+  { key: 'ratio', title: '1:1 构图' },
   { key: 'number', title: '图片编号' },
   { key: 'import', title: '入库' },
   { key: 'upload', title: '上传 OMS' },
@@ -142,6 +179,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     elapsedMs: number;
   } | null>(null);
   const scanIdRef = useRef('');
+  /** 用户是否手动改过拍摄日期：改过就不再被扫描结果的建议日期覆盖 */
+  const dateTouchedRef = useRef(false);
   const [cancelling, setCancelling] = useState(false);
   const [applyMode, setApplyMode] = useState<
     | 'copy'
@@ -215,10 +254,10 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [moveDst, setMoveDst] = useState('');
   const [moveSel, setMoveSel] = useState<string[]>([]);
   const [moving, setMoving] = useState(false);
-  /** 第 5 步：复用图库里的批量裁切台，直接裁输出文件夹里还没入库的 eBay 图 */
+  /** 第 5 步：复用图库里的批量裁切台，直接裁输出文件夹里还没入库的图 */
   const [cropStudioOpen, setCropStudioOpen] = useState(false);
   const [cropStudioItems, setCropStudioItems] = useState<CropItem[]>([]);
-  /** 参与 1:1 检查/裁切的文件夹；默认只选 eBay，用户可手动勾选其它平台 */
+  /** 参与 1:1 检查/裁切的文件夹；默认全选（eBay 必须 1:1），用户可取消勾选跳过 */
   const [ratioInclude, setRatioInclude] = useState<Record<string, boolean>>({});
 
   // 每个摄影师用自己的 OMS 账号：进页面先读一次配置状态
@@ -357,8 +396,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     return out;
   };
 
-  const manualFolderPath = (name: string) =>
-    `${manualDir.replace(/[\\/]+$/, '')}\\${name}`;
+  // 分隔符跟随用户选的目录：macOS/Linux 上用「\」拼出来的路径在服务端 stat 不到
+  const manualFolderPath = (name: string) => {
+    const base = manualDir.replace(/[\\/]+$/, '');
+    return `${base}${manualDir.includes('\\') ? '\\' : '/'}${name}`;
+  };
 
   /** 重新读已选文件夹：用户在资源管理器里增删/改名后同步列表，别拿旧名字去上传 */
   const refreshManualFolders = async () => {
@@ -430,8 +472,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setReported(false);
   };
 
-  /** 选一个已经整理好的父文件夹（里面是若干 SKU 子文件夹），报表/上传共用 */
-  const pickManualReportDir = async (target: StepKey = 'report') => {
+  /**
+   * 选一个已经整理好的父文件夹（里面是若干 SKU 子文件夹），编号/入库/上传/报表共用。
+   * target 传 null 表示不锁步骤：落在第一条还没做的步骤（通常是 1:1 检查），由步骤条自己决定。
+   */
+  const pickManualReportDir = async (target: StepKey | null = 'report') => {
     const dir = await pickFolder();
     if (!dir) return;
     try {
@@ -610,7 +655,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           mainSku: g.code.trim().match(/^(\d{4,6})/)?.[1] || '',
         }))
       );
-      setDate((prev) => prev || result.date);
+      // 日期默认是「今天」，但扫描结果带的是照片 EXIF 拍摄日期：隔天早上处理昨晚的素材时，
+      // 不跟着改就会把文件夹和日报放进错误的日期。用户手动改过日期就尊重用户的选择。
+      if (!dateTouchedRef.current && result.date) setDate(result.date);
       setDateFolder((prev) => prev || result.date);
       if (!result.groups.length) onToast(i18n.t('k07190065'));
       // 已配置 OMS 时顺手换成完整编码并补产品名（只取「待拍摄」）
@@ -676,59 +723,57 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     let done = 0;
     let uploadedTotal = 0;
     let failed = 0;
-    for (const f of manualFolders) {
-      const folder = manualFolderPath(f.name);
-      setUploads((prev) => ({
-        ...prev,
-        [folder]: { state: 'uploading', uploaded: 0, skipped: 0, shootCount: 0, message: '正在上传…' },
-      }));
-      try {
-        const res = await api.omsProductUpload({
-          sku: f.name,
-          dir: folder,
-          expectedName: names[f.name] || '',
-        });
-        uploadedTotal += res.uploaded;
-        if (res.displayName) {
-          setManualNames((prev) => (prev[f.name] ? prev : { ...prev, [f.name]: res.displayName }));
+    try {
+      for (const f of manualFolders) {
+        const folder = manualFolderPath(f.name);
+        setUploads((prev) => ({
+          ...prev,
+          [folder]: { state: 'uploading', uploaded: 0, skipped: 0, shootCount: 0, message: '正在上传…' },
+        }));
+        try {
+          const res = await api.omsProductUpload({
+            sku: f.name,
+            dir: folder,
+            expectedName: names[f.name] || '',
+          });
+          const { outcome, failedParts } = describeUpload(res);
+          uploadedTotal += res.uploaded;
+          // 部分图片没传上去也算这个 SKU 没完成：留着红行，再点一次会只补缺失的
+          if (failedParts) failed += 1;
+          if (res.displayName) {
+            setManualNames((prev) => (prev[f.name] ? prev : { ...prev, [f.name]: res.displayName }));
+          }
+          setUploads((prev) => ({ ...prev, [folder]: outcome }));
+        } catch (err) {
+          failed += 1;
+          const e = err as Error & { code?: string };
+          setUploads((prev) => ({
+            ...prev,
+            [folder]: {
+              state: e.code === 'name_mismatch' ? 'mismatch' : 'error',
+              uploaded: 0,
+              skipped: 0,
+              shootCount: 0,
+              message: e.message,
+            },
+          }));
+        } finally {
+          done += 1;
+          setUploadProgress({ done, total: manualFolders.length });
         }
-        setUploads((prev) => ({
-          ...prev,
-          [folder]: {
-            state: res.uploaded > 0 ? 'uploaded' : 'skipped',
-            uploaded: res.uploaded,
-            skipped: res.skipped,
-            shootCount: res.shootCount,
-            message:
-              res.uploaded > 0
-                ? `已上传 ${res.uploaded} 张到 OMS${res.skipped ? `，跳过 ${res.skipped} 张已存在` : ''}`
-                : `后台已有这 ${res.skipped} 张，未重复上传`,
-          },
-        }));
-      } catch (err) {
-        failed += 1;
-        const e = err as Error & { code?: string };
-        setUploads((prev) => ({
-          ...prev,
-          [folder]: {
-            state: e.code === 'name_mismatch' ? 'mismatch' : 'error',
-            uploaded: 0,
-            skipped: 0,
-            shootCount: 0,
-            message: e.message,
-          },
-        }));
-      } finally {
-        done += 1;
-        setUploadProgress({ done, total: manualFolders.length });
       }
+      setUploadedOk(failed === 0);
+      onToast(
+        failed
+          ? `已上传 ${uploadedTotal} 张；${failed} 个 SKU 没全部传上去，详情见列表`
+          : `已上传 ${uploadedTotal} 张到 OMS`,
+        failed ? 'error' : 'info'
+      );
+    } finally {
+      setApplyMode(null);
+      // 不收尾的话，下一次编号/入库会把上次的「18/18 · 100%」当成自己的进度
+      setUploadProgress(null);
     }
-    setUploadedOk(failed === 0);
-    onToast(
-      failed ? `已上传 ${uploadedTotal} 张；${failed} 个 SKU 上传失败，详情见列表` : `已上传 ${uploadedTotal} 张到 OMS`,
-      failed ? 'error' : 'info'
-    );
-    setApplyMode(null);
   };
 
   /**
@@ -736,15 +781,25 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
    * 不弹二次确认；用户点主按钮「保存 / 入库 / 上传」即视为同意这一步。
    */
   const uploadAppliedGroups = async (result: BarcodeApplyResponse) => {
-    const pending = result.results.filter((r) => r.folder);
+    // 同编码的多个分组会落到同一个文件夹：只传一次，否则第二次会把第一次的上传结果覆盖成「后台已有」
+    const byFolder = new Map<string, BarcodeApplyResponse['results'][number]>();
+    for (const r of result.results) {
+      if (!r.folder) continue;
+      const key = r.folder.toLowerCase();
+      const prev = byFolder.get(key);
+      const name = String(edits[r.sourceIndex]?.productName || '').trim();
+      const prevName = prev ? String(edits[prev.sourceIndex]?.productName || '').trim() : '';
+      // 优先保留填了产品名的那一组（上传前要拿它核对后台名称）
+      if (!prev || (!prevName && name)) byFolder.set(key, r);
+    }
+    const pending = [...byFolder.values()];
     setUploads({});
     setUploadProgress({ done: 0, total: pending.length });
     let uploadedTotal = 0;
     let mismatch = 0;
     let failed = 0;
     let done = 0;
-    for (const r of result.results) {
-      if (!r.folder) continue;
+    for (const r of pending) {
       const idx = r.sourceIndex;
       const edit = edits[idx];
       const group = scan?.groups[idx];
@@ -769,17 +824,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           dir: r.folder,
           expectedName,
         });
+        const { outcome, failedParts } = describeUpload(res);
         uploadedTotal += res.uploaded;
-        const outcome: UploadOutcome = {
-          state: res.uploaded > 0 ? 'uploaded' : 'skipped',
-          uploaded: res.uploaded,
-          skipped: res.skipped,
-          shootCount: res.shootCount,
-          message:
-            res.uploaded > 0
-              ? `已上传 ${res.uploaded} 张到 OMS${res.skipped ? `，跳过 ${res.skipped} 张已存在` : ''}`
-              : `后台已有这 ${res.skipped} 张，未重复上传`,
-        };
+        if (failedParts) failed += 1;
         setUploads((prev) => ({ ...prev, [r.folder]: outcome }));
       } catch (err) {
         const e = err as Error & { code?: string };
@@ -856,21 +903,31 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   /** 已复制出来的编码文件夹：后续检查 / 编号 / 入库 / 上传都围绕它们；没扫描时用现成文件夹顶上 */
   const outputFolders = applied
-    ? // 同编码会合并到同一个文件夹，两组结果指向同一个 folder：按 folder 去重，避免后续步骤重复处理
+    ? // 同编码会合并到同一个文件夹：按 folder 去重，优先保留填了产品名的那一组（入库要写标签）
       [
-        ...new Map(
-          applied.results
-            .filter((r) => r.folder)
-            .map((r) => [
-              r.folder,
-              {
-                sourceIndex: r.sourceIndex,
-                code: r.code,
-                folder: r.folder,
-                subfolder: r.subfolder || '',
-              },
-            ])
-        ).values(),
+        ...applied.results
+          .filter((r) => r.folder)
+          .reduce(
+            (map, r) => {
+              const prev = map.get(r.folder);
+              const name = String(edits[r.sourceIndex]?.productName || '').trim();
+              const prevName = prev ? String(edits[prev.sourceIndex]?.productName || '').trim() : '';
+              if (!prev || (!prevName && name)) {
+                map.set(r.folder, {
+                  sourceIndex: r.sourceIndex,
+                  code: r.code,
+                  folder: r.folder,
+                  subfolder: r.subfolder || '',
+                });
+              }
+              return map;
+            },
+            new Map<
+              string,
+              { sourceIndex: number; code: string; folder: string; subfolder: string }
+            >()
+          )
+          .values(),
       ]
     : manualFolders.map((f, i) => ({
         sourceIndex: i,
@@ -920,8 +977,27 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setStepOverride(null);
       // 文件夹重建后，后面的检查结果全部作废
       resetDownstream();
-      onToast(i18n.t('k2827af98', { p0: result.totalCopied, p1: result.dateDir }));
-      onToast('文件夹已创建：下一步检查 eBay 图片是否 1:1', 'info');
+      // 逐个文件的失败（被占用、权限、源文件被移走）必须说出来，否则「已创建」会让人以为都复制好了。
+      // 提示条只有一个槽位：这里只能发一条，别让后一条把带明细的前一条顶掉。
+      const copyErrors = result.results.flatMap((r) => r.errors);
+      const cleanErrors = result.results.flatMap((r) => r.cleanErrors || []);
+      const failedFiles = copyErrors.length + cleanErrors.length;
+      const copiedMsg = i18n.t('k2827af98', { p0: result.totalCopied, p1: result.dateDir });
+      if (failedFiles) {
+        const sample = copyErrors
+          .concat(cleanErrors)
+          .slice(0, 3)
+          .map((e) => `${e.file || '——'}：${e.error}`)
+          .join('；');
+        onToast(
+          `${copiedMsg}；但有 ${failedFiles} 个文件没处理成功（${sample}${
+            failedFiles > 3 ? ' 等' : ''
+          }），先核对再继续`,
+          'error'
+        );
+      } else {
+        onToast(`${copiedMsg}；下一步检查图片是否 1:1`);
+      }
       // 输出目录大概率就是用户现有的素材库：检测到就刷新列表；是别的库先问要不要切过去。
       void (async () => {
         try {
@@ -938,8 +1014,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               onToast('已切换并刷新素材库', 'info');
             }
           } else {
+            // 静默刷新：提示条已被「已复制 N 张…」占用，别把它顶掉
             onLibraryChanged();
-            onToast('输出目录属于当前素材库，已刷新图片列表', 'info');
           }
         } catch {
           /* 探测 / 刷新失败不能影响条码主流程 */
@@ -982,13 +1058,23 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     return res.items;
   };
 
+  // 参与检查的文件夹一变，上一次的结果就不完整了：清掉重查，
+  // 否则新勾选的文件夹没查过，步骤条却已经算「1:1 全部通过」。
+  const ratioKey = ebayFolders
+    .map((f) => f.folder.toLowerCase())
+    .sort()
+    .join('|');
+  useEffect(() => {
+    setRatios(null);
+  }, [ratioKey]);
+
   const runRatio = async () => {
     setApplyMode('ratio');
     try {
       const items = await checkRatios();
       if (!items) return;
       if (!items.length) {
-        onToast('没有 eBay 组，不需要检查 1:1');
+        onToast('还没有可检查的文件夹：先创建产品文件夹，或选一个已整理好的文件夹', 'error');
         return;
       }
       const bad = items.reduce((n, it) => n + it.notSquare.length, 0);
@@ -999,7 +1085,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           .map((it) => `${it.code}（${it.notSquare.length} 张）`)
           .join('、');
         onToast(
-          `有 ${bad} 张${applied ? ' eBay' : ''}图不是 1:1，必须是正方形：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。已打开批量裁切台，可逐张调整；也可点「自动居中裁剪」一键处理。`,
+          `有 ${bad} 张图不是 1:1，必须是正方形：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。已打开批量裁切台，可逐张调整；也可点「自动居中裁剪」一键处理。`,
           'error'
         );
         // 检查出不合格图片就自动打开裁切台；已经开着时不要重复弹
@@ -1386,7 +1472,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setUploadedOk(up.mismatch === 0 && up.failed === 0);
       const summary = [`已上传 ${up.uploadedTotal} 张到 OMS`];
       if (up.mismatch) summary.push(`${up.mismatch} 个 SKU 名称不一致`);
-      if (up.failed) summary.push(`${up.failed} 个 SKU 上传失败，详情见列表`);
+      if (up.failed) summary.push(`${up.failed} 个 SKU 没全部传上去，详情见列表`);
       onToast(summary.join('；'), up.mismatch || up.failed ? 'error' : 'info');
     } catch (err) {
       onToast((err as Error).message, 'error');
@@ -1403,7 +1489,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       onToast('请先选择输出根目录，或在报表步骤选择已整理好的文件夹', 'error');
       return;
     }
-    const url = omsProductFolderShotUrl(shotDir);
+    const url = omsProductFolderShotUrl(shotDir, manualDir ? 1 : shotDepth);
     try {
       const token = await getApiToken();
       const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
@@ -1521,6 +1607,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           dateFolder.trim() || shootDate
         }`
       : '');
+  /** 文件夹截图要列到 SKU 层：开了「日期下一级分类」时 SKU 在日期下面第二层 */
+  const shotDepth =
+    applied && outputFolders.some((f) => f.folder.slice(applied.dateDir.length).split(/[\\/]/).filter(Boolean).length > 1)
+      ? 2
+      : 1;
 
   /** 各步骤完成状态：当前步骤 = 第一个没完成的 */
   const stepDone: Record<StepKey, boolean> = {
@@ -1557,6 +1648,37 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     scanProgress && scanProgress.total > 0
       ? Math.min(100, Math.round((scanProgress.done / scanProgress.total) * 100))
       : 0;
+
+  /** 每个批量操作的进度文案；上传有真实的 done/total，其余接口一次调用完，只能给滚动条 */
+  const RUN_LABELS: Record<string, string> = {
+    copy: '正在创建文件夹并复制图片…',
+    ratio: '正在检查 1:1…',
+    crop: '正在裁剪图片…',
+    number: '正在按顺序编号…',
+    'number-read': '正在读取文件夹图片…',
+    import: '正在登记到图库…',
+    upload: '正在核对名称并上传 OMS…',
+    'manual-upload': '正在核对名称并上传 OMS…',
+    report: '正在生成 Excel / 文件夹截图…',
+  };
+  const runText = omsQuerying
+    ? '正在查询完整编码…'
+    : moving
+      ? '正在移动图片…'
+      : applyMode
+        ? RUN_LABELS[applyMode] || '处理中…'
+        : '';
+  // 只有上传才有真实进度；别的操作跑起来时别把上一次上传的 x/y 带出来
+  const runPct =
+    (applyMode === 'upload' || applyMode === 'manual-upload') &&
+    uploadProgress &&
+    uploadProgress.total > 0
+      ? Math.min(100, Math.round((uploadProgress.done / uploadProgress.total) * 100))
+      : null;
+  /** 有子目录里的图时提示一下：编号会把它们统一提到编码夹根 */
+  const numberHasNested = Object.values(numberFiles).some((list) =>
+    list.some((n) => n.includes('/'))
+  );
 
   /**
    * 硬缺口：缺完整编码的 SKU、或一个产品文件夹都没有。
@@ -1687,66 +1809,16 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied?.dateDir, manualDir, scan]);
 
-  /** 复制成可直接粘贴进 Excel 的表格：日期/时长/进度/工作成果跨行合并（无表头，整体居中） */
+  /**
+   * 复制成可直接粘贴进 Excel 的表格（无表头，整体居中）。
+   * 列结构与合并规则都在 lib/work-report-table.ts（与后端 xlsx 共用同一套 13 列约定，C 运营列留空）。
+   */
   const copyReportTable = async () => {
     if (!reportRows.length) {
       onToast('没有可复制的 SKU', 'error');
       return;
     }
-    const mainCount = reportRows.length;
-    const aoa: string[][] = [];
-    reportRows.forEach((r, i) => {
-      aoa.push([
-        i === 0 ? shootDate : '',
-        i === 0 ? `产品拍摄*${mainCount}` : '',
-        '',
-        r.sku,
-        r.name,
-        r.platform,
-        r.category,
-        i === 0 ? '待填' : '',
-        i === 0 ? '待填' : '',
-        i === 0 ? '待填' : '',
-        i === 0 ? '100%' : '',
-        i === 0 ? '文件夹截图' : '',
-        '',
-      ]);
-    });
-    aoa.push(['', '图片上传', '', '', '', '', '其它', '', '', '待填', '100%', '文件夹截图', '']);
-
-    const esc = (s: string) =>
-      String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    const cell = 'text-align:center;vertical-align:middle;';
-    const rowsHtml: string[] = [];
-    reportRows.forEach((r, i) => {
-      let cells = '';
-      if (i === 0) {
-        cells += `<td rowspan="${mainCount}" style="${cell}">${esc(shootDate)}</td>`;
-        cells += `<td rowspan="${mainCount}" style="${cell}">${esc(`产品拍摄*${mainCount}`)}</td>`;
-      }
-      cells += `<td style="${cell}"></td><td style="${cell}">${esc(r.sku)}</td><td style="${cell}">${esc(
-        r.name
-      )}</td><td style="${cell}">${esc(r.platform)}</td><td style="${cell}">${esc(r.category)}</td>`;
-      if (i === 0) {
-        cells += `<td rowspan="${mainCount}" style="${cell}">待填</td>`;
-        cells += `<td rowspan="${mainCount}" style="${cell}">待填</td>`;
-        cells += `<td rowspan="${mainCount}" style="${cell}">待填</td>`;
-        cells += `<td rowspan="${mainCount}" style="${cell}">100%</td>`;
-        cells += `<td rowspan="${mainCount}" style="${cell}">文件夹截图</td>`;
-      }
-      cells += `<td style="${cell}"></td>`;
-      rowsHtml.push(`<tr>${cells}</tr>`);
-    });
-    rowsHtml.push(
-      `<tr><td style="${cell}"></td><td style="${cell}">图片上传</td><td style="${cell}"></td><td style="${cell}"></td><td style="${cell}"></td><td style="${cell}"></td><td style="${cell}">其它</td><td style="${cell}"></td><td style="${cell}"></td><td style="${cell}">待填</td><td style="${cell}">100%</td><td style="${cell}">文件夹截图</td><td style="${cell}"></td></tr>`
-    );
-    const html = `<html><body><table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:'Microsoft YaHei',Arial,sans-serif;font-size:12px;text-align:center;vertical-align:middle">${rowsHtml.join(
-      ''
-    )}</table></body></html>`;
+    const { aoa, html } = buildWorkReportTable(shootDate, reportRows);
     const tsv = aoa.map((r) => r.join('\t')).join('\n');
     try {
       const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
@@ -1757,7 +1829,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             'text/html': new Blob([html], { type: 'text/html' }),
           }),
         ]);
-        onToast('表格已复制，直接粘贴到 Excel（日期/时长/进度已合并）');
+        onToast('表格已复制，直接粘贴到 Excel（日期与右侧五列已按模板通栏）');
         return;
       }
     } catch {
@@ -1912,7 +1984,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             type="date"
             style={{ width: 180 }}
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => {
+              dateTouchedRef.current = true;
+              setDate(e.target.value);
+              // 日报文件名带日期：改了日期，上一份「已完成」就不作数了
+              setReported(false);
+            }}
           />
           <span className="hint">{i18n.t('k0600844a')}</span>
         </div>
@@ -1996,7 +2073,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           <span className="hint">
             将生成：{rootDir.trim() || '输出根目录'}/{dateFolder.trim() || shootDate}
             {subEnabled && subMode === 'platform' ? `/${subEbay || 'eBay'} 或 /${subOther || '非eBay'}` : ''}
-            {subEnabled && subMode === 'custom' ? `/${subCustom || '分类'}` : ''}/编码
+            {subEnabled && subMode === 'custom' ? `/${subCustom || '分类'}` : ''}/编码；源目录里的子文件夹会原样保留
           </span>
         </div>
 
@@ -2121,14 +2198,14 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             <button className="btn primary" onClick={() => void runScan()} disabled={!srcDir.trim()}>
               <IconBarcode /> 开始识别
             </button>
-            <button className="btn" onClick={() => void pickManualReportDir()} disabled={!isDesktop}>
-              <IconFolder /> 已有整理好的文件夹？直接生成 Excel + 文件夹截图
+            <button className="btn" onClick={() => void pickManualReportDir(null)} disabled={!isDesktop}>
+              <IconFolder /> 已有整理好的文件夹？选目录直接开始
             </button>
           </div>
           <div className="hint" style={{ marginTop: 10 }}>
             {srcDir.trim()
-              ? '识别后用条码把照片分好组，第 2~9 步点上面的步骤条进去做。'
-              : '先在上方「源目录」选好拍摄当天所有照片的文件夹，再点「开始识别」。'}
+              ? '识别后用条码把照片分好组，第 2~9 步点上面的步骤条进去做；也可以选一个已整理好的文件夹，从编号 / 入库 / 上传 / 报表任意一步开始。'
+              : '先在上方「源目录」选好拍摄当天所有照片的文件夹，再点「开始识别」；也可以选一个已整理好的文件夹，从编号 / 入库 / 上传 / 报表任意一步开始。'}
           </div>
         </div>
       )}
@@ -2302,6 +2379,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               </div>
               {moveSrc && (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  {/* 子目录里的图也列出来（title 带相对路径）；移动后落到目标夹根，后续编号统一摊平 */}
                   {(numberFiles[manualFolderPath(moveSrc)] || []).map((name) => {
                     const at = moveSel.includes(name);
                     return (
@@ -2666,6 +2744,31 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               backdropFilter: 'blur(12px)',
             }}
           >
+            {/* 进度条：批量操作一开始就出现在吸底条上，不用再往下翻找「正在上传 3/30」 */}
+            {runText && (
+              <div style={{ marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 8,
+                    marginBottom: 5,
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>{runText}</span>
+                  {runPct !== null && (
+                    <span className="hint">
+                      {uploadProgress?.done}/{uploadProgress?.total} · {runPct}%
+                    </span>
+                  )}
+                </div>
+                <div className={`run-progress${runPct === null ? ' indeterminate' : ''}`}>
+                  <i style={runPct === null ? undefined : { width: `${runPct}%` }} />
+                </div>
+              </div>
+            )}
             {(showMissingCode || showMissingFolder) && (
               <div
                 style={{
@@ -2769,7 +2872,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   </span>
                   <details style={{ flexBasis: '100%' }}>
                     <summary className="hint" style={{ cursor: 'pointer' }}>
-                      参与检查的文件夹（默认 eBay，可勾选其它平台）：{ebayFolders.length}/{outputFolders.length}
+                      参与检查的文件夹（默认只查 eBay，可勾选其它平台跳过/一起查）：
+                      {ebayFolders.length}/{outputFolders.length}
                     </summary>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
                       {outputFolders.map((f) => {
@@ -2821,6 +2925,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                       ? '点上方产品图的缩略图，按点击顺序定 1.jpg 起的前五张（最多 5 张）；也可点「选择前五张」放大挑选。'
                       : '每个文件夹的 1~5 张都要自己点，选满才能编号。'}
                   </span>
+                  {numberHasNested && (
+                    <span className="hint" style={{ color: 'var(--warn, #d08b2c)' }}>
+                      有图片在子文件夹里：编号时会把它们统一提到编码文件夹根，再按顺序命名 1.jpg…
+                    </span>
+                  )}
                 </>
               )}
 
@@ -2879,13 +2988,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                         onToast('请先选择输出根目录，或选择已整理好的文件夹', 'error');
                         return;
                       }
-                      downloadFile(omsProductFolderShotUrl(shotDir));
+                      downloadFile(omsProductFolderShotUrl(shotDir, manualDir ? 1 : shotDepth));
                     }}
                   >
                     下载文件夹截图
                   </button>
                   <button className="btn ghost sm" onClick={() => void pickManualReportDir()} disabled={applying}>
-                    选择已整理好的文件夹
+                    {manualDir ? '重新选择文件夹' : '选择已整理好的文件夹'}
                   </button>
                 </>
               )}
@@ -2911,6 +3020,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                     onClick={() => {
                       setManualDir('');
                       setManualFolders([]);
+                      setManualNames({});
                     }}
                   >
                     清除
@@ -3046,11 +3156,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {currentKey === 'ratio' &&
                 (ratios
                   ? notSquareTotal
-                    ? `有 ${notSquareTotal} 张 eBay 图不是 1:1，必须为正方形。`
+                    ? `有 ${notSquareTotal} 张图不是 1:1，必须为正方形。`
                     : ebayFolders.length
-                      ? 'eBay 图都是 1:1，可以继续编号。'
-                      : '没有 eBay 组，跳过 1:1 检查。'
-                  : '创建文件夹后，先检查 eBay 图是否 1:1。')}
+                      ? '勾选的图都是 1:1，可以继续编号。'
+                      : '没有勾选任何文件夹，跳过 1:1 检查。'
+                  : '创建文件夹后，先检查图片是否 1:1。')}
               {currentKey === 'number' &&
                 (numbered
                   ? `已编号 ${numbered.reduce((n, r) => n + r.files.length, 0)} 张（1.jpg、2.jpg…）`

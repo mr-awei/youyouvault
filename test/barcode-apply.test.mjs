@@ -178,3 +178,125 @@ test('同批重复编码合并到同一个文件夹：不加 -2 后缀，清理�
   assert.equal(body.results.length, 2);
   assert.equal(body.results[0].folder, body.results[1].folder, '两组结果指向同一个文件夹');
 });
+
+test('源目录多级嵌套：复制保留相对子目录，不同机位的同名文件不互相覆盖', async () => {
+  const source = path.join(tmp, 'source-nest');
+  const output = path.join(tmp, 'output-nest');
+  fs.mkdirSync(path.join(source, '机位A'), { recursive: true });
+  fs.mkdirSync(path.join(source, '机位B'), { recursive: true });
+  fs.mkdirSync(output, { recursive: true });
+  for (const rel of ['机位A/1.JPG', '机位B/1.JPG', '2.JPG']) {
+    await sharp({ create: { width: 120, height: 120, channels: 3, background: '#dddddd' } })
+      .jpeg()
+      .toFile(path.join(source, rel));
+  }
+
+  const handler = handlers.get('/api/barcode/apply');
+  let status = 200;
+  let body = null;
+  const res = {
+    status(code) {
+      status = code;
+      return this;
+    },
+    json(value) {
+      body = value;
+      return this;
+    },
+  };
+  await handler(
+    {
+      body: {
+        dir: source,
+        root: output,
+        date: '2026-11-22',
+        importToLibrary: false,
+        parentFolderId: null,
+        cleanStale: false,
+        groups: [
+          {
+            code: '46000-Y01Y0001-QD08',
+            files: ['机位A/1.JPG', '机位B/1.JPG', '2.JPG'],
+          },
+        ],
+      },
+    },
+    res
+  );
+
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.equal(body.totalCopied, 3);
+  const codeDir = path.join(output, '2026-11-22', '46000-Y01Y0001-QD08');
+  assert.ok(fs.existsSync(path.join(codeDir, '机位A', '1.JPG')), '子目录结构要保留');
+  assert.ok(fs.existsSync(path.join(codeDir, '机位B', '1.JPG')), '同名文件不能互相覆盖');
+  assert.ok(fs.existsSync(path.join(codeDir, '2.JPG')), '根目录的图仍然落在根目录');
+});
+
+test('调整归属：子目录里的图片也能挪到另一个编码夹，重名不覆盖', async () => {
+  const from = path.join(tmp, 'move-from', '46240-Y01Y0001-QD08');
+  const to = path.join(tmp, 'move-to', '46241-Y01Y0001-QD08');
+  fs.mkdirSync(path.join(from, '机位A'), { recursive: true });
+  fs.mkdirSync(to, { recursive: true });
+  await sharp({ create: { width: 200, height: 200, channels: 3, background: '#111111' } })
+    .jpeg()
+    .toFile(path.join(from, '机位A', '1.JPG'));
+  await sharp({ create: { width: 320, height: 320, channels: 3, background: '#222222' } })
+    .jpeg()
+    .toFile(path.join(to, '1.JPG'));
+
+  const handler = handlers.get('/api/barcode/move-image');
+  assert.ok(handler, 'move-image handler 必须注册');
+  let status = 200;
+  let body = null;
+  const res = {
+    status(code) {
+      status = code;
+      return this;
+    },
+    json(value) {
+      body = value;
+      return this;
+    },
+  };
+  await handler({ body: { from, to, files: ['机位A/1.JPG'] } }, res);
+
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.deepEqual(body.errors, [], '子目录相对路径不能按 basename 去找');
+  assert.deepEqual(body.moved, ['1 (2).JPG'], '目标已有同名图时要加序号，不能覆盖');
+  assert.ok(!fs.existsSync(path.join(from, '机位A', '1.JPG')), '源文件应被移走');
+  assert.ok(fs.existsSync(path.join(to, '1 (2).JPG')));
+});
+
+test('编号对嵌套目录：图文全部提到编码夹根，按 1.jpg… 顺序命名并清掉空子目录', async () => {
+  const dir = path.join(tmp, 'number-nest', '46001-Y01Y0001-QD08');
+  fs.mkdirSync(path.join(dir, '机位A'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '机位B'), { recursive: true });
+  // 同名文件分处两个子目录：必须都能编号，而不是互相覆盖成一张
+  for (const rel of ['机位A/1.JPG', '机位B/1.JPG', '3.JPG']) {
+    await sharp({ create: { width: 150, height: 150, channels: 3, background: '#eeeeee' } })
+      .jpeg()
+      .toFile(path.join(dir, rel));
+  }
+
+  const handler = handlers.get('/api/barcode/number');
+  assert.ok(handler, 'number handler 必须注册');
+  let status = 200;
+  let body = null;
+  const res = {
+    status(code) {
+      status = code;
+      return this;
+    },
+    json(value) {
+      body = value;
+      return this;
+    },
+  };
+  await handler({ body: { folders: [{ code: '46001-Y01Y0001-QD08', dir }] } }, res);
+
+  assert.equal(status, 200, JSON.stringify(body));
+  const files = fs.readdirSync(dir).sort();
+  assert.deepEqual(files, ['1.jpg', '2.jpg', '3.jpg'], '嵌套图片要摊平并连续编号');
+  assert.ok(!fs.existsSync(path.join(dir, '机位A')), '空子目录要清掉');
+  assert.ok(!fs.existsSync(path.join(dir, '机位B')), '空子目录要清掉');
+});
