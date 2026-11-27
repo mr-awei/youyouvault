@@ -50,7 +50,9 @@ function readState() {
 
 function writeState(state) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  // 不能被写成半截：readState 解析失败会退回默认状态，deviceId 换新会让同步盘把本机
+  // 当成「另一台设备」，基线指纹也一起丢，之后每次发布都被判成有冲突
+  writeAtomic(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
 function localFingerprint() {
@@ -68,6 +70,21 @@ function localFingerprint() {
     /* 旧库可能还没有文件夹表 */
   }
   return fingerprintOf({ images: Number(a.c || 0), maxImage: Number(a.m || 0), maxOp: ops, folders });
+}
+
+/**
+ * 先写同目录临时文件再改名：同步盘随时可能扫目录，直接覆盖会让人读到半截 JSON。
+ * 改名在同一分区上是原子的，读到的要么是旧版、要么是新版。
+ */
+function writeAtomic(file, data) {
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
 }
 
 function readManifest(dir) {
@@ -173,44 +190,58 @@ export function register(app, ctx) {
 
       // 临时目录放在本机数据目录，不能放同步盘：否则网盘会把半成品也同步走
       const tmpRoot = path.join(DATA_DIR, 'sync-tmp');
-      fs.mkdirSync(tmpRoot, { recursive: true });
       let backup;
+      let files;
+      let revision;
       try {
-        backup = backupLibrary({ targetDir: tmpRoot, includeThumbs: false });
-      } catch (err) {
-        return res.status(500).json({ error: `生成快照失败：${err?.message || err}` });
-      }
-      const files = SNAPSHOT_FILES.map((name) => {
-        const buffer = fs.readFileSync(path.join(backup.dir, name));
-        return { name, buffer, sha256: sha256(buffer), size: buffer.length };
-      });
+        fs.mkdirSync(tmpRoot, { recursive: true });
+        try {
+          backup = backupLibrary({ targetDir: tmpRoot, includeThumbs: false });
+        } catch (err) {
+          return res.status(500).json({ error: `生成快照失败：${err?.message || err}` });
+        }
+        files = SNAPSHOT_FILES.map((name) => {
+          const buffer = fs.readFileSync(path.join(backup.dir, name));
+          return { name, buffer, sha256: sha256(buffer), size: buffer.length };
+        });
 
-      const snapDir = path.join(st.syncDir, 'snapshot');
-      fs.mkdirSync(snapDir, { recursive: true });
-      for (const f of files) fs.writeFileSync(path.join(snapDir, f.name), f.buffer);
-      const revision = (manifest?.revision || 0) + 1;
-      const active = getActiveLibrary();
-      const next = {
-        format: SYNC_FORMAT,
-        version: SYNC_VERSION,
-        revision,
-        publishedAt: new Date().toISOString(),
-        deviceId: st.deviceId,
-        libraryId: active?.id || '',
-        libraryName: active?.name || '图库',
-        rootPath: active?.root_path || '',
-        counts: backup.counts,
-        fingerprint: fp,
-        files: files.map((f) => ({ name: f.name, sha256: f.sha256, size: f.size })),
-      };
-      fs.writeFileSync(path.join(st.syncDir, 'manifest.json'), JSON.stringify(next, null, 2), 'utf8');
-      writeState({
-        ...st,
-        lastPublishedRevision: revision,
-        lastPulledRevision: revision,
-        lastPublishedFingerprint: fp,
-      });
-      fs.rmSync(tmpRoot, { recursive: true, force: true });
+        const snapDir = path.join(st.syncDir, 'snapshot');
+        fs.mkdirSync(snapDir, { recursive: true });
+        // 每个文件也走「临时名 + 改名」：网盘扫到 .part 会跳过，不会把半截 DB 校验成坏文件
+        for (const f of files) {
+          writeAtomic(path.join(snapDir, f.name), f.buffer);
+        }
+        // 同步盘清单可能被网盘还原 / 手工删掉，这时不能从 1 重新开始，
+        // 否则对端会按 revision 判定「本机已是最新」而永远拉不到新快照。
+        revision = Math.max(Number(manifest?.revision) || 0, Number(st.lastPublishedRevision) || 0) + 1;
+        const active = getActiveLibrary();
+        const next = {
+          format: SYNC_FORMAT,
+          version: SYNC_VERSION,
+          revision,
+          publishedAt: new Date().toISOString(),
+          deviceId: st.deviceId,
+          libraryId: active?.id || '',
+          libraryName: active?.name || '图库',
+          rootPath: active?.root_path || '',
+          counts: backup.counts,
+          fingerprint: fp,
+          files: files.map((f) => ({ name: f.name, sha256: f.sha256, size: f.size })),
+        };
+        // manifest 是提交点，必须最后写且原子写
+        writeAtomic(path.join(st.syncDir, 'manifest.json'), JSON.stringify(next, null, 2));
+        writeState({
+          ...st,
+          lastPublishedRevision: revision,
+          lastPulledRevision: revision,
+          lastPublishedFingerprint: fp,
+        });
+      } catch (err) {
+        return res.status(500).json({ error: `写入同步盘失败：${err?.message || err}` });
+      } finally {
+        // 成功或失败都要清掉，否则临时快照会一直堆在本机数据目录里
+        fs.rmSync(tmpRoot, { recursive: true, force: true });
+      }
       res.json({
         ok: true,
         unchanged: false,

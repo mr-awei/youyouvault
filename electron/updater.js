@@ -460,7 +460,12 @@ export async function downloadUpdate() {
   }
 }
 
-/** 退出并安装（isSilent=false 会拉起安装向导，用户能看到进度） */
+/**
+ * 退出并安装。
+ * isSilent=true：不再拉起 NSIS 安装向导，安装程序在后台装完自己重启。
+ * 用户点一次「立即安装并重启」就够了，不该再被要求一路点「下一步」。
+ * 静默装不上时由 30s 看门狗兜底转成错误态（见 installUpdate 里）。
+ */
 export async function installUpdate() {
   if (!isSupported()) return { ok: false, msg: '当前是开发模式，自动更新只在安装版可用' };
   if (!state.ready) return { ok: false, msg: '更新包还没下载完成' };
@@ -480,7 +485,7 @@ export async function installUpdate() {
     try {
       // prepareQuit 会先停服务（释放安装包要覆盖的文件），再拉起安装程序
       await prepareQuit?.();
-      up.quitAndInstall(false, true);
+      up.quitAndInstall(true, true);
       // quitAndInstall 可能既不抛错也不真的启动安装程序（签名/权限/被安全软件拦下）。
       // 那种情况下应用会一直停在这里：看门狗超时后按失败处理，用户不至于被锁死。
       clearWatchdog();

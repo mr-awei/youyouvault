@@ -13,7 +13,7 @@ import { APP_ROOT_DIR } from './constants.js';
 import { SCHEMA_VERSION } from '../../server/db/schema-version.js';
 
 /**
- * Gitee 镜像仓库（形如 'mr-awei/gallery'）。
+ * Gitee 镜像仓库（形如 'mr-awei/youyouvault'）。
  * 打包后的应用没有环境变量可读，所以默认值必须写在这里；设成空串才只走 GitHub。
  */
 const GITEE_MIRROR = process.env.TUKU_HOTFIX_GITEE ?? 'mr-awei/youyouvault';

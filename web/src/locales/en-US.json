@@ -313,7 +313,7 @@
   "k1d2a6b5a": "A maintenance task is in progress",
   "k1d35a858": "Image stacking: collapse a group into one card",
   "k1d4b5f79": "Portrait",
-  "k1d7f63dd": "\"Install now and restart\" closes and reopens the app; library data is unaffected. \"Install on next launch\" lets you keep working now, but you must finish installing before the next launch.",
+  "k1d7f63dd": "\"Install now and restart\" installs automatically and reopens the app (no installer wizard steps); library data is unaffected. \"Install on next launch\" lets you keep working now, but you must finish installing before the next launch.",
   "k1d9b4a7a": "Free tier · key required",
   "k1df47bd2": "All 8 color bands reset to zero",
   "k1e6d05ed": "Files go to the recycle bin and can be restored anytime; nothing is logged this time",

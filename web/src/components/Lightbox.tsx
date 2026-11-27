@@ -226,6 +226,23 @@ export default function Lightbox({
   colorRoomRef.current = colorRoom;
   // 保存方式：默认覆盖原图；切到「另存副本」时默认落在原图所在目录
   const [moreOpen, setMoreOpen] = useState(false); // 顶部「更多」菜单
+  // 图上右键菜单：功能项复用顶栏那张 acts 表，避免两处维护
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', close);
+    };
+  }, [ctxMenu]);
   // 哪些「更多」里的功能被用户挪到了顶栏（顺序即显示顺序）
   const [pinnedActs, setPinnedActs] = usePinnedActions('lightbox', LB_PINNED_DEFAULT);
   const [tczOpen, setTczOpen] = useState(false); // 自定义工具栏面板
@@ -565,9 +582,10 @@ export default function Lightbox({
       const i = indexRef.current;
       if (e.key === 'Escape') {
         // 菜单开着时先收菜单（和系统菜单一致），再退播放，最后才关大图
-        if (moreOpen || rotOpen) {
+        if (moreOpen || rotOpen || ctxMenu) {
           setMoreOpen(false);
           setRotOpen(false);
+          setCtxMenu(null);
         } else if (playing) setPlaying(false);
         else onClose();
       } else if (e.key === 'ArrowLeft') {
@@ -599,7 +617,7 @@ export default function Lightbox({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [items.length, playing, moreOpen, rotOpen, onClose, onIndex, resetZoom, zoomAt, onPatch]);
+  }, [items.length, playing, moreOpen, rotOpen, ctxMenu, onClose, onIndex, resetZoom, zoomAt, onPatch]);
 
   /* --------------- 编辑：图片渲染矩形测量与调色预览（hooks 需在早退之前） --------------- */
   const measureFrame = useCallback(() => {
@@ -1093,42 +1111,15 @@ export default function Lightbox({
       onMouseMove={onMouseMove}
       onMouseUp={endDrag}
       onMouseLeave={endDrag}
+      onContextMenu={(e) => {
+        // 编辑/标注/调色时保留原生右键（取色、输入框粘贴要用），其余位置弹大图自己的菜单
+        if (editor || annoMode || colorRoom) return;
+        e.preventDefault();
+        setCtxMenu({ x: e.clientX, y: e.clientY });
+      }}
     >
       <div className="lightbox-top" onClick={(e) => e.stopPropagation()}>
-        <div className="lb-top-left">
-          <button className="btn ghost sm" onClick={onClose} title={i18n.t('k806092ad')}>
-            <IconClose />
-            <span className="lb-txt">{i18n.t('kb15d9127')}</span>
-            <span className="lb-txt-short">{i18n.t('kb15d9127')}</span>
-          </button>
-          <span className="lb-counter">
-            {index + 1} / {items.length}
-          </span>
-          {/* 文件名：之前只有序号，连自己在看哪张都不知道（Eagle / 系统看图都放标题）
-              点它在资源管理器里定位（和卡片右键「打开所在文件夹」同一件事，这里更好找） */}
-          <span
-            className="lb-title is-clickable"
-            title={i18n.t('k6d89daf9', { p0: item.title })}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' && e.key !== ' ') return;
-              e.preventDefault();
-              e.stopPropagation();
-              revealFile(item.path).catch((err: Error) =>
-                onChangeToast?.(i18n.t('k22c7225f', { p0: err.message }))
-              );
-            }}
-            onClick={() =>
-              revealFile(item.path).catch((err: Error) =>
-                onChangeToast?.(i18n.t('k22c7225f', { p0: err.message }))
-              )
-            }
-          >
-            {item.title}
-          </span>
-        </div>
-
+        {/* 功能按钮统一放左侧；关闭按钮单独在右上角 */}
         <div className="lb-top-actions">
           <button
             className={`btn sm${item.favorite ? ' primary' : ''}`}
@@ -1303,6 +1294,40 @@ export default function Lightbox({
             <IconTrash />
             <span className="lb-txt">{i18n.t('k2f4aaddd')}</span>
             <span className="lb-txt-short">{i18n.t('k2f4aaddd')}</span>
+          </button>
+        </div>
+
+        <div className="lb-top-right">
+          <span className="lb-counter">
+            {index + 1} / {items.length}
+          </span>
+          {/* 文件名：之前只有序号，连自己在看哪张都不知道（Eagle / 系统看图都放标题）
+              点它在资源管理器里定位（和卡片右键「打开所在文件夹」同一件事，这里更好找） */}
+          <span
+            className="lb-title is-clickable"
+            title={i18n.t('k6d89daf9', { p0: item.title })}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation();
+              revealFile(item.path).catch((err: Error) =>
+                onChangeToast?.(i18n.t('k22c7225f', { p0: err.message }))
+              );
+            }}
+            onClick={() =>
+              revealFile(item.path).catch((err: Error) =>
+                onChangeToast?.(i18n.t('k22c7225f', { p0: err.message }))
+              )
+            }
+          >
+            {item.title}
+          </span>
+          <button className="btn ghost sm" onClick={onClose} title={i18n.t('k806092ad')}>
+            <IconClose />
+            <span className="lb-txt">{i18n.t('kb15d9127')}</span>
+            <span className="lb-txt-short">{i18n.t('kb15d9127')}</span>
           </button>
         </div>
       </div>
@@ -1763,6 +1788,47 @@ export default function Lightbox({
         onChange={setPinnedActs}
         onClose={() => setTczOpen(false)}
       />
+
+      {/* 右键菜单：和顶栏共用同一张 acts 表（含已固定到顶栏的项），按分组排列 */}
+      {ctxMenu && (
+        <div
+          className="lb-ctx-menu"
+          style={{
+            left: Math.max(8, Math.min(ctxMenu.x, window.innerWidth - 248)),
+            top: Math.max(8, Math.min(ctxMenu.y, window.innerHeight - 420)),
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {groupOrder
+            .map((g) => ({ ...g, list: visible.filter((a) => a.group === g.key) }))
+            .filter((g) => g.list.length > 0)
+            .map((g, gi) => (
+              <React.Fragment key={g.key}>
+                {gi > 0 && <div className="lb-more-sep" />}
+                <div className="lb-ctx-group">{g.name}</div>
+                {g.list.map((a) => (
+                  <button
+                    key={a.key}
+                    className="btn sm ghost"
+                    title={a.title}
+                    disabled={a.disabled}
+                    onClick={() => {
+                      setCtxMenu(null);
+                      a.run();
+                    }}
+                  >
+                    {a.icon} {a.label}
+                  </button>
+                ))}
+              </React.Fragment>
+            ))}
+          <div className="lb-more-sep" />
+          <button className="btn sm ghost" onClick={onClose}>
+            <IconClose /> {i18n.t('kb15d9127')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

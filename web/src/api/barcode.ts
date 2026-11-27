@@ -127,6 +127,10 @@ export interface BarcodeImportResponse {
   importedTotal: number;
   importSkippedTotal: number;
   results: BarcodeImportGroupResult[];
+  /** 输出目录是否已经在当前库内（是则图库层级按磁盘层级走，忽略侧栏选中的父文件夹） */
+  insideLibrary?: boolean;
+  /** 实际落位的图库层级名（如 ['11月', '20261127']） */
+  importPath?: string[];
 }
 
 const LONG_TIMEOUT_MS = 10 * 60 * 1000;

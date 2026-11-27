@@ -450,7 +450,7 @@ export function createHotfix({
  * 两处都必须验签才算数，所以镜像挂了最多是「这次没更新」。
  * @param {{ owner?: string, repo?: string, gitee?: string }} opts gitee 形如 'mr-awei/youyouvault'
  */
-export function defaultFeedUrls({ owner = 'mr-awei', repo = 'gallery', gitee = '' } = {}) {
+export function defaultFeedUrls({ owner = 'mr-awei', repo = 'youyouvault', gitee = '' } = {}) {
   const urls = [];
   if (gitee) urls.push(`https://gitee.com/${gitee}/raw/hotfix/manifest.json`);
   urls.push(`https://github.com/${owner}/${repo}/releases/download/hotfix/manifest.json`);

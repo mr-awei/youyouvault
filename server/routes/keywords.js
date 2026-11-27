@@ -117,11 +117,30 @@ export function register(app, ctx) {
       } catch {
         /* 没有 .tuku 是正常情况 */
       }
+      // 目录落在某个库内部（库根本身或它的子目录）时，返回命中的库 + 相对层级：
+      // 条码流程据此知道「这些图已经在库里，别再重复入库」以及入库该落在哪一层。
+      const insideOf = (rootPath) => {
+        const rel = path.relative(path.resolve(rootPath), target);
+        if (!rel) return [];
+        if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+        return rel.split(path.sep).filter(Boolean);
+      };
+      let inside = null;
+      for (const l of libs) {
+        if (!l.root_path) continue;
+        const relPath = insideOf(l.root_path);
+        if (!relPath) continue;
+        // 多层嵌套时取最深（relPath 最短）的那个库
+        if (!inside || relPath.length < inside.relPath.length) {
+          inside = { id: l.id, name: l.name, active: l.id === activeId, relPath };
+        }
+      }
       res.json({
         found: !!hit || hasTuku,
         library: hit ? { id: hit.id, name: hit.name, active: hit.id === activeId } : null,
         hasTuku,
         activeId,
+        inside,
       });
     })
   );

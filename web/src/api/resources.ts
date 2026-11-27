@@ -47,6 +47,8 @@ export const resourcesAPI = {
       library: { id: number; name: string; active: boolean } | null;
       hasTuku: boolean;
       activeId: number | null;
+      /** 目录落在某个库内部时的命中信息（relPath 是相对库根的层级） */
+      inside: { id: number; name: string; active: boolean; relPath: string[] } | null;
     }>(`/api/libraries/probe?${new URLSearchParams({ dir })}`),
   createLibrary: (payload: { name: string; rootPath?: string; libFolder?: string }) =>
     request<{ ok: boolean; id: number }>('/api/libraries', {

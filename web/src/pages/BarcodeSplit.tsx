@@ -21,6 +21,7 @@ import {
 } from '../api';
 import { IconArrowUpRight, IconBarcode, IconCopy, IconFolder, IconRefresh } from '../components/Icons';
 import { getApiToken } from '../api/core';
+import { useLicense } from '../app/LicenseGate';
 import { buildWorkReportTable } from '../lib/work-report-table';
 import { confirmDialog } from '../components/Dialogs';
 import { subscribeEvents } from '../events';
@@ -116,6 +117,14 @@ function platformOf(code: string) {
   return flag === '02' || flag === '05' ? '非eBay' : 'eBay';
 }
 
+/**
+ * 编号前是否必须人工定顺序：只有 eBay 要挑 1~5 张主图。
+ * 非 eBay 只是归档用，按拍摄顺序自动编号就行，不该被「没选够前五张」卡住整条流程。
+ */
+function needManualPicks(code: string) {
+  return platformOf(code) === 'eBay';
+}
+
 /** 九个固定步骤：识别 → 查询 → 核对 → 建夹 → 构图 → 编号 → 入库 → 上传 → 报表 */
 type StepKey =
   | 'scan'
@@ -163,6 +172,9 @@ function omsPageUrl(baseUrl: string, mainSku?: string) {
  * 选源目录 → 扫描（判黄 + OCR）→ 核对编码 → 按「日期 / 编码」复制产品图。
  */
 export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLibName, onLibraryChanged }: Props) {
+  // OMS 登录只有右上角一个入口：这里只读共享状态，登录/退出后自动跟着刷新
+  const { status: license } = useLicense();
+  const omsLoggedIn = license?.omsLoggedIn === true;
   const [srcDir, setSrcDir] = useState('');
   const [rootDir, setRootDir] = useState('');
   // 默认今天：拍摄日期是必填项，留空会在创建文件夹 / 入库时被后端拒绝
@@ -219,11 +231,6 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [uploads, setUploads] = useState<Record<string, UploadOutcome>>({});
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [oms, setOms] = useState<OmsStatus | null>(null);
-  const [omsOpen, setOmsOpen] = useState(false);
-  const [omsUser, setOmsUser] = useState('');
-  const [omsPass, setOmsPass] = useState('');
-  const [omsBase, setOmsBase] = useState('https://sit.uyoyous.com');
-  const [omsBusy, setOmsBusy] = useState(false);
   const [omsQuerying, setOmsQuerying] = useState(false);
   /** 日期文件夹名：默认跟 date 一致，会从输出根目录的同级目录学习命名格式 */
   const [dateFolder, setDateFolder] = useState('');
@@ -259,24 +266,29 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const [cropStudioItems, setCropStudioItems] = useState<CropItem[]>([]);
   /** 参与 1:1 检查/裁切的文件夹；默认全选（eBay 必须 1:1），用户可取消勾选跳过 */
   const [ratioInclude, setRatioInclude] = useState<Record<string, boolean>>({});
+  /** 输出根目录落在哪个库内部（决定「已在库内就别重复入库」以及入库落位层级） */
+  const [rootLib, setRootLib] = useState<{
+    inside: { id: number; name: string; active: boolean; relPath: string[] } | null;
+  } | null>(null);
 
-  // 每个摄影师用自己的 OMS 账号：进页面先读一次配置状态
+  // OMS 后台地址进页面读一次；右上角登录/退出后重读，状态跟着变。
+  // 退出登录时直接清空：本地不留上一个账号的任何信息，页面也不会残留「已登录」的痕迹
   useEffect(() => {
+    if (!omsLoggedIn) {
+      setOms(null);
+      return;
+    }
     let alive = true;
     api
       .omsStatus()
       .then((s) => {
-        if (!alive) return;
-        setOms(s);
-        setOmsUser(s.username || '');
-        setOmsBase(s.baseUrl || 'https://sit.uyoyous.com');
-        if (!s.configured) setOmsOpen(true);
+        if (alive) setOms(s);
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, []);
+  }, [omsLoggedIn]);
 
   // 扫描可能持续几十秒（每张条码都要跑一次系统 OCR），给个已耗时让用户知道没卡死
   useEffect(() => {
@@ -324,6 +336,31 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     }, 450);
     return () => clearTimeout(timer);
   }, [rootDir, date]);
+
+  // 输出根目录是不是某个库（尤其当前库）的内部目录：
+  // 是的话图片会被库监听按磁盘层级自动登记，再点「入库」只会多出一条平行文件夹链。
+  useEffect(() => {
+    const dir = rootDir.trim();
+    if (!dir) {
+      setRootLib(null);
+      return;
+    }
+    let alive = true;
+    const timer = setTimeout(() => {
+      api
+        .probeLibrary(dir)
+        .then((r) => {
+          if (alive) setRootLib({ inside: r.inside || null });
+        })
+        .catch(() => {
+          if (alive) setRootLib(null);
+        });
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [rootDir]);
 
   const chooseDir = async (apply: (v: string) => void) => {
     const dir = await pickFolder();
@@ -553,9 +590,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   const queryOms = async () => {
     if (!scan) return;
-    if (!oms?.configured) {
-      setOmsOpen(true);
-      onToast(i18n.t('kd2e4d938'), 'error');
+    if (!omsLoggedIn) {
+      onToast('还没有登录 OMS：请点右上角头像 →「登录 / 激活授权」，登录后本页自动同步', 'error');
       return;
     }
     const skuOf = (i: number) => {
@@ -570,57 +606,6 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       return;
     }
     await runOmsQuery(skus, skuOf);
-  };
-
-  const saveOmsAccount = async () => {
-    if (!omsUser.trim() || !omsPass) {
-      onToast(i18n.t('k67a944b8'), 'error');
-      return;
-    }
-    setOmsBusy(true);
-    try {
-      const next = await api.omsSaveAccount({
-        username: omsUser.trim(),
-        password: omsPass,
-        baseUrl: omsBase.trim() || undefined,
-      });
-      setOms(next);
-      setOmsPass('');
-      setOmsOpen(false);
-      onToast(i18n.t('kdee9ac33', { p0: next.username }));
-    } catch (err) {
-      onToast((err as Error).message, 'error');
-    } finally {
-      setOmsBusy(false);
-    }
-  };
-
-  const testOms = async () => {
-    setOmsBusy(true);
-    try {
-      const next = await api.omsLogin();
-      setOms(next);
-      onToast(i18n.t('kdee9ac33', { p0: next.username }));
-    } catch (err) {
-      onToast((err as Error).message, 'error');
-    } finally {
-      setOmsBusy(false);
-    }
-  };
-
-  const clearOms = async () => {
-    setOmsBusy(true);
-    try {
-      const next = await api.omsClearAccount();
-      setOms(next);
-      setOmsPass('');
-      setOmsOpen(true);
-      onToast(i18n.t('k5ba0cd3b'));
-    } catch (err) {
-      onToast((err as Error).message, 'error');
-    } finally {
-      setOmsBusy(false);
-    }
   };
 
   const runScan = async () => {
@@ -661,7 +646,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setDateFolder((prev) => prev || result.date);
       if (!result.groups.length) onToast(i18n.t('k07190065'));
       // 已配置 OMS 时顺手换成完整编码并补产品名（只取「待拍摄」）
-      if (oms?.configured) {
+      if (omsLoggedIn) {
         const skus = [...new Set(
           result.groups
             .map((g) => g.code.trim().match(/^(\d{4,6})/)?.[1] || '')
@@ -1198,7 +1183,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   const sanitizePicks = (prev: Record<string, string[]>, files: Record<string, string[]>) => {
     const next: Record<string, string[]> = {};
     for (const [dir, list] of Object.entries(files)) {
-      // 不再自动挑前五张：编几号、哪几张必须由用户自己点。
+      // 不自动预选：eBay 由用户自己点顺序；非 eBay 留空即按拍摄顺序自动编号
       next[dir] = (prev[dir] || []).filter((n) => list.includes(n)).slice(0, 5);
     }
     return next;
@@ -1297,17 +1282,19 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       dir: f.folder,
       files: picksMap[f.folder]?.length ? picksMap[f.folder] : undefined,
     }));
-    // 每个文件夹的 1~5 张必须由用户自己选：没选够就不编号，避免按拍摄顺序乱编
+    // eBay 的 1~5 张主图必须由用户自己定顺序，没选够就不编号，避免按拍摄顺序乱编；
+    // 非 eBay 不强制：没手选就交给后端按拍摄顺序自动编号
     const unfilled = targets.filter((f) => {
+      if (!needManualPicks(f.code)) return false;
       const list = files[f.folder] || [];
       return (picksMap[f.folder] || []).length < Math.min(5, list.length);
     });
     if (unfilled.length) {
       onToast(
-        `还有 ${unfilled.length} 个文件夹没选够前五张（${unfilled
+        `还有 ${unfilled.length} 个 eBay 文件夹没选够前五张（${unfilled
           .slice(0, 3)
           .map((f) => f.code)
-          .join('、')}${unfilled.length > 3 ? ' 等' : ''}），先点缩略图选好再编号`,
+          .join('、')}${unfilled.length > 3 ? ' 等' : ''}），先点缩略图选好再编号；非 eBay 会自动编号`,
         'error'
       );
       return;
@@ -1431,10 +1418,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
 
   /** 第 8 步：核对 OMS 名称并上传（本轮不测，保留完整实现） */
   const runUpload = async () => {
-    // 没配账号就逐个 SKU 报同一句错，先把账号面板打开让用户填
-    if (!oms?.configured) {
-      setOmsOpen(true);
-      onToast('还没有配置 OMS 账号：先在页面顶部填好账号密码再上传', 'error');
+    // 未登录就逐个 SKU 报同一句错：登录入口只保留右上角，这里只提示
+    if (!omsLoggedIn) {
+      onToast('还没有登录 OMS：请点右上角头像 →「登录 / 激活授权」，登录后本页自动同步', 'error');
       return;
     }
     // 缺完整编码就不开传：宁可停下，也别传一半留下脏数据（现成文件夹同样检查）
@@ -1612,6 +1598,14 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     applied && outputFolders.some((f) => f.folder.slice(applied.dateDir.length).split(/[\\/]/).filter(Boolean).length > 1)
       ? 2
       : 1;
+  /** 输出目录就在当前库内：图片由库监听自动登记，再入库会多出一条平行文件夹链 */
+  const insideActiveLib = !!rootLib?.inside?.active;
+  /** 库内入库时实际会落到的层级（11月 / 20261127） */
+  const importTargetPath = [...(rootLib?.inside?.relPath || []), dateFolder.trim() || shootDate];
+  // 已经在当前库里就默认跳过入库（保留「仍要入库」给监听没跑起来的情况）
+  useEffect(() => {
+    if (applied && insideActiveLib) setImportSkipped(true);
+  }, [applied, insideActiveLib]);
 
   /** 各步骤完成状态：当前步骤 = 第一个没完成的 */
   const stepDone: Record<StepKey, boolean> = {
@@ -1862,85 +1856,15 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, fontSize: 13 }}>{i18n.t('kf15335db')}</span>
-          <span
-            style={{
-              padding: '2px 8px',
-              borderRadius: 999,
-              fontSize: 12,
-              border: '1px solid var(--line)',
-              color: oms?.configured ? 'var(--text)' : 'var(--muted)',
-            }}
-          >
-            {oms?.configured ? oms.username : i18n.t('k71dc8feb')}
-          </span>
-          {oms?.configured && (
-            <span className="hint" style={{ color: oms.loggedIn ? 'var(--ok, #3c9d5d)' : 'var(--muted)' }}>
-              {oms.loggedIn ? i18n.t('k0b5961c7') : i18n.t('kda208e9c')}
-            </span>
-          )}
-          <button className="btn sm" onClick={() => setOmsOpen((v) => !v)}>
-            {omsOpen ? i18n.t('kdef9e98b') : oms?.configured ? i18n.t('k733314cf') : i18n.t('k6e3e8be2')}
-          </button>
-          {oms?.configured && (
-            <button className="btn sm" onClick={testOms} disabled={omsBusy}>
-              {i18n.t('k69e74756')}
-            </button>
-          )}
-          {oms?.configured && (
-            <button className="btn sm" onClick={clearOms} disabled={omsBusy}>
-              {i18n.t('k79a14307')}
-            </button>
-          )}
-          <span className="hint" style={{ marginLeft: 'auto' }}>
-            {i18n.t('k9b98f1a1')}
+      {/* 登录入口只有右上角一处：这里不显示账号、也不提供退出/改账号，
+          已登录时整块不出，避免看起来像第二套登录系统 */}
+      {!omsLoggedIn && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <span className="hint" style={{ color: 'var(--warn, #d08b2c)' }}>
+            未登录 OMS：点右上角头像 →「登录 / 激活授权」，登录后本页自动同步；查询完整编码与上传需要先登录。
           </span>
         </div>
-
-        {omsOpen && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ width: 72, color: 'var(--muted)', fontSize: 12.5 }}>{i18n.t('k7035c62f')}</span>
-              <input
-                className="input"
-                style={{ flex: 1 }}
-                value={omsUser}
-                onChange={(e) => setOmsUser(e.target.value)}
-                placeholder="13333333333"
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ width: 72, color: 'var(--muted)', fontSize: 12.5 }}>{i18n.t('ka8105204')}</span>
-              <input
-                className="input"
-                type="password"
-                style={{ flex: 1 }}
-                value={omsPass}
-                onChange={(e) => setOmsPass(e.target.value)}
-                autoComplete="new-password"
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ width: 72, color: 'var(--muted)', fontSize: 12.5 }}>{i18n.t('k76167587')}</span>
-              <input className="input" style={{ flex: 1 }} value={omsBase} onChange={(e) => setOmsBase(e.target.value)} />
-              <button className="btn primary sm" onClick={saveOmsAccount} disabled={omsBusy}>
-                {i18n.t('kdb20c338')}
-              </button>
-            </div>
-            <div className="hint" style={{ marginTop: 6, marginLeft: 80 }}>
-              {i18n.t('k622bd299')}
-            </div>
-          </div>
-        )}
-
-        {oms?.error && !omsOpen && (
-          <div className="hint" style={{ marginTop: 8, color: 'var(--danger, #d9534f)' }}>
-            {oms.error}
-          </div>
-        )}
-      </div>
+      )}
 
       <div className="card" style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
@@ -2249,13 +2173,14 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               </span>
             ))}
           </div>
-          {/* 编号步骤：和完整流程一样逐个文件夹展示图片，1~5 张由用户自己点 */}
+          {/* 编号步骤：eBay 逐个点 1~5 张，非 eBay 直接按拍摄顺序自动编号 */}
           {currentKey === 'number' && (
             <div style={{ display: 'grid', gap: 10 }}>
               {manualFolders.map((f) => {
                 const dir = manualFolderPath(f.name);
                 const files = numberFiles[dir] || [];
                 const picks = numberPicks[dir] || [];
+                const required = needManualPicks(f.name);
                 const need = Math.min(5, files.length);
                 return (
                   <div key={dir} style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
@@ -2272,7 +2197,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                         {f.name}
                       </b>
                       <span className="hint">
-                        {files.length} 张 · 已选 {picks.length}/{need}
+                        {files.length} 张 ·{' '}
+                        {required
+                          ? `已选 ${picks.length}/${need}`
+                          : picks.length
+                            ? `自动编号（手选 ${picks.length} 张优先）`
+                            : '自动按拍摄顺序编号'}
                       </span>
                       {!files.length && numberReading && <span className="hint">正在读取图片…</span>}
                       {!files.length && !numberReading && (
@@ -2922,8 +2852,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                   </button>
                   <span className="hint">
                     {scan
-                      ? '点上方产品图的缩略图，按点击顺序定 1.jpg 起的前五张（最多 5 张）；也可点「选择前五张」放大挑选。'
-                      : '每个文件夹的 1~5 张都要自己点，选满才能编号。'}
+                      ? 'eBay 要点缩略图按点击顺序定 1.jpg 起的前五张（最多 5 张，也可点「选择前五张」放大挑）；非 eBay 不用选，按拍摄顺序自动编号。'
+                      : 'eBay 文件夹要自己点满 1~5 张；非 eBay 不用点，按拍摄顺序自动编号。'}
                   </span>
                   {numberHasNested && (
                     <span className="hint" style={{ color: 'var(--warn, #d08b2c)' }}>
@@ -2936,7 +2866,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {currentKey === 'import' && (
                 <>
                   <button className="btn primary" onClick={runImport} disabled={applying}>
-                    {applyMode === 'import' ? '入库中…' : '入库'}
+                    {applyMode === 'import' ? '入库中…' : insideActiveLib ? '仍要入库' : '入库'}
                   </button>
                   <button
                     className="btn ghost"
@@ -3058,13 +2988,16 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               >
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
                   <b>逐个产品选择前五张</b>
-                  <span className="hint">按点击顺序编号：第 1 次点的是 1.jpg，第 5 次点的是 5.jpg。</span>
+                  <span className="hint">
+                    按点击顺序编号：第 1 次点的是 1.jpg，第 5 次点的是 5.jpg；非 eBay 不点就按拍摄顺序自动编号。
+                  </span>
                   <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => setPickerOpen(false)}>
                     收起
                   </button>
                 </div>
                 {outputFolders.map((f) => {
                   const picked = numberPicks[f.folder] || [];
+                  const required = needManualPicks(f.code);
                   return (
                     <div
                       key={f.folder}
@@ -3074,7 +3007,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                         <b style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 12.5 }}>
                           {f.code || '—'}
                         </b>
-                        <span className="hint">已选 {picked.length}/5</span>
+                        <span className="hint">
+                          {required ? `已选 ${picked.length}/5` : '非 eBay · 可不选，自动编号'}
+                        </span>
                         {picked.length > 0 && (
                           <button className="btn ghost sm" onClick={() => setNumberPicks((p) => ({ ...p, [f.folder]: [] }))}>
                             清空这个产品
@@ -3152,7 +3087,10 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 (codeIssues.length
                   ? `还有 ${codeIssues.length} 个组缺编码或产品图，补齐才能创建文件夹。`
                   : '编码和产品图都齐了（产品名可以到上传前再补）。')}
-              {currentKey === 'copy' && `将复制到：${outputDateDir || '请先选择输出根目录'}`}
+              {currentKey === 'copy' &&
+                `将复制到：${outputDateDir || '请先选择输出根目录'}${
+                  insideActiveLib ? '；目录在当前库内，入库会自动跳过（库监听会登记）' : ''
+                }`}
               {currentKey === 'ratio' &&
                 (ratios
                   ? notSquareTotal
@@ -3168,8 +3106,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {currentKey === 'import' && (
                 <>
                   {imported
-                    ? `已入库 ${imported.importedTotal} 张`
-                    : `登记到图库：${activeFolder?.name || activeLibName || '图库根'}`}
+                    ? `已入库 ${imported.importedTotal} 张${
+                        imported.importPath?.length ? `（${imported.importPath.join(' / ')}）` : ''
+                      }`
+                    : insideActiveLib
+                      ? `图片已经在当前库「${importTargetPath.join(' / ')}」下，库监听会自动登记，默认跳过入库。`
+                      : `登记到图库：${activeFolder?.name || activeLibName || '图库根'}`}
                   {/* 图库按绝对路径登记：没编号就入库，之后编号改名会让记录指向不存在的文件 */}
                   {!imported && applied && !numbered && (
                     <span style={{ color: 'var(--warn, #d08b2c)' }}>
@@ -3196,8 +3138,10 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
             )}
 
             <div className="hint" style={{ marginTop: 4 }}>
-              {i18n.t('k168903f9')}：{activeFolder?.name || activeLibName || i18n.t('k1dae2087')} ·{' '}
-              {i18n.t('k948019e4')}
+              {i18n.t('k168903f9')}：
+              {insideActiveLib
+                ? `当前库 / ${importTargetPath.join(' / ')}（目录已在库内，默认跳过入库）`
+                : `${activeFolder?.name || activeLibName || i18n.t('k1dae2087')} · ${i18n.t('k948019e4')}`}
             </div>
           </div>
       )}

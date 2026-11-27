@@ -30,16 +30,16 @@
   /* 窄窗口换行而不是被裁掉：操作多时允许折行 */
   flex-wrap: wrap;
 }
-/* 左侧：导航与视图控制；右侧：图片操作，宽度不够时整体右对齐折行 */
-.lb-top-left,
-.lb-top-actions {
+/* 左侧：全部功能按钮；右侧：序号 + 文件名 + 关闭，宽度不够时折行 */
+.lb-top-actions,
+.lb-top-right {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
   min-width: 0;
 }
-.lb-top-actions {
+.lb-top-right {
   margin-left: auto;
   justify-content: flex-end;
 }
@@ -132,7 +132,7 @@
     padding: 6px 9px;
   }
   .lb-top-actions,
-  .lb-top-left {
+  .lb-top-right {
     gap: 4px;
   }
 }
@@ -170,6 +170,35 @@
 .lb-more-menu .btn {
   justify-content: flex-start;
   white-space: nowrap;
+}
+
+/* 图上右键菜单：固定定位在鼠标位置，条目多时可滚 */
+.lb-ctx-menu {
+  position: fixed;
+  z-index: 90;
+  min-width: 210px;
+  max-height: min(560px, 70vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(18, 18, 31, 0.98);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+}
+.lb-ctx-menu .btn {
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+.lb-ctx-group {
+  padding: 2px 6px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  user-select: none;
 }
 /* 幻灯片间隔：菜单里一行「标签 + 下拉」 */
 .lb-more-row {

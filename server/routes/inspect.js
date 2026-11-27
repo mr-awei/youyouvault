@@ -134,8 +134,13 @@ export function register(app, ctx) {
         .filter((r) => r.w > 0.01 && r.h > 0.01)
         .slice(0, 24);
       if (!regions.length) return res.status(400).json({ error: '至少需要一个裁切框' });
-      const targetDir = assertWritableDir(req.body?.targetDir, '保存位置');
-      if (!targetDir) return res.status(400).json({ error: '请先选择保存位置' });
+      // assertWritableDir 是抛异常而不是返回 null：用户没选/选了非法路径要按 400 回，别变成 500
+      let targetDir;
+      try {
+        targetDir = assertWritableDir(req.body?.targetDir, '保存位置');
+      } catch (err) {
+        return res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+      }
       if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
       const addToLibrary = Boolean(req.body?.addToLibrary);
       const out = [];

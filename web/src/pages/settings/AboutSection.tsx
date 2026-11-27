@@ -3,6 +3,7 @@ import { BASE, desktop, getApiToken, getAppInfo, quiet } from '../../api';
 import type { AppInfo, HotfixState, UpdateState } from '../../api';
 import type { Settings as SettingsType } from '../../types';
 import Card from './Card';
+import { promptDialog } from '../../components/Dialogs';
 import i18n from '../../i18n';
 
 interface Props {
@@ -213,7 +214,12 @@ export default function AboutSection({ settings, patch, onToast, onOpenTutorial 
 
   /** 一键诊断包：用户只提交一个 zip，系统环境/网络/操作/日志都在里面 */
   const downloadBundle = async () => {
-    const description = window.prompt('问题描述 / 复现步骤（会写入诊断包，可留空）') || '';
+    // Electron 不支持 window.prompt（会直接抛 "prompt is not supported"），统一走应用内对话框
+    const answer = await promptDialog('生成诊断包', '', '问题描述 / 复现步骤（可留空）', {
+      hint: '会写入诊断包，方便开发者定位问题；不包含密码、token 或图片原文件。',
+    });
+    if (answer === null) return; // 取消
+    const description = answer.trim();
     try {
       const token = await getApiToken();
       const client = {
@@ -245,8 +251,9 @@ export default function AboutSection({ settings, patch, onToast, onOpenTutorial 
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
-      onToast('诊断包已生成，直接把这个 zip 发给开发者即可');
+      // 别立刻 revoke：桌面端会先弹「另存为」并暂停下载，过早释放 blob 会让下载中断
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      onToast('诊断包已生成：在「另存为」里选好位置，把这个 zip 发给开发者即可');
     } catch (err) {
       onToast((err as Error).message, 'error');
     }

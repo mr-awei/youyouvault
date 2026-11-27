@@ -41,12 +41,22 @@ export function register(app, ctx) {
     '/api/playlists/:id',
     asyncRoute(async (req, res) => {
       const id = Number(req.params.id);
+      if (!db.prepare('SELECT 1 AS ok FROM playlists WHERE id = ?').get(id)) {
+        return res.status(404).json({ error: '清单不存在' });
+      }
       if (req.body?.name !== undefined) {
-        db.prepare('UPDATE playlists SET name = ?, updated_at = ? WHERE id = ?').run(
-          String(req.body.name).trim(),
-          new Date().toISOString(),
-          id
-        );
+        const name = String(req.body.name).trim();
+        // 空名会让侧栏出现一条看不见的清单，和新建接口一样拒掉
+        if (!name) return res.status(400).json({ error: '清单名称不能为空' });
+        try {
+          db.prepare('UPDATE playlists SET name = ?, updated_at = ? WHERE id = ?').run(
+            name,
+            new Date().toISOString(),
+            id
+          );
+        } catch {
+          return res.status(400).json({ error: '已存在同名清单' });
+        }
       }
       if (req.body?.description !== undefined) {
         db.prepare('UPDATE playlists SET description = ?, updated_at = ? WHERE id = ?').run(

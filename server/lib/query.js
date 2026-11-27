@@ -477,18 +477,24 @@ export function attachInheritedTags(items) {
 export function listImageIds(query = {}) {
   const colorIds = query.colorIds || null;
   const colorTable = colorIds && colorIds.length ? createColorScope(colorIds) : '';
-  const { sql, params } = buildImageFilter(query, { colorTable });
-  // 全选也要有上限：十万级库一次返回 10 万个 id = 1MB+ JSON + 前端 10 万项 Set，
-  // 而且用户根本没法真对 10 万张做批量操作。多取一行用来判断「是否被截断」。
-  const rows = db
-    .prepare(`SELECT id FROM images ${sql} ORDER BY id DESC LIMIT ?`)
-    .all(...params, MAX_IDS + 1);
-  const truncated = rows.length > MAX_IDS;
-  const ids = (truncated ? rows.slice(0, MAX_IDS) : rows).map((r) => r.id);
-  const total = truncated
-    ? db.prepare(`SELECT COUNT(*) AS c FROM images ${sql}`).get(...params).c
-    : ids.length;
-  return { ids, total, truncated };
+  // 颜色筛选会建 TEMP 表：和 listImages 一样必须在 finally 里删，
+  // 否则每次 Ctrl+A 都留一张 color_scope_N（最多 2 万行）在连接内存里。
+  try {
+    const { sql, params } = buildImageFilter(query, { colorTable });
+    // 全选也要有上限：十万级库一次返回 10 万个 id = 1MB+ JSON + 前端 10 万项 Set，
+    // 而且用户根本没法真对 10 万张做批量操作。多取一行用来判断「是否被截断」。
+    const rows = db
+      .prepare(`SELECT id FROM images ${sql} ORDER BY id DESC LIMIT ?`)
+      .all(...params, MAX_IDS + 1);
+    const truncated = rows.length > MAX_IDS;
+    const ids = (truncated ? rows.slice(0, MAX_IDS) : rows).map((r) => r.id);
+    const total = truncated
+      ? db.prepare(`SELECT COUNT(*) AS c FROM images ${sql}`).get(...params).c
+      : ids.length;
+    return { ids, total, truncated };
+  } finally {
+    dropColorScope(colorTable);
+  }
 }
 
 export function listImages(query = {}) {

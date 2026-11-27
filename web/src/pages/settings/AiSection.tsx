@@ -3,6 +3,7 @@ import { api } from '../../api';
 import type { AiProviderInfo } from '../../types';
 import Card from './Card';
 import Select from '../../components/Select';
+import { promptDialog } from '../../components/Dialogs';
 import type { SettingsForm } from './useSettingsForm';
 import i18n from '../../i18n';
 
@@ -32,7 +33,8 @@ function ProviderKit({ settings, onToast }: { settings: SettingsForm['settings']
 
   const saveCurrent = async () => {
     if (!settings?.ai) return;
-    const name = window.prompt(i18n.t('k7c93ec7c'), settings.ai.model || i18n.t('k772e7fb7'));
+    // Electron 里 window.prompt 不可用，用应用内输入框
+    const name = await promptDialog(i18n.t('k7c93ec7c'), settings.ai.model || i18n.t('k772e7fb7'));
     if (!name) return;
     setBusy('save');
     setErr('');

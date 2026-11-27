@@ -71,7 +71,9 @@ export default function OmsLoginDialog({ onClose, onToast }: Props) {
     setBusy(true);
     try {
       await api.omsClearAccount();
-      await refresh(true);
+      // 退出走轻刷：force 会重新探测硬件并串一次远程停用清单，网络慢时弹窗长时间停在
+      // 「退出中」，看起来像没退出；服务端会话已经清空，普通刷新就能拿到未登录状态
+      await refresh();
       onToast('已退出登录，专业版功能已关闭', 'info');
       onClose();
     } catch (err) {

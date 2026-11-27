@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
-import { db, getLibraryGeneration } from '../db.js';
+import { db, getActiveLibrary, getLibraryGeneration } from '../db.js';
 import { ensureFolderUnderParent, linkImageToFolder } from '../folders.js';
 import { ingest, setTags } from '../library.js';
 import { assertWritableDir } from '../lib/safe-path.js';
@@ -526,6 +526,9 @@ export function register(app, ctx) {
       let importedTotal = 0;
       let importSkippedTotal = 0;
       let cleanedTotal = 0;
+      // 库代数在请求入口取一次：放在循环里重新取，就等于永远等于当前值，
+      // 用户处理到一半切库时后排的组会直接写进新库（ingest 的跨库守卫失效）。
+      const generation = getLibraryGeneration();
 
       for (let sourceIndex = 0; sourceIndex < input.length; sourceIndex++) {
         const g = input[sourceIndex];
@@ -612,7 +615,6 @@ export function register(app, ctx) {
                 [cleanTag(g.productName), cleanTag(g.code), cleanTag(mainSku)].filter(Boolean)
               ),
             ];
-            const generation = getLibraryGeneration();
             for (const dest of destFiles) {
               const r = await importImageToFolder(dest, libraryFolderId, tags, generation);
               if (r.ok) {
@@ -996,12 +998,33 @@ export function register(app, ctx) {
       const dateDir = path.join(root, dateFolderName);
       await fsp.mkdir(dateDir, { recursive: true });
       notifyOnChange(dateDir);
-      // 图库层级：当前选中的文件夹 / 日期文件夹 /（可选分类）/ 编码
-      const dateFolderId = ensureFolderUnderParent(parentFolderId, dateFolderName);
+      // 输出根目录本身就在当前库的素材目录里（例如 D:\李伟\11月）时，
+      // 图库层级按磁盘层级落位（11月/20261127/编码），别挂到侧栏选中的文件夹下：
+      // 监听器已经按磁盘路径把图归好夹，再建一条平行层级会让同一张图在库里出现两处。
+      const libRoot = String(getActiveLibrary()?.root_path || '').trim();
+      let rootSegs = null;
+      if (libRoot) {
+        const rel = path.relative(path.resolve(libRoot), path.resolve(root));
+        if (!rel) rootSegs = [];
+        else if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+          rootSegs = rel.split(path.sep).filter(Boolean);
+        }
+      }
+      let baseParentId = parentFolderId;
+      if (rootSegs) {
+        baseParentId = null;
+        for (const seg of rootSegs) {
+          baseParentId = ensureFolderUnderParent(baseParentId, safeCodeName(seg) || seg);
+        }
+      }
+      // 图库层级：库内磁盘层级（或选中的文件夹）/ 日期文件夹 /（可选分类）/ 编码
+      const dateFolderId = ensureFolderUnderParent(baseParentId, dateFolderName);
 
       const results = [];
       let importedTotal = 0;
       let importSkippedTotal = 0;
+      // 同上：代数只取一次，中途切库就整批失败，不能把记录写进另一个库
+      const generation = getLibraryGeneration();
 
       for (const g of input) {
         const code = safeCodeName(g?.code);
@@ -1064,7 +1087,6 @@ export function register(app, ctx) {
                 [cleanTag(g.productName), cleanTag(g.code), cleanTag(mainSku)].filter(Boolean)
               ),
             ];
-            const generation = getLibraryGeneration();
             for (const name of names) {
               const r = await importImageToFolder(path.join(folder, name), libraryFolderId, tags, generation);
               if (r.ok) {
@@ -1083,7 +1105,16 @@ export function register(app, ctx) {
         results.push({ code, folder, imported, importSkipped, importErrors, libraryFolderId });
       }
 
-      res.json({ ok: true, dateDir, importedTotal, importSkippedTotal, results });
+      res.json({
+        ok: true,
+        dateDir,
+        importedTotal,
+        importSkippedTotal,
+        results,
+        // 实际落位的图库层级（库内时是磁盘相对层级，否则是选中的父文件夹 + 日期）
+        insideLibrary: !!rootSegs,
+        importPath: (rootSegs || []).concat(dateFolderName),
+      });
     })
   );
 
