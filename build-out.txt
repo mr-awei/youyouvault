@@ -1,0 +1,810 @@
+
+> tuku-gallery@1.7.0 dist:secure
+> node scripts/build-secure.mjs
+
+[secure] 已混淆 199 个文件；源码备份：D:\a\youyouvault\youyouvault\.obfuscate-backup\2026-11-28T08-45-56
+
+> tuku-gallery@1.7.0 dist
+> vite build && node scripts/gen-integrity.mjs && electron-builder && node scripts/gen-checksums.mjs && node scripts/release-notes.mjs --publish never
+
+[36mvite v6.4.3 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 600 modules transformed.
+rendering chunks...
+computing gzip size...
+[2m../dist/web/[22m[32mindex.html                             [39m[1m[2m  1.05 kB[22m[1m[22m[2m │ gzip:   0.57 kB[22m
+[2m../dist/web/[22m[32massets/gif.worker-DtVXFlE4.js          [39m[1m[2m545.60 kB[22m[1m[22m
+[2m../dist/web/[22m[35massets/EpubViewer-uKZ8Oml9.css         [39m[1m[2m  2.76 kB[22m[1m[22m[2m │ gzip:   0.90 kB[22m
+[2m../dist/web/[22m[35massets/index-1qdRBAW8.css              [39m[1m[2m170.69 kB[22m[1m[22m[2m │ gzip:  30.77 kB[22m
+[2m../dist/web/[22m[36massets/useJobProgress-CmnHvolX.js      [39m[1m[2m  0.60 kB[22m[1m[22m[2m │ gzip:   0.36 kB[22m
+[2m../dist/web/[22m[36massets/SaveModeBlock-CrMKlgid.js       [39m[1m[2m  1.60 kB[22m[1m[22m[2m │ gzip:   0.70 kB[22m
+[2m../dist/web/[22m[36massets/VirtualGrid-DeHtecCZ.js         [39m[1m[2m  2.83 kB[22m[1m[22m[2m │ gzip:   1.27 kB[22m
+[2m../dist/web/[22m[36massets/STLLoader-CitfXQum.js           [39m[1m[2m  3.08 kB[22m[1m[22m[2m │ gzip:   1.48 kB[22m
+[2m../dist/web/[22m[36massets/EpubViewer-CM1VDY_W.js          [39m[1m[2m  3.54 kB[22m[1m[22m[2m │ gzip:   1.48 kB[22m
+[2m../dist/web/[22m[36massets/ExportDialog-CKPg_2Og.js        [39m[1m[2m  3.83 kB[22m[1m[22m[2m │ gzip:   1.60 kB[22m
+[2m../dist/web/[22m[36massets/CompareView-B3ihC5kN.js         [39m[1m[2m  5.06 kB[22m[1m[22m[2m │ gzip:   1.97 kB[22m
+[2m../dist/web/[22m[36massets/BulkMetadataDialog-C1cUWMxa.js  [39m[1m[2m  5.11 kB[22m[1m[22m[2m │ gzip:   1.88 kB[22m
+[2m../dist/web/[22m[36massets/Search-CUnFcN5s.js              [39m[1m[2m  5.15 kB[22m[1m[22m[2m │ gzip:   2.23 kB[22m
+[2m../dist/web/[22m[36massets/BulkEditDialog-Cu7CyilJ.js      [39m[1m[2m  5.48 kB[22m[1m[22m[2m │ gzip:   2.49 kB[22m
+[2m../dist/web/[22m[36massets/RenameBatchDialog-DdKfItxZ.js   [39m[1m[2m  5.51 kB[22m[1m[22m[2m │ gzip:   2.33 kB[22m
+[2m../dist/web/[22m[36massets/Playlists-DiRkacWc.js           [39m[1m[2m  5.97 kB[22m[1m[22m[2m │ gzip:   2.37 kB[22m
+[2m../dist/web/[22m[36massets/FolderGroupView-U9T5nBGX.js     [39m[1m[2m  7.44 kB[22m[1m[22m[2m │ gzip:   2.98 kB[22m
+[2m../dist/web/[22m[36massets/Knowledge-D7MNInf8.js           [39m[1m[2m  7.67 kB[22m[1m[22m[2m │ gzip:   2.77 kB[22m
+[2m../dist/web/[22m[36massets/TDSLoader-Bb2rHeWe.js           [39m[1m[2m  8.28 kB[22m[1m[22m[2m │ gzip:   2.74 kB[22m
+[2m../dist/web/[22m[36massets/BatchCropStudio-Ca0zTP8g.js     [39m[1m[2m  8.42 kB[22m[1m[22m[2m │ gzip:   3.83 kB[22m
+[2m../dist/web/[22m[36massets/Enhance-CtjUZQ-h.js             [39m[1m[2m  8.55 kB[22m[1m[22m[2m │ gzip:   3.22 kB[22m
+[2m../dist/web/[22m[36massets/Dashboard-D3LH4M5K.js           [39m[1m[2m  8.87 kB[22m[1m[22m[2m │ gzip:   2.96 kB[22m
+[2m../dist/web/[22m[36massets/PLYLoader-Dv935XcU.js           [39m[1m[2m  9.03 kB[22m[1m[22m[2m │ gzip:   3.26 kB[22m
+[2m../dist/web/[22m[36massets/OBJLoader-2KGUGpPm.js           [39m[1m[2m  9.04 kB[22m[1m[22m[2m │ gzip:   3.02 kB[22m
+[2m../dist/web/[22m[36massets/CropSettings-Dsn-gMID.js        [39m[1m[2m  9.55 kB[22m[1m[22m[2m │ gzip:   3.28 kB[22m
+[2m../dist/web/[22m[36massets/Smart-C3HPpKix.js               [39m[1m[2m 14.14 kB[22m[1m[22m[2m │ gzip:   4.23 kB[22m
+[2m../dist/web/[22m[36massets/Timeline-DwJGqJ9y.js            [39m[1m[2m 17.77 kB[22m[1m[22m[2m │ gzip:   6.26 kB[22m
+[2m../dist/web/[22m[36massets/Tidy-BWuikT_G.js                [39m[1m[2m 19.96 kB[22m[1m[22m[2m │ gzip:   7.04 kB[22m
+[2m../dist/web/[22m[36massets/OrbitControls-vtVVOdTA.js       [39m[1m[2m 20.22 kB[22m[1m[22m[2m │ gzip:   4.52 kB[22m
+[2m../dist/web/[22m[36massets/Tutorial-EPvnMpQI.js            [39m[1m[2m 30.11 kB[22m[1m[22m[2m │ gzip:   9.83 kB[22m
+[2m../dist/web/[22m[36massets/GLTFLoader-ClysoKZC.js          [39m[1m[2m 47.83 kB[22m[1m[22m[2m │ gzip:  14.21 kB[22m
+[2m../dist/web/[22m[36massets/CanvasBoard-Da8-nLvC.js         [39m[1m[2m 48.08 kB[22m[1m[22m[2m │ gzip:  15.19 kB[22m
+[2m../dist/web/[22m[36massets/FBXLoader-DkKd7vTi.js           [39m[1m[2m 51.82 kB[22m[1m[22m[2m │ gzip:  17.29 kB[22m
+[2m../dist/web/[22m[36massets/ColorRoom-DgWkFioD.js           [39m[1m[2m 52.73 kB[22m[1m[22m[2m │ gzip:  19.27 kB[22m
+[2m../dist/web/[22m[36massets/AppDialogs-D1MUd-RR.js          [39m[1m[2m 53.84 kB[22m[1m[22m[2m │ gzip:  16.24 kB[22m
+[2m../dist/web/[22m[36massets/ColladaLoader-BjtD1y2e.js       [39m[1m[2m 56.48 kB[22m[1m[22m[2m │ gzip:  15.25 kB[22m
+[2m../dist/web/[22m[36massets/BarcodeSplit-BzA0blcS.js        [39m[1m[2m 68.59 kB[22m[1m[22m[2m │ gzip:  21.16 kB[22m
+[2m../dist/web/[22m[36massets/Lightbox-BtXSIMjp.js            [39m[1m[2m106.64 kB[22m[1m[22m[2m │ gzip:  35.19 kB[22m
+[2m../dist/web/[22m[36massets/react-B7TwpDvY.js               [39m[1m[2m143.57 kB[22m[1m[22m[2m │ gzip:  45.98 kB[22m
+[2m../dist/web/[22m[36massets/Settings-DM2o-9Us.js            [39m[1m[2m145.46 kB[22m[1m[22m[2m │ gzip:  42.06 kB[22m
+[2m../dist/web/[22m[36massets/OfficeViewer-DCRQyl73.js        [39m[1m[2m322.08 kB[22m[1m[22m[2m │ gzip: 104.04 kB[22m
+[2m../dist/web/[22m[36massets/three.module-BSwTHy4A.js        [39m[1m[2m753.49 kB[22m[1m[22m[2m │ gzip: 192.67 kB[22m
+[2m../dist/web/[22m[36massets/xlsx.min-B3AbISaj.js            [39m[1m[33m870.26 kB[39m[22m[2m │ gzip: 323.04 kB[22m
+[2m../dist/web/[22m[36massets/index-Cf49hCgY.js               [39m[1m[33m870.39 kB[39m[22m[2m │ gzip: 332.07 kB[22m
+
+(!) Some chunks are larger than 800 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[32m✓ built in 7.75s[39m
+[integrity] 216 个文件 · 5.3 MB → electron\integrity-manifest.json
+  • electron-builder  version=26.15.3 os=10.0.26100
+  • Implicit publishing triggered by git tag. This behavior will be disabled in electron-builder v27. Please use --publish explicitly.  tag=v1.7.0
+  • loaded configuration  file=package.json ("build" field)
+  • effective config  config=directories:
+  output: release-build
+  buildResources: build
+appId: com.youyou.tuku.visual
+productName: youyoutuku
+copyright: Copyright © 2026 优优图库
+files:
+  - filter:
+      - electron/**/*
+      - server/**/*
+      - plugins/**/*
+      - dist/web/**/*
+      - package.json
+      - build/icon.ico
+      - '!node_modules/react/**'
+      - '!node_modules/react-dom/**'
+      - '!node_modules/scheduler/**'
+      - '!node_modules/onnxruntime-web/**'
+      - '!node_modules/three/**'
+      - '!node_modules/mammoth/**'
+      - '!node_modules/codepage/**'
+      - '!node_modules/@huggingface/transformers/dist/ort-wasm*'
+      - '!node_modules/@huggingface/transformers/dist/transformers.js'
+      - '!node_modules/@huggingface/transformers/dist/transformers.min.js'
+      - '!node_modules/@huggingface/transformers/dist/transformers.web*'
+      - '!**/*.map'
+afterPack: scripts/after-pack.cjs
+extraResources:
+  - from: assets/samples
+    to: samples
+    filter:
+      - '**/*'
+asarUnpack:
+  - plugins/**
+  - server/plugin-runtime.js
+  - '**/node_modules/sharp/**'
+  - '**/node_modules/@img/**'
+  - '**/node_modules/jpegtran-bin/**'
+  - '**/node_modules/onnxruntime-node/**'
+  - '**/node_modules/onnxruntime-common/**'
+  - '**/node_modules/@huggingface/**'
+  - '**/node_modules/semver/**'
+  - '**/node_modules/detect-libc/**'
+compression: maximum
+forceCodeSigning: false
+publish:
+  - provider: github
+    owner: mr-awei
+    repo: youyouvault
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+  signtoolOptions:
+    signingHashAlgorithms:
+      - sha256
+    rfc3161TimeStampServer: http://timestamp.digicert.com
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.photography
+  artifactName: TuKu-${version}-${arch}.${ext}
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Graphics;Photography;Viewer
+  artifactName: TuKu-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 优优图库
+  uninstallDisplayName: 优优图库
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  deleteAppDataOnUninstall: false
+  artifactName: TuKu-Setup-${version}.exe
+
+  • spawning        command=npm prefix -w cwd=D:\a\youyouvault\youyouvault
+  • exited          command=npm code=1 pid=2860
+  • no event listeners found  event=beforePack
+  • executing @electron/rebuild  electronVersion=44.4.5 arch=x64 buildFromSource=false workspaceRoot=D:\a\youyouvault\youyouvault projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=44.4.5 appOutDir=release-build\win-unpacked
+  • no custom electronDist provided, unpacking default Electron distribution
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=D:\a\youyouvault\youyouvault\release-build\win-unpacked
+  • no event listeners found  event=afterExtract
+  • searching for node modules  pm=npm searchDir=D:\a\youyouvault\youyouvault
+  • node modules collection complete  packageName=tuku-gallery depCount=381
+  • collected node modules  pm=npm nodeModules=[{"name":"@huggingface/jinja","version":"0.5.10","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@huggingface\\jinja"},{"name":"@huggingface/transformers","version":"3.8.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@huggingface\\transformers"},{"name":"@img/colour","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@img\\colour"},{"name":"@img/sharp-win32-x64","version":"0.34.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@img\\sharp-win32-x64"},{"name":"@isaacs/cliui","version":"8.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@isaacs\\cliui","dependencies":[{"name":"ansi-regex","version":"6.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ansi-regex"},{"name":"strip-ansi","version":"7.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\strip-ansi"}]},{"name":"@isaacs/fs-minipass","version":"4.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@isaacs\\fs-minipass"},{"name":"@pkgjs/parseargs","version":"0.11.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@pkgjs\\parseargs"},{"name":"@protobufjs/aspromise","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\aspromise"},{"name":"@protobufjs/base64","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\base64"},{"name":"@protobufjs/codegen","version":"2.0.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\codegen"},{"name":"@protobufjs/eventemitter","version":"1.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\eventemitter"},{"name":"@protobufjs/fetch","version":"1.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\fetch"},{"name":"@protobufjs/float","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\float"},{"name":"@protobufjs/path","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\path"},{"name":"@protobufjs/pool","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\pool"},{"name":"@protobufjs/utf8","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@protobufjs\\utf8"},{"name":"@sindresorhus/is","version":"0.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@sindresorhus\\is"},{"name":"@types/node","version":"22.20.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@types\\node"},{"name":"@webtoon/psd","version":"0.4.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@webtoon\\psd"},{"name":"@zxing/library","version":"0.23.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@zxing\\library"},{"name":"@zxing/text-encoding","version":"0.9.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\@zxing\\text-encoding"},{"name":"abort-controller","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\abort-controller"},{"name":"accepts","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\accepts"},{"name":"address","version":"1.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\address"},{"name":"adler-32","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xlsx-js-style\\node_modules\\adler-32"},{"name":"agentkeepalive","version":"3.5.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\agentkeepalive"},{"name":"ali-oss","version":"6.23.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ali-oss"},{"name":"ansi-regex","version":"5.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wrap-ansi-cjs\\node_modules\\ansi-regex"},{"name":"ansi-styles","version":"4.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ansi-styles"},{"name":"any-promise","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\any-promise"},{"name":"arch","version":"2.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\arch"},{"name":"archive-type","version":"4.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\archive-type","dependencies":[{"name":"file-type","version":"4.4.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\archive-type\\node_modules\\file-type"}]},{"name":"archiver","version":"7.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\archiver","dependencies":[{"name":"readable-stream","version":"4.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\readable-stream"},{"name":"string_decoder","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\string_decoder"}]},{"name":"archiver-utils","version":"5.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\archiver-utils","dependencies":[{"name":"is-stream","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-stream"},{"name":"readable-stream","version":"4.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\readable-stream"},{"name":"string_decoder","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\string_decoder"}]},{"name":"argparse","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\argparse"},{"name":"async","version":"3.2.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\async"},{"name":"available-typed-arrays","version":"1.0.7","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\available-typed-arrays"},{"name":"b4a","version":"1.9.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\text-decoder\\node_modules\\b4a"},{"name":"balanced-match","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\balanced-match"},{"name":"bare-events","version":"2.9.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bare-events"},{"name":"bare-fs","version":"4.8.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bare-fs"},{"name":"bare-path","version":"3.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bare-path"},{"name":"bare-stream","version":"2.13.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bare-stream"},{"name":"bare-url","version":"2.5.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bare-url"},{"name":"base64-js","version":"1.5.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\base64-js"},{"name":"bin-build","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-build"},{"name":"bin-check","version":"4.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-check"},{"name":"bin-version","version":"3.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version","dependencies":[{"name":"cross-spawn","version":"6.0.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\cross-spawn"},{"name":"execa","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\execa"},{"name":"get-stream","version":"4.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\get-stream"},{"name":"semver","version":"5.7.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version-check\\node_modules\\semver"}]},{"name":"bin-version-check","version":"4.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version-check","dependencies":[{"name":"semver","version":"5.7.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version-check\\node_modules\\semver"}]},{"name":"bin-wrapper","version":"4.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper","dependencies":[{"name":"download","version":"7.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\download","dependencies":[{"name":"pify","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\download\\node_modules\\pify"}]},{"name":"file-type","version":"8.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\file-type"},{"name":"got","version":"8.3.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\got","dependencies":[{"name":"pify","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\download\\node_modules\\pify"}]},{"name":"p-cancelable","version":"0.4.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\p-cancelable"},{"name":"p-event","version":"2.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\p-event"},{"name":"p-timeout","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\p-timeout"},{"name":"pify","version":"4.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\pify"},{"name":"url-parse-lax","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\url-parse-lax"}]},{"name":"bl","version":"1.2.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bl","dependencies":[{"name":"safe-buffer","version":"5.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jszip\\node_modules\\safe-buffer"}]},{"name":"body-parser","version":"2.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\body-parser"},{"name":"boolean","version":"3.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\boolean"},{"name":"bowser","version":"1.9.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bowser"},{"name":"brace-expansion","version":"2.1.7","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\brace-expansion"},{"name":"buffer","version":"6.0.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\buffer"},{"name":"buffer-alloc","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\buffer-alloc"},{"name":"buffer-alloc-unsafe","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\buffer-alloc-unsafe"},{"name":"buffer-crc32","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\buffer-crc32"},{"name":"buffer-fill","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\buffer-fill"},{"name":"builder-util-runtime","version":"9.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\builder-util-runtime"},{"name":"builtin-status-codes","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\builtin-status-codes"},{"name":"bytes","version":"3.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bytes"},{"name":"cacheable-request","version":"2.1.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\cacheable-request","dependencies":[{"name":"lowercase-keys","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\cacheable-request\\node_modules\\lowercase-keys"}]},{"name":"call-bind","version":"1.0.9","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\call-bind"},{"name":"call-bind-apply-helpers","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\call-bind-apply-helpers"},{"name":"call-bound","version":"1.0.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\call-bound"},{"name":"caw","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\caw"},{"name":"cfb","version":"1.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\cfb","dependencies":[{"name":"adler-32","version":"1.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\adler-32"}]},{"name":"chownr","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\chownr"},{"name":"clone-response","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\clone-response"},{"name":"codepage","version":"1.14.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xlsx-js-style\\node_modules\\codepage","dependencies":[{"name":"commander","version":"2.14.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xlsx-js-style\\node_modules\\codepage\\node_modules\\commander"}]},{"name":"color-convert","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\color-convert"},{"name":"color-name","version":"1.1.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\color-name"},{"name":"commander","version":"2.20.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\commander"},{"name":"compress-commons","version":"6.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\compress-commons","dependencies":[{"name":"is-stream","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-stream"},{"name":"readable-stream","version":"4.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\readable-stream"},{"name":"string_decoder","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\string_decoder"}]},{"name":"config-chain","version":"1.1.13","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\config-chain"},{"name":"content-disposition","version":"0.5.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\content-disposition"},{"name":"content-type","version":"2.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\type-is\\node_modules\\content-type"},{"name":"cookie","version":"0.7.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\cookie"},{"name":"cookie-signature","version":"1.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\cookie-signature"},{"name":"copy-to","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\copy-to"},{"name":"core-util-is","version":"1.0.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\core-util-is"},{"name":"crc-32","version":"1.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\crc-32"},{"name":"crc32-stream","version":"6.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\crc32-stream","dependencies":[{"name":"readable-stream","version":"4.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\readable-stream"},{"name":"string_decoder","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\string_decoder"}]},{"name":"cross-spawn","version":"7.0.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\cross-spawn","dependencies":[{"name":"path-key","version":"3.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\path-key"},{"name":"shebang-command","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\shebang-command"},{"name":"which","version":"2.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\which"}]},{"name":"dateformat","version":"2.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\dateformat"},{"name":"debug","version":"4.4.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\debug"},{"name":"decode-uri-component","version":"0.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decode-uri-component"},{"name":"decompress","version":"4.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress","dependencies":[{"name":"pify","version":"2.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\executable\\node_modules\\pify"}]},{"name":"decompress-response","version":"3.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress-response"},{"name":"decompress-tar","version":"4.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress-tar","dependencies":[{"name":"tar-stream","version":"1.6.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress-tar\\node_modules\\tar-stream"}]},{"name":"decompress-tarbz2","version":"4.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress-tarbz2","dependencies":[{"name":"file-type","version":"6.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress-tarbz2\\node_modules\\file-type"}]},{"name":"decompress-targz","version":"4.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress-targz"},{"name":"decompress-unzip","version":"4.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress-unzip","dependencies":[{"name":"file-type","version":"3.9.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\decompress-unzip\\node_modules\\file-type"},{"name":"get-stream","version":"2.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\get-stream"},{"name":"pify","version":"2.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\executable\\node_modules\\pify"}]},{"name":"default-user-agent","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\default-user-agent"},{"name":"define-data-property","version":"1.1.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\define-data-property"},{"name":"define-properties","version":"1.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\define-properties"},{"name":"depd","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\depd"},{"name":"destroy","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\destroy"},{"name":"detect-libc","version":"2.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\detect-libc"},{"name":"detect-node","version":"2.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\detect-node"},{"name":"digest-header","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\digest-header"},{"name":"download","version":"6.2.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\download"},{"name":"dunder-proto","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\dunder-proto"},{"name":"duplexer3","version":"0.1.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\duplexer3"},{"name":"eastasianwidth","version":"0.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\eastasianwidth"},{"name":"ee-first","version":"1.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ee-first"},{"name":"electron-updater","version":"6.8.11","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\electron-updater"},{"name":"emoji-regex","version":"8.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wrap-ansi-cjs\\node_modules\\emoji-regex"},{"name":"encodeurl","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\encodeurl"},{"name":"end-of-stream","version":"1.4.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\end-of-stream"},{"name":"end-or-error","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\end-or-error"},{"name":"es-define-property","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\es-define-property"},{"name":"es-errors","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\es-errors"},{"name":"es-object-atoms","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\es-object-atoms"},{"name":"es6-error","version":"4.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\es6-error"},{"name":"escape-html","version":"1.0.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\escape-html"},{"name":"escape-string-regexp","version":"1.0.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\escape-string-regexp"},{"name":"etag","version":"1.8.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\etag"},{"name":"event-target-shim","version":"5.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\event-target-shim"},{"name":"events","version":"3.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\events"},{"name":"events-universal","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\events-universal"},{"name":"execa","version":"0.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\execa","dependencies":[{"name":"cross-spawn","version":"5.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\execa\\node_modules\\cross-spawn"},{"name":"lru-cache","version":"4.1.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\execa\\node_modules\\lru-cache"},{"name":"yallist","version":"2.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\execa\\node_modules\\yallist"}]},{"name":"executable","version":"4.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\executable","dependencies":[{"name":"pify","version":"2.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\executable\\node_modules\\pify"}]},{"name":"exit-on-epipe","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\exit-on-epipe"},{"name":"express","version":"5.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\express","dependencies":[{"name":"content-disposition","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\content-disposition"},{"name":"content-type","version":"1.0.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\content-type"},{"name":"merge-descriptors","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\merge-descriptors"}]},{"name":"ext-list","version":"2.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ext-list"},{"name":"ext-name","version":"5.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ext-name"},{"name":"extend-shallow","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\extend-shallow"},{"name":"fast-fifo","version":"1.3.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\fast-fifo"},{"name":"fd-slicer","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\fd-slicer"},{"name":"fflate","version":"0.3.11","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xlsx-js-style\\node_modules\\fflate"},{"name":"file-type","version":"5.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\file-type"},{"name":"filename-reserved-regex","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\filename-reserved-regex"},{"name":"filenamify","version":"2.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\filenamify"},{"name":"finalhandler","version":"2.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\finalhandler"},{"name":"find-versions","version":"3.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\find-versions"},{"name":"flatbuffers","version":"25.9.23","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\flatbuffers"},{"name":"for-each","version":"0.3.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\for-each"},{"name":"foreground-child","version":"3.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\foreground-child","dependencies":[{"name":"signal-exit","version":"4.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\signal-exit"}]},{"name":"formstream","version":"1.5.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\formstream"},{"name":"forwarded","version":"0.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\forwarded"},{"name":"frac","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\frac"},{"name":"fresh","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\fresh"},{"name":"from2","version":"2.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\from2"},{"name":"fs-constants","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\fs-constants"},{"name":"fs-extra","version":"10.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\fs-extra"},{"name":"function-bind","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\function-bind"},{"name":"get-intrinsic","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\get-intrinsic"},{"name":"get-proto","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\get-proto"},{"name":"get-proxy","version":"2.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\get-proxy"},{"name":"get-ready","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\get-ready"},{"name":"get-stream","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\get-stream"},{"name":"glob","version":"10.4.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\glob"},{"name":"global-agent","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\global-agent"},{"name":"globalthis","version":"1.0.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\globalthis"},{"name":"gopd","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\gopd"},{"name":"got","version":"7.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\got"},{"name":"graceful-fs","version":"4.2.11","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\graceful-fs"},{"name":"guid-typescript","version":"1.0.9","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\guid-typescript"},{"name":"has-property-descriptors","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\has-property-descriptors"},{"name":"has-symbol-support-x","version":"1.4.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\has-symbol-support-x"},{"name":"has-symbols","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\has-symbols"},{"name":"has-to-string-tag-x","version":"1.4.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\has-to-string-tag-x"},{"name":"has-tostringtag","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\has-tostringtag"},{"name":"hasown","version":"2.0.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\hasown"},{"name":"html-parse-stringify","version":"4.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\html-parse-stringify"},{"name":"http-cache-semantics","version":"3.8.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\http-cache-semantics"},{"name":"http-errors","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\http-errors"},{"name":"humanize-ms","version":"1.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\humanize-ms"},{"name":"i18next","version":"27.1.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\i18next"},{"name":"iconv-lite","version":"0.7.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\iconv-lite"},{"name":"ieee754","version":"1.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ieee754"},{"name":"immediate","version":"3.0.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\immediate"},{"name":"import-lazy","version":"3.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\import-lazy"},{"name":"inherits","version":"2.0.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\inherits"},{"name":"ini","version":"1.3.8","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ini"},{"name":"into-stream","version":"3.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\into-stream"},{"name":"ipaddr.js","version":"1.9.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ipaddr.js"},{"name":"is-callable","version":"1.2.7","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-callable"},{"name":"is-class-hotfix","version":"0.0.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-class-hotfix"},{"name":"is-extendable","version":"0.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-extendable"},{"name":"is-fullwidth-code-point","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-fullwidth-code-point"},{"name":"is-natural-number","version":"4.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-natural-number"},{"name":"is-object","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-object"},{"name":"is-plain-obj","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-plain-obj"},{"name":"is-promise","version":"4.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-promise"},{"name":"is-retry-allowed","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-retry-allowed"},{"name":"is-stream","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\is-stream"},{"name":"is-type-of","version":"1.4.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-type-of"},{"name":"is-typed-array","version":"1.1.15","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\is-typed-array"},{"name":"isarray","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\isarray"},{"name":"isexe","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\isexe"},{"name":"isstream","version":"0.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\isstream"},{"name":"isurl","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\isurl"},{"name":"jackspeak","version":"3.4.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jackspeak"},{"name":"jpegtran-bin","version":"7.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jpegtran-bin"},{"name":"js-base64","version":"2.6.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\js-base64"},{"name":"js-tokens","version":"4.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\js-tokens"},{"name":"js-yaml","version":"4.3.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\js-yaml"},{"name":"json-buffer","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\json-buffer"},{"name":"json-stringify-safe","version":"5.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\json-stringify-safe"},{"name":"jsonfile","version":"6.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jsonfile"},{"name":"jstoxml","version":"2.2.9","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jstoxml"},{"name":"jszip","version":"3.10.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jszip"},{"name":"keyv","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\keyv"},{"name":"lazy-val","version":"1.0.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\lazy-val"},{"name":"lazystream","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\lazystream"},{"name":"libheif-js","version":"1.23.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\libheif-js"},{"name":"lie","version":"3.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\lie"},{"name":"lodash","version":"4.18.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\lodash"},{"name":"lodash.escaperegexp","version":"4.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\lodash.escaperegexp"},{"name":"lodash.isequal","version":"4.5.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\lodash.isequal"},{"name":"long","version":"5.3.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\long"},{"name":"loose-envify","version":"1.4.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\loose-envify"},{"name":"lowercase-keys","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\lowercase-keys"},{"name":"lru-cache","version":"11.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\lru-cache"},{"name":"make-dir","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\make-dir"},{"name":"matcher","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\matcher","dependencies":[{"name":"escape-string-regexp","version":"4.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\matcher\\node_modules\\escape-string-regexp"}]},{"name":"math-intrinsics","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\math-intrinsics"},{"name":"media-typer","version":"1.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\media-typer"},{"name":"merge-descriptors","version":"1.0.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ali-oss\\node_modules\\merge-descriptors"},{"name":"mime","version":"2.6.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\mime"},{"name":"mime-db","version":"1.54.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\mime-db"},{"name":"mime-types","version":"3.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\mime-types"},{"name":"mimic-response","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\mimic-response"},{"name":"minimatch","version":"9.0.9","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\minimatch"},{"name":"minimist","version":"1.2.8","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\minimist"},{"name":"minipass","version":"7.1.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\minipass"},{"name":"minizlib","version":"3.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\minizlib"},{"name":"mkdirp","version":"0.5.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\mkdirp"},{"name":"ms","version":"2.1.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ms"},{"name":"mz","version":"2.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\mz"},{"name":"negotiator","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\negotiator"},{"name":"nice-try","version":"1.0.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\nice-try"},{"name":"node-hex","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\node-hex"},{"name":"normalize-path","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\normalize-path"},{"name":"normalize-url","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\normalize-url","dependencies":[{"name":"sort-keys","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\normalize-url\\node_modules\\sort-keys"}]},{"name":"npm-conf","version":"1.1.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\npm-conf"},{"name":"npm-run-path","version":"2.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\npm-run-path"},{"name":"object-assign","version":"4.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\object-assign"},{"name":"object-inspect","version":"1.13.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\object-inspect"},{"name":"object-keys","version":"1.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\object-keys"},{"name":"on-finished","version":"2.4.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\on-finished"},{"name":"once","version":"1.4.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\once"},{"name":"onnxruntime-common","version":"1.21.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\onnxruntime-common"},{"name":"onnxruntime-node","version":"1.21.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\onnxruntime-node"},{"name":"onnxruntime-web","version":"1.22.0-dev.20250409-89f8206ba4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\onnxruntime-web","dependencies":[{"name":"onnxruntime-common","version":"1.22.0-dev.20250409-89f8206ba4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\onnxruntime-web\\node_modules\\onnxruntime-common"}]},{"name":"os-filter-obj","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\os-filter-obj"},{"name":"os-name","version":"1.0.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\os-name"},{"name":"osx-release","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\osx-release"},{"name":"p-cancelable","version":"0.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\p-cancelable"},{"name":"p-event","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\p-event"},{"name":"p-finally","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\p-finally"},{"name":"p-is-promise","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\p-is-promise"},{"name":"p-map-series","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\p-map-series"},{"name":"p-reduce","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\p-reduce"},{"name":"p-timeout","version":"1.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\p-timeout"},{"name":"package-json-from-dist","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\package-json-from-dist"},{"name":"pako","version":"1.0.11","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\pako"},{"name":"parseurl","version":"1.3.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\parseurl"},{"name":"path-key","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\path-key"},{"name":"path-scurry","version":"1.11.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\path-scurry","dependencies":[{"name":"lru-cache","version":"10.4.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\path-scurry\\node_modules\\lru-cache"}]},{"name":"path-to-regexp","version":"8.4.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\path-to-regexp"},{"name":"pause-stream","version":"0.0.11","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\pause-stream"},{"name":"pend","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\pend"},{"name":"pify","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\download\\node_modules\\pify"},{"name":"pinkie","version":"2.0.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\pinkie"},{"name":"pinkie-promise","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\pinkie-promise"},{"name":"platform","version":"1.3.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\platform"},{"name":"possible-typed-array-names","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\possible-typed-array-names"},{"name":"prepend-http","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-wrapper\\node_modules\\prepend-http"},{"name":"printj","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\printj"},{"name":"process","version":"0.11.10","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\process"},{"name":"process-nextick-args","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\process-nextick-args"},{"name":"proto-list","version":"1.2.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\proto-list"},{"name":"protobufjs","version":"7.6.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\protobufjs"},{"name":"proxy-addr","version":"2.0.8","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\proxy-addr"},{"name":"pseudomap","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\pseudomap"},{"name":"pump","version":"3.0.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\pump"},{"name":"qs","version":"6.16.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\qs"},{"name":"query-string","version":"5.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\query-string"},{"name":"range-parser","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\range-parser"},{"name":"raw-body","version":"3.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\raw-body"},{"name":"react","version":"18.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\react"},{"name":"react-dom","version":"18.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\react-dom"},{"name":"react-i18next","version":"18.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\react-i18next"},{"name":"readable-stream","version":"2.3.8","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jszip\\node_modules\\readable-stream","dependencies":[{"name":"safe-buffer","version":"5.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jszip\\node_modules\\safe-buffer"}]},{"name":"readdir-glob","version":"1.1.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\readdir-glob","dependencies":[{"name":"minimatch","version":"5.1.9","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\readdir-glob\\node_modules\\minimatch"}]},{"name":"responselike","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\responselike"},{"name":"roarr","version":"2.15.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\roarr"},{"name":"router","version":"2.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\router"},{"name":"safe-buffer","version":"5.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\safe-buffer"},{"name":"safer-buffer","version":"2.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\safer-buffer"},{"name":"sax","version":"1.6.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\sax"},{"name":"scheduler","version":"0.23.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\scheduler"},{"name":"sdk-base","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\sdk-base"},{"name":"seek-bzip","version":"1.0.6","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\seek-bzip"},{"name":"semver","version":"7.7.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\semver"},{"name":"semver-compare","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\semver-compare"},{"name":"semver-regex","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\semver-regex"},{"name":"semver-truncate","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\semver-truncate","dependencies":[{"name":"semver","version":"5.7.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version-check\\node_modules\\semver"}]},{"name":"send","version":"1.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\send"},{"name":"serialize-error","version":"7.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\serialize-error"},{"name":"serve-static","version":"2.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\serve-static"},{"name":"set-function-length","version":"1.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\set-function-length"},{"name":"setimmediate","version":"1.0.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\setimmediate"},{"name":"setprototypeof","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\setprototypeof"},{"name":"sharp","version":"0.34.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\sharp"},{"name":"shebang-command","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\shebang-command","dependencies":[{"name":"shebang-regex","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\shebang-regex"}]},{"name":"shebang-regex","version":"3.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\shebang-regex"},{"name":"side-channel","version":"1.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\side-channel","dependencies":[{"name":"side-channel-list","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\side-channel\\node_modules\\side-channel-list"}]},{"name":"side-channel-list","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\side-channel-list"},{"name":"side-channel-map","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\side-channel-map"},{"name":"side-channel-weakmap","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\side-channel-weakmap"},{"name":"signal-exit","version":"3.0.7","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\signal-exit"},{"name":"sort-keys","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\sort-keys"},{"name":"sort-keys-length","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\sort-keys-length"},{"name":"sprintf-js","version":"1.1.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\sprintf-js"},{"name":"ssf","version":"0.11.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ssf"},{"name":"statuses","version":"2.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\statuses"},{"name":"stream-http","version":"2.8.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\stream-http"},{"name":"stream-wormhole","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\stream-wormhole"},{"name":"streamx","version":"2.28.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\streamx"},{"name":"strict-uri-encode","version":"1.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\strict-uri-encode"},{"name":"string_decoder","version":"1.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jszip\\node_modules\\string_decoder","dependencies":[{"name":"safe-buffer","version":"5.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\jszip\\node_modules\\safe-buffer"}]},{"name":"string-width","version":"5.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\string-width","dependencies":[{"name":"ansi-regex","version":"6.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ansi-regex"},{"name":"emoji-regex","version":"9.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\emoji-regex"},{"name":"strip-ansi","version":"7.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\strip-ansi"}]},{"name":"string-width-cjs","version":"4.2.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\string-width-cjs"},{"name":"strip-ansi","version":"6.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wrap-ansi-cjs\\node_modules\\strip-ansi"},{"name":"strip-ansi-cjs","version":"6.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\strip-ansi-cjs"},{"name":"strip-dirs","version":"2.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\strip-dirs"},{"name":"strip-eof","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\strip-eof"},{"name":"strip-outer","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\strip-outer"},{"name":"tar","version":"7.5.22","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\tar"},{"name":"tar-stream","version":"3.2.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\tar-stream"},{"name":"teex","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\teex"},{"name":"temp-dir","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\temp-dir"},{"name":"tempfile","version":"2.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\tempfile"},{"name":"text-decoder","version":"1.2.7","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\text-decoder"},{"name":"thenify","version":"3.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\thenify"},{"name":"thenify-all","version":"1.6.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\thenify-all"},{"name":"through","version":"2.3.8","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\through"},{"name":"timed-out","version":"4.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\timed-out"},{"name":"tiny-typed-emitter","version":"2.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\tiny-typed-emitter"},{"name":"to-arraybuffer","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\to-arraybuffer"},{"name":"to-buffer","version":"1.2.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\to-buffer","dependencies":[{"name":"isarray","version":"2.0.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\to-buffer\\node_modules\\isarray"}]},{"name":"toidentifier","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\toidentifier"},{"name":"trim-repeated","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\trim-repeated"},{"name":"ts-custom-error","version":"3.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ts-custom-error"},{"name":"tunnel-agent","version":"0.6.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\tunnel-agent"},{"name":"type-fest","version":"0.13.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\type-fest"},{"name":"type-is","version":"2.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\type-is"},{"name":"typed-array-buffer","version":"1.0.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\typed-array-buffer"},{"name":"unbzip2-stream","version":"1.4.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\unbzip2-stream","dependencies":[{"name":"buffer","version":"5.7.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\unbzip2-stream\\node_modules\\buffer"}]},{"name":"undici-types","version":"6.21.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\undici-types"},{"name":"unescape","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\unescape"},{"name":"universalify","version":"2.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\universalify"},{"name":"unpipe","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\unpipe"},{"name":"url-parse-lax","version":"1.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\url-parse-lax","dependencies":[{"name":"prepend-http","version":"1.0.4","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\prepend-http"}]},{"name":"url-to-options","version":"1.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\url-to-options"},{"name":"urllib","version":"2.44.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\urllib","dependencies":[{"name":"content-type","version":"1.0.5","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\content-type"},{"name":"iconv-lite","version":"0.6.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\urllib\\node_modules\\iconv-lite"},{"name":"statuses","version":"1.5.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\urllib\\node_modules\\statuses"}]},{"name":"util-deprecate","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\util-deprecate"},{"name":"utility","version":"1.18.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\utility"},{"name":"uuid","version":"3.4.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\uuid"},{"name":"vary","version":"1.1.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\vary"},{"name":"which","version":"1.3.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\bin-version\\node_modules\\which"},{"name":"which-typed-array","version":"1.1.24","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\which-typed-array"},{"name":"win-release","version":"1.1.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\win-release","dependencies":[{"name":"semver","version":"5.7.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\win-release\\node_modules\\semver"}]},{"name":"wmf","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wmf"},{"name":"word","version":"0.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\word"},{"name":"wrap-ansi","version":"8.1.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wrap-ansi","dependencies":[{"name":"ansi-regex","version":"6.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\ansi-regex"},{"name":"ansi-styles","version":"6.2.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wrap-ansi\\node_modules\\ansi-styles"},{"name":"strip-ansi","version":"7.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\strip-ansi"}]},{"name":"wrap-ansi-cjs","version":"7.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wrap-ansi-cjs","dependencies":[{"name":"string-width","version":"4.2.3","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wrap-ansi-cjs\\node_modules\\string-width"}]},{"name":"wrappy","version":"1.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\wrappy"},{"name":"xlsx-js-style","version":"1.2.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xlsx-js-style","dependencies":[{"name":"commander","version":"2.17.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xlsx-js-style\\node_modules\\commander"}]},{"name":"xml2js","version":"0.6.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xml2js"},{"name":"xmlbuilder","version":"11.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xml2js\\node_modules\\xmlbuilder"},{"name":"xtend","version":"4.0.2","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\xtend"},{"name":"yallist","version":"5.0.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\yallist"},{"name":"yauzl","version":"2.10.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\yauzl","dependencies":[{"name":"buffer-crc32","version":"0.2.13","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\yauzl\\node_modules\\buffer-crc32"}]},{"name":"zip-stream","version":"6.0.1","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\zip-stream","dependencies":[{"name":"readable-stream","version":"4.7.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\readable-stream"},{"name":"string_decoder","version":"1.3.0","dir":"D:\\a\\youyouvault\\youyouvault\\node_modules\\string_decoder"}]}]
+  • duplicate dependency references  dependencies=["sharp@0.34.5","humanize-ms@1.2.1","once@1.4.0","once@1.4.0","side-channel-map@1.0.1","side-channel-weakmap@1.0.2","humanize-ms@1.2.1","pump@3.0.4","qs@6.16.0","utility@1.18.0","strip-ansi@7.2.0","strip-ansi@6.0.1","string-width@5.1.2","strip-ansi@7.2.0","archiver-utils@5.0.2","readable-stream@4.7.0","brace-expansion@2.1.7","streamx@2.28.1","streamx@2.28.1","archiver-utils@5.0.2","readable-stream@4.7.0","readable-stream@4.7.0","readable-stream@4.7.0","end-of-stream@1.4.5","call-bound@1.0.4","call-bind-apply-helpers@1.0.2","get-intrinsic@1.3.0","define-data-property@1.1.4","get-intrinsic@1.3.0","has-property-descriptors@1.0.2","call-bound@1.0.4","get-proto@1.0.1","decompress-tar@4.1.1","decompress-tar@4.1.1","debug@4.4.3","mime-types@3.0.2","debug@4.4.3","http-errors@2.0.1","on-finished@2.4.1","qs@6.16.0","http-errors@2.0.1","iconv-lite@0.7.3","type-is@2.1.0","debug@4.4.3","debug@4.4.3","on-finished@2.4.1","qs@6.16.0","debug@4.4.3","debug@4.4.3","http-errors@2.0.1","mime-types@3.0.2","on-finished@2.4.1","send@1.2.1","mime-types@3.0.2","decompress-tar@4.1.1","decompress-tarbz2@4.1.1","decompress-targz@4.1.1","decompress-unzip@4.0.1","decompress@4.2.1","isurl@1.0.0","make-dir@1.3.0","p-timeout@1.2.1","execa@0.7.0","pump@3.0.4","npm-run-path@2.0.2","caw@2.0.1","decompress@4.2.1","ext-name@5.0.0","filenamify@2.1.0","decompress-response@3.3.0","isurl@1.0.0","make-dir@1.3.0","p-timeout@2.0.1","react@18.3.1","loose-envify@1.4.0","react@18.3.1","loose-envify@1.4.0","call-bind-apply-helpers@1.0.2","get-intrinsic@1.3.0","call-bind-apply-helpers@1.0.2","call-bind-apply-helpers@1.0.2","es-object-atoms@1.1.2","call-bound@1.0.4","get-intrinsic@1.3.0","side-channel-map@1.0.1"]
+  • identified module  dep=@huggingface/jinja from=node_modules\@huggingface\jinja to=release-build\win-unpacked\resources\app\node_modules\@huggingface\jinja filesCount=12
+  • identified module  dep=@huggingface/transformers from=node_modules\@huggingface\transformers to=release-build\win-unpacked\resources\app\node_modules\@huggingface\transformers filesCount=126
+  • identified module  dep=@img/colour from=node_modules\@img\colour to=release-build\win-unpacked\resources\app\node_modules\@img\colour filesCount=4
+  • identified module  dep=@img/sharp-win32-x64 from=node_modules\@img\sharp-win32-x64 to=release-build\win-unpacked\resources\app\node_modules\@img\sharp-win32-x64 filesCount=6
+  • identified module  dep=@isaacs/cliui from=node_modules\@isaacs\cliui to=release-build\win-unpacked\resources\app\node_modules\@isaacs\cliui filesCount=6
+  • identified module  dep=ansi-regex from=node_modules\ansi-regex to=release-build\win-unpacked\resources\app\node_modules\@isaacs\cliui\node_modules\ansi-regex filesCount=3
+  • identified module  dep=strip-ansi from=node_modules\strip-ansi to=release-build\win-unpacked\resources\app\node_modules\@isaacs\cliui\node_modules\strip-ansi filesCount=3
+  • identified module  dep=@isaacs/fs-minipass from=node_modules\@isaacs\fs-minipass to=release-build\win-unpacked\resources\app\node_modules\@isaacs\fs-minipass filesCount=6
+  • identified module  dep=@pkgjs/parseargs from=node_modules\@pkgjs\parseargs to=release-build\win-unpacked\resources\app\node_modules\@pkgjs\parseargs filesCount=9
+  • identified module  dep=@protobufjs/aspromise from=node_modules\@protobufjs\aspromise to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\aspromise filesCount=3
+  • identified module  dep=@protobufjs/base64 from=node_modules\@protobufjs\base64 to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\base64 filesCount=3
+  • identified module  dep=@protobufjs/codegen from=node_modules\@protobufjs\codegen to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\codegen filesCount=3
+  • identified module  dep=@protobufjs/eventemitter from=node_modules\@protobufjs\eventemitter to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\eventemitter filesCount=3
+  • identified module  dep=@protobufjs/fetch from=node_modules\@protobufjs\fetch to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\fetch filesCount=4
+  • identified module  dep=@protobufjs/float from=node_modules\@protobufjs\float to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\float filesCount=5
+  • identified module  dep=@protobufjs/path from=node_modules\@protobufjs\path to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\path filesCount=3
+  • identified module  dep=@protobufjs/pool from=node_modules\@protobufjs\pool to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\pool filesCount=3
+  • identified module  dep=@protobufjs/utf8 from=node_modules\@protobufjs\utf8 to=release-build\win-unpacked\resources\app\node_modules\@protobufjs\utf8 filesCount=3
+  • identified module  dep=@sindresorhus/is from=node_modules\@sindresorhus\is to=release-build\win-unpacked\resources\app\node_modules\@sindresorhus\is filesCount=6
+  • identified module  dep=@types/node from=node_modules\@types\node to=release-build\win-unpacked\resources\app\node_modules\@types\node filesCount=2
+  • identified module  dep=@webtoon/psd from=node_modules\@webtoon\psd to=release-build\win-unpacked\resources\app\node_modules\@webtoon\psd filesCount=3
+  • identified module  dep=@zxing/library from=node_modules\@zxing\library to=release-build\win-unpacked\resources\app\node_modules\@zxing\library filesCount=949
+  • identified module  dep=@zxing/text-encoding from=node_modules\@zxing\text-encoding to=release-build\win-unpacked\resources\app\node_modules\@zxing\text-encoding filesCount=158
+  • identified module  dep=abort-controller from=node_modules\abort-controller to=release-build\win-unpacked\resources\app\node_modules\abort-controller filesCount=9
+  • identified module  dep=accepts from=node_modules\accepts to=release-build\win-unpacked\resources\app\node_modules\accepts filesCount=4
+  • identified module  dep=address from=node_modules\address to=release-build\win-unpacked\resources\app\node_modules\address filesCount=3
+  • identified module  dep=adler-32 from=node_modules\xlsx-js-style\node_modules\adler-32 to=release-build\win-unpacked\resources\app\node_modules\adler-32 filesCount=6
+  • identified module  dep=agentkeepalive from=node_modules\agentkeepalive to=release-build\win-unpacked\resources\app\node_modules\agentkeepalive filesCount=7
+  • identified module  dep=ali-oss from=node_modules\ali-oss to=release-build\win-unpacked\resources\app\node_modules\ali-oss filesCount=186
+  • identified module  dep=ansi-regex from=node_modules\wrap-ansi-cjs\node_modules\ansi-regex to=release-build\win-unpacked\resources\app\node_modules\ansi-regex filesCount=3
+  • identified module  dep=ansi-styles from=node_modules\ansi-styles to=release-build\win-unpacked\resources\app\node_modules\ansi-styles filesCount=3
+  • identified module  dep=any-promise from=node_modules\any-promise to=release-build\win-unpacked\resources\app\node_modules\any-promise filesCount=18
+  • identified module  dep=arch from=node_modules\arch to=release-build\win-unpacked\resources\app\node_modules\arch filesCount=4
+  • identified module  dep=archive-type from=node_modules\archive-type to=release-build\win-unpacked\resources\app\node_modules\archive-type filesCount=3
+  • identified module  dep=file-type from=node_modules\archive-type\node_modules\file-type to=release-build\win-unpacked\resources\app\node_modules\archive-type\node_modules\file-type filesCount=3
+  • identified module  dep=archiver from=node_modules\archiver to=release-build\win-unpacked\resources\app\node_modules\archiver filesCount=8
+  • identified module  dep=readable-stream from=node_modules\readable-stream to=release-build\win-unpacked\resources\app\node_modules\archiver\node_modules\readable-stream filesCount=34
+  • identified module  dep=string_decoder from=node_modules\string_decoder to=release-build\win-unpacked\resources\app\node_modules\archiver\node_modules\string_decoder filesCount=3
+  • identified module  dep=archiver-utils from=node_modules\archiver-utils to=release-build\win-unpacked\resources\app\node_modules\archiver-utils filesCount=4
+  • identified module  dep=is-stream from=node_modules\is-stream to=release-build\win-unpacked\resources\app\node_modules\archiver-utils\node_modules\is-stream filesCount=3
+  • identified module  dep=readable-stream from=node_modules\readable-stream to=release-build\win-unpacked\resources\app\node_modules\archiver-utils\node_modules\readable-stream filesCount=34
+  • identified module  dep=string_decoder from=node_modules\string_decoder to=release-build\win-unpacked\resources\app\node_modules\archiver-utils\node_modules\string_decoder filesCount=3
+  • identified module  dep=argparse from=node_modules\argparse to=release-build\win-unpacked\resources\app\node_modules\argparse filesCount=5
+  • identified module  dep=async from=node_modules\async to=release-build\win-unpacked\resources\app\node_modules\async filesCount=135
+  • identified module  dep=available-typed-arrays from=node_modules\available-typed-arrays to=release-build\win-unpacked\resources\app\node_modules\available-typed-arrays filesCount=5
+  • identified module  dep=b4a from=node_modules\text-decoder\node_modules\b4a to=release-build\win-unpacked\resources\app\node_modules\b4a filesCount=11
+  • identified module  dep=balanced-match from=node_modules\balanced-match to=release-build\win-unpacked\resources\app\node_modules\balanced-match filesCount=3
+  • identified module  dep=bare-events from=node_modules\bare-events to=release-build\win-unpacked\resources\app\node_modules\bare-events filesCount=6
+  • identified module  dep=bare-fs from=node_modules\bare-fs to=release-build\win-unpacked\resources\app\node_modules\bare-fs filesCount=22
+  • identified module  dep=bare-path from=node_modules\bare-path to=release-build\win-unpacked\resources\app\node_modules\bare-path filesCount=24
+  • identified module  dep=bare-stream from=node_modules\bare-stream to=release-build\win-unpacked\resources\app\node_modules\bare-stream filesCount=6
+  • identified module  dep=bare-url from=node_modules\bare-url to=release-build\win-unpacked\resources\app\node_modules\bare-url filesCount=22
+  • identified module  dep=base64-js from=node_modules\base64-js to=release-build\win-unpacked\resources\app\node_modules\base64-js filesCount=4
+  • identified module  dep=bin-build from=node_modules\bin-build to=release-build\win-unpacked\resources\app\node_modules\bin-build filesCount=3
+  • identified module  dep=bin-check from=node_modules\bin-check to=release-build\win-unpacked\resources\app\node_modules\bin-check filesCount=3
+  • identified module  dep=bin-version from=node_modules\bin-version to=release-build\win-unpacked\resources\app\node_modules\bin-version filesCount=3
+  • identified module  dep=cross-spawn from=node_modules\bin-version\node_modules\cross-spawn to=release-build\win-unpacked\resources\app\node_modules\bin-version\node_modules\cross-spawn filesCount=8
+  • identified module  dep=execa from=node_modules\bin-version\node_modules\execa to=release-build\win-unpacked\resources\app\node_modules\bin-version\node_modules\execa filesCount=5
+  • identified module  dep=get-stream from=node_modules\bin-version\node_modules\get-stream to=release-build\win-unpacked\resources\app\node_modules\bin-version\node_modules\get-stream filesCount=4
+  • identified module  dep=semver from=node_modules\bin-version-check\node_modules\semver to=release-build\win-unpacked\resources\app\node_modules\bin-version\node_modules\semver filesCount=5
+  • identified module  dep=bin-version-check from=node_modules\bin-version-check to=release-build\win-unpacked\resources\app\node_modules\bin-version-check filesCount=3
+  • identified module  dep=semver from=node_modules\bin-version-check\node_modules\semver to=release-build\win-unpacked\resources\app\node_modules\bin-version-check\node_modules\semver filesCount=5
+  • identified module  dep=bin-wrapper from=node_modules\bin-wrapper to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper filesCount=3
+  • identified module  dep=download from=node_modules\bin-wrapper\node_modules\download to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\download filesCount=3
+  • identified module  dep=pify from=node_modules\bin-wrapper\node_modules\download\node_modules\pify to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\download\node_modules\pify filesCount=3
+  • identified module  dep=file-type from=node_modules\bin-wrapper\node_modules\file-type to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\file-type filesCount=3
+  • identified module  dep=got from=node_modules\bin-wrapper\node_modules\got to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\got filesCount=4
+  • identified module  dep=pify from=node_modules\bin-wrapper\node_modules\download\node_modules\pify to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\got\node_modules\pify filesCount=3
+  • identified module  dep=p-cancelable from=node_modules\bin-wrapper\node_modules\p-cancelable to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\p-cancelable filesCount=3
+  • identified module  dep=p-event from=node_modules\bin-wrapper\node_modules\p-event to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\p-event filesCount=3
+  • identified module  dep=p-timeout from=node_modules\bin-wrapper\node_modules\p-timeout to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\p-timeout filesCount=3
+  • identified module  dep=pify from=node_modules\pify to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\pify filesCount=3
+  • identified module  dep=url-parse-lax from=node_modules\bin-wrapper\node_modules\url-parse-lax to=release-build\win-unpacked\resources\app\node_modules\bin-wrapper\node_modules\url-parse-lax filesCount=3
+  • identified module  dep=bl from=node_modules\bl to=release-build\win-unpacked\resources\app\node_modules\bl filesCount=3
+  • identified module  dep=safe-buffer from=node_modules\jszip\node_modules\safe-buffer to=release-build\win-unpacked\resources\app\node_modules\bl\node_modules\safe-buffer filesCount=3
+  • identified module  dep=body-parser from=node_modules\body-parser to=release-build\win-unpacked\resources\app\node_modules\body-parser filesCount=9
+  • identified module  dep=boolean from=node_modules\boolean to=release-build\win-unpacked\resources\app\node_modules\boolean filesCount=13
+  • identified module  dep=bowser from=node_modules\bowser to=release-build\win-unpacked\resources\app\node_modules\bowser filesCount=8
+  • identified module  dep=brace-expansion from=node_modules\brace-expansion to=release-build\win-unpacked\resources\app\node_modules\brace-expansion filesCount=3
+  • identified module  dep=buffer from=node_modules\buffer to=release-build\win-unpacked\resources\app\node_modules\buffer filesCount=4
+  • identified module  dep=buffer-alloc from=node_modules\buffer-alloc to=release-build\win-unpacked\resources\app\node_modules\buffer-alloc filesCount=2
+  • identified module  dep=buffer-alloc-unsafe from=node_modules\buffer-alloc-unsafe to=release-build\win-unpacked\resources\app\node_modules\buffer-alloc-unsafe filesCount=2
+  • identified module  dep=buffer-crc32 from=node_modules\buffer-crc32 to=release-build\win-unpacked\resources\app\node_modules\buffer-crc32 filesCount=6
+  • identified module  dep=buffer-fill from=node_modules\buffer-fill to=release-build\win-unpacked\resources\app\node_modules\buffer-fill filesCount=2
+  • identified module  dep=builder-util-runtime from=node_modules\builder-util-runtime to=release-build\win-unpacked\resources\app\node_modules\builder-util-runtime filesCount=16
+  • identified module  dep=builtin-status-codes from=node_modules\builtin-status-codes to=release-build\win-unpacked\resources\app\node_modules\builtin-status-codes filesCount=5
+  • identified module  dep=bytes from=node_modules\bytes to=release-build\win-unpacked\resources\app\node_modules\bytes filesCount=4
+  • identified module  dep=cacheable-request from=node_modules\cacheable-request to=release-build\win-unpacked\resources\app\node_modules\cacheable-request filesCount=3
+  • identified module  dep=lowercase-keys from=node_modules\cacheable-request\node_modules\lowercase-keys to=release-build\win-unpacked\resources\app\node_modules\cacheable-request\node_modules\lowercase-keys filesCount=2
+  • identified module  dep=call-bind from=node_modules\call-bind to=release-build\win-unpacked\resources\app\node_modules\call-bind filesCount=6
+  • identified module  dep=call-bind-apply-helpers from=node_modules\call-bind-apply-helpers to=release-build\win-unpacked\resources\app\node_modules\call-bind-apply-helpers filesCount=10
+  • identified module  dep=call-bound from=node_modules\call-bound to=release-build\win-unpacked\resources\app\node_modules\call-bound filesCount=5
+  • identified module  dep=caw from=node_modules\caw to=release-build\win-unpacked\resources\app\node_modules\caw filesCount=3
+  • identified module  dep=cfb from=node_modules\cfb to=release-build\win-unpacked\resources\app\node_modules\cfb filesCount=9
+  • identified module  dep=adler-32 from=node_modules\adler-32 to=release-build\win-unpacked\resources\app\node_modules\cfb\node_modules\adler-32 filesCount=5
+  • identified module  dep=chownr from=node_modules\chownr to=release-build\win-unpacked\resources\app\node_modules\chownr filesCount=6
+  • identified module  dep=clone-response from=node_modules\clone-response to=release-build\win-unpacked\resources\app\node_modules\clone-response filesCount=3
+  • identified module  dep=codepage from=node_modules\xlsx-js-style\node_modules\codepage to=release-build\win-unpacked\resources\app\node_modules\codepage filesCount=0
+  • identified module  dep=commander from=node_modules\xlsx-js-style\node_modules\codepage\node_modules\commander to=release-build\win-unpacked\resources\app\node_modules\codepage\node_modules\commander filesCount=0
+  • identified module  dep=color-convert from=node_modules\color-convert to=release-build\win-unpacked\resources\app\node_modules\color-convert filesCount=5
+  • identified module  dep=color-name from=node_modules\color-name to=release-build\win-unpacked\resources\app\node_modules\color-name filesCount=3
+  • identified module  dep=commander from=node_modules\commander to=release-build\win-unpacked\resources\app\node_modules\commander filesCount=3
+  • identified module  dep=compress-commons from=node_modules\compress-commons to=release-build\win-unpacked\resources\app\node_modules\compress-commons filesCount=12
+  • identified module  dep=is-stream from=node_modules\is-stream to=release-build\win-unpacked\resources\app\node_modules\compress-commons\node_modules\is-stream filesCount=3
+  • identified module  dep=readable-stream from=node_modules\readable-stream to=release-build\win-unpacked\resources\app\node_modules\compress-commons\node_modules\readable-stream filesCount=34
+  • identified module  dep=string_decoder from=node_modules\string_decoder to=release-build\win-unpacked\resources\app\node_modules\compress-commons\node_modules\string_decoder filesCount=3
+  • identified module  dep=config-chain from=node_modules\config-chain to=release-build\win-unpacked\resources\app\node_modules\config-chain filesCount=3
+  • identified module  dep=content-disposition from=node_modules\bin-wrapper\node_modules\content-disposition to=release-build\win-unpacked\resources\app\node_modules\content-disposition filesCount=4
+  • identified module  dep=content-type from=node_modules\type-is\node_modules\content-type to=release-build\win-unpacked\resources\app\node_modules\content-type filesCount=3
+  • identified module  dep=cookie from=node_modules\cookie to=release-build\win-unpacked\resources\app\node_modules\cookie filesCount=4
+  • identified module  dep=cookie-signature from=node_modules\cookie-signature to=release-build\win-unpacked\resources\app\node_modules\cookie-signature filesCount=4
+  • identified module  dep=copy-to from=node_modules\copy-to to=release-build\win-unpacked\resources\app\node_modules\copy-to filesCount=2
+  • identified module  dep=core-util-is from=node_modules\core-util-is to=release-build\win-unpacked\resources\app\node_modules\core-util-is filesCount=3
+  • identified module  dep=crc-32 from=node_modules\crc-32 to=release-build\win-unpacked\resources\app\node_modules\crc-32 filesCount=7
+  • identified module  dep=crc32-stream from=node_modules\crc32-stream to=release-build\win-unpacked\resources\app\node_modules\crc32-stream filesCount=5
+  • identified module  dep=readable-stream from=node_modules\readable-stream to=release-build\win-unpacked\resources\app\node_modules\crc32-stream\node_modules\readable-stream filesCount=34
+  • identified module  dep=string_decoder from=node_modules\string_decoder to=release-build\win-unpacked\resources\app\node_modules\crc32-stream\node_modules\string_decoder filesCount=3
+  • identified module  dep=cross-spawn from=node_modules\cross-spawn to=release-build\win-unpacked\resources\app\node_modules\cross-spawn filesCount=8
+  • identified module  dep=path-key from=node_modules\path-key to=release-build\win-unpacked\resources\app\node_modules\cross-spawn\node_modules\path-key filesCount=3
+  • identified module  dep=shebang-command from=node_modules\shebang-command to=release-build\win-unpacked\resources\app\node_modules\cross-spawn\node_modules\shebang-command filesCount=3
+  • identified module  dep=which from=node_modules\which to=release-build\win-unpacked\resources\app\node_modules\cross-spawn\node_modules\which filesCount=4
+  • identified module  dep=dateformat from=node_modules\dateformat to=release-build\win-unpacked\resources\app\node_modules\dateformat filesCount=3
+  • identified module  dep=debug from=node_modules\debug to=release-build\win-unpacked\resources\app\node_modules\debug filesCount=6
+  • identified module  dep=decode-uri-component from=node_modules\decode-uri-component to=release-build\win-unpacked\resources\app\node_modules\decode-uri-component filesCount=3
+  • identified module  dep=decompress from=node_modules\decompress to=release-build\win-unpacked\resources\app\node_modules\decompress filesCount=3
+  • identified module  dep=pify from=node_modules\executable\node_modules\pify to=release-build\win-unpacked\resources\app\node_modules\decompress\node_modules\pify filesCount=3
+  • identified module  dep=decompress-response from=node_modules\decompress-response to=release-build\win-unpacked\resources\app\node_modules\decompress-response filesCount=3
+  • identified module  dep=decompress-tar from=node_modules\decompress-tar to=release-build\win-unpacked\resources\app\node_modules\decompress-tar filesCount=3
+  • identified module  dep=tar-stream from=node_modules\decompress-tar\node_modules\tar-stream to=release-build\win-unpacked\resources\app\node_modules\decompress-tar\node_modules\tar-stream filesCount=6
+  • identified module  dep=decompress-tarbz2 from=node_modules\decompress-tarbz2 to=release-build\win-unpacked\resources\app\node_modules\decompress-tarbz2 filesCount=3
+  • identified module  dep=file-type from=node_modules\decompress-tarbz2\node_modules\file-type to=release-build\win-unpacked\resources\app\node_modules\decompress-tarbz2\node_modules\file-type filesCount=3
+  • identified module  dep=decompress-targz from=node_modules\decompress-targz to=release-build\win-unpacked\resources\app\node_modules\decompress-targz filesCount=3
+  • identified module  dep=decompress-unzip from=node_modules\decompress-unzip to=release-build\win-unpacked\resources\app\node_modules\decompress-unzip filesCount=3
+  • identified module  dep=file-type from=node_modules\decompress-unzip\node_modules\file-type to=release-build\win-unpacked\resources\app\node_modules\decompress-unzip\node_modules\file-type filesCount=3
+  • identified module  dep=get-stream from=node_modules\get-stream to=release-build\win-unpacked\resources\app\node_modules\decompress-unzip\node_modules\get-stream filesCount=4
+  • identified module  dep=pify from=node_modules\executable\node_modules\pify to=release-build\win-unpacked\resources\app\node_modules\decompress-unzip\node_modules\pify filesCount=3
+  • identified module  dep=default-user-agent from=node_modules\default-user-agent to=release-build\win-unpacked\resources\app\node_modules\default-user-agent filesCount=4
+  • identified module  dep=define-data-property from=node_modules\define-data-property to=release-build\win-unpacked\resources\app\node_modules\define-data-property filesCount=5
+  • identified module  dep=define-properties from=node_modules\define-properties to=release-build\win-unpacked\resources\app\node_modules\define-properties filesCount=5
+  • identified module  dep=depd from=node_modules\depd to=release-build\win-unpacked\resources\app\node_modules\depd filesCount=5
+  • identified module  dep=destroy from=node_modules\destroy to=release-build\win-unpacked\resources\app\node_modules\destroy filesCount=3
+  • identified module  dep=detect-libc from=node_modules\detect-libc to=release-build\win-unpacked\resources\app\node_modules\detect-libc filesCount=6
+  • identified module  dep=detect-node from=node_modules\detect-node to=release-build\win-unpacked\resources\app\node_modules\detect-node filesCount=5
+  • identified module  dep=digest-header from=node_modules\digest-header to=release-build\win-unpacked\resources\app\node_modules\digest-header filesCount=3
+  • identified module  dep=download from=node_modules\download to=release-build\win-unpacked\resources\app\node_modules\download filesCount=3
+  • identified module  dep=dunder-proto from=node_modules\dunder-proto to=release-build\win-unpacked\resources\app\node_modules\dunder-proto filesCount=6
+  • identified module  dep=duplexer3 from=node_modules\duplexer3 to=release-build\win-unpacked\resources\app\node_modules\duplexer3 filesCount=3
+  • identified module  dep=eastasianwidth from=node_modules\eastasianwidth to=release-build\win-unpacked\resources\app\node_modules\eastasianwidth filesCount=2
+  • identified module  dep=ee-first from=node_modules\ee-first to=release-build\win-unpacked\resources\app\node_modules\ee-first filesCount=3
+  • identified module  dep=electron-updater from=node_modules\electron-updater to=release-build\win-unpacked\resources\app\node_modules\electron-updater filesCount=34
+  • identified module  dep=emoji-regex from=node_modules\wrap-ansi-cjs\node_modules\emoji-regex to=release-build\win-unpacked\resources\app\node_modules\emoji-regex filesCount=6
+  • identified module  dep=encodeurl from=node_modules\encodeurl to=release-build\win-unpacked\resources\app\node_modules\encodeurl filesCount=3
+  • identified module  dep=end-of-stream from=node_modules\end-of-stream to=release-build\win-unpacked\resources\app\node_modules\end-of-stream filesCount=3
+  • identified module  dep=end-or-error from=node_modules\end-or-error to=release-build\win-unpacked\resources\app\node_modules\end-or-error filesCount=4
+  • identified module  dep=es-define-property from=node_modules\es-define-property to=release-build\win-unpacked\resources\app\node_modules\es-define-property filesCount=5
+  • identified module  dep=es-errors from=node_modules\es-errors to=release-build\win-unpacked\resources\app\node_modules\es-errors filesCount=10
+  • identified module  dep=es-object-atoms from=node_modules\es-object-atoms to=release-build\win-unpacked\resources\app\node_modules\es-object-atoms filesCount=7
+  • identified module  dep=es6-error from=node_modules\es6-error to=release-build\win-unpacked\resources\app\node_modules\es6-error filesCount=4
+  • identified module  dep=escape-html from=node_modules\escape-html to=release-build\win-unpacked\resources\app\node_modules\escape-html filesCount=3
+  • identified module  dep=escape-string-regexp from=node_modules\escape-string-regexp to=release-build\win-unpacked\resources\app\node_modules\escape-string-regexp filesCount=3
+  • identified module  dep=etag from=node_modules\etag to=release-build\win-unpacked\resources\app\node_modules\etag filesCount=4
+  • identified module  dep=event-target-shim from=node_modules\event-target-shim to=release-build\win-unpacked\resources\app\node_modules\event-target-shim filesCount=5
+  • identified module  dep=events from=node_modules\events to=release-build\win-unpacked\resources\app\node_modules\events filesCount=6
+  • identified module  dep=events-universal from=node_modules\events-universal to=release-build\win-unpacked\resources\app\node_modules\events-universal filesCount=6
+  • identified module  dep=execa from=node_modules\execa to=release-build\win-unpacked\resources\app\node_modules\execa filesCount=5
+  • identified module  dep=cross-spawn from=node_modules\execa\node_modules\cross-spawn to=release-build\win-unpacked\resources\app\node_modules\execa\node_modules\cross-spawn filesCount=10
+  • identified module  dep=lru-cache from=node_modules\execa\node_modules\lru-cache to=release-build\win-unpacked\resources\app\node_modules\execa\node_modules\lru-cache filesCount=3
+  • identified module  dep=yallist from=node_modules\execa\node_modules\yallist to=release-build\win-unpacked\resources\app\node_modules\execa\node_modules\yallist filesCount=4
+  • identified module  dep=executable from=node_modules\executable to=release-build\win-unpacked\resources\app\node_modules\executable filesCount=3
+  • identified module  dep=pify from=node_modules\executable\node_modules\pify to=release-build\win-unpacked\resources\app\node_modules\executable\node_modules\pify filesCount=3
+  • identified module  dep=exit-on-epipe from=node_modules\exit-on-epipe to=release-build\win-unpacked\resources\app\node_modules\exit-on-epipe filesCount=3
+  • identified module  dep=express from=node_modules\express to=release-build\win-unpacked\resources\app\node_modules\express filesCount=9
+  • identified module  dep=content-disposition from=node_modules\content-disposition to=release-build\win-unpacked\resources\app\node_modules\express\node_modules\content-disposition filesCount=3
+  • identified module  dep=content-type from=node_modules\content-type to=release-build\win-unpacked\resources\app\node_modules\express\node_modules\content-type filesCount=4
+  • identified module  dep=merge-descriptors from=node_modules\merge-descriptors to=release-build\win-unpacked\resources\app\node_modules\express\node_modules\merge-descriptors filesCount=3
+  • identified module  dep=ext-list from=node_modules\ext-list to=release-build\win-unpacked\resources\app\node_modules\ext-list filesCount=3
+  • identified module  dep=ext-name from=node_modules\ext-name to=release-build\win-unpacked\resources\app\node_modules\ext-name filesCount=3
+  • identified module  dep=extend-shallow from=node_modules\extend-shallow to=release-build\win-unpacked\resources\app\node_modules\extend-shallow filesCount=3
+  • identified module  dep=fast-fifo from=node_modules\fast-fifo to=release-build\win-unpacked\resources\app\node_modules\fast-fifo filesCount=4
+  • identified module  dep=fd-slicer from=node_modules\fd-slicer to=release-build\win-unpacked\resources\app\node_modules\fd-slicer filesCount=3
+  • identified module  dep=fflate from=node_modules\xlsx-js-style\node_modules\fflate to=release-build\win-unpacked\resources\app\node_modules\fflate filesCount=8
+  • identified module  dep=file-type from=node_modules\file-type to=release-build\win-unpacked\resources\app\node_modules\file-type filesCount=3
+  • identified module  dep=filename-reserved-regex from=node_modules\filename-reserved-regex to=release-build\win-unpacked\resources\app\node_modules\filename-reserved-regex filesCount=3
+  • identified module  dep=filenamify from=node_modules\filenamify to=release-build\win-unpacked\resources\app\node_modules\filenamify filesCount=3
+  • identified module  dep=finalhandler from=node_modules\finalhandler to=release-build\win-unpacked\resources\app\node_modules\finalhandler filesCount=4
+  • identified module  dep=find-versions from=node_modules\find-versions to=release-build\win-unpacked\resources\app\node_modules\find-versions filesCount=3
+  • identified module  dep=flatbuffers from=node_modules\flatbuffers to=release-build\win-unpacked\resources\app\node_modules\flatbuffers filesCount=54
+  • identified module  dep=for-each from=node_modules\for-each to=release-build\win-unpacked\resources\app\node_modules\for-each filesCount=6
+  • identified module  dep=foreground-child from=node_modules\foreground-child to=release-build\win-unpacked\resources\app\node_modules\foreground-child filesCount=12
+  • identified module  dep=signal-exit from=node_modules\signal-exit to=release-build\win-unpacked\resources\app\node_modules\foreground-child\node_modules\signal-exit filesCount=10
+  • identified module  dep=formstream from=node_modules\formstream to=release-build\win-unpacked\resources\app\node_modules\formstream filesCount=3
+  • identified module  dep=forwarded from=node_modules\forwarded to=release-build\win-unpacked\resources\app\node_modules\forwarded filesCount=4
+  • identified module  dep=frac from=node_modules\frac to=release-build\win-unpacked\resources\app\node_modules\frac filesCount=8
+  • identified module  dep=fresh from=node_modules\fresh to=release-build\win-unpacked\resources\app\node_modules\fresh filesCount=4
+  • identified module  dep=from2 from=node_modules\from2 to=release-build\win-unpacked\resources\app\node_modules\from2 filesCount=4
+  • identified module  dep=fs-constants from=node_modules\fs-constants to=release-build\win-unpacked\resources\app\node_modules\fs-constants filesCount=4
+  • identified module  dep=fs-extra from=node_modules\fs-extra to=release-build\win-unpacked\resources\app\node_modules\fs-extra filesCount=30
+  • identified module  dep=function-bind from=node_modules\function-bind to=release-build\win-unpacked\resources\app\node_modules\function-bind filesCount=5
+  • identified module  dep=get-intrinsic from=node_modules\get-intrinsic to=release-build\win-unpacked\resources\app\node_modules\get-intrinsic filesCount=4
+  • identified module  dep=get-proto from=node_modules\get-proto to=release-build\win-unpacked\resources\app\node_modules\get-proto filesCount=7
+  • identified module  dep=get-proxy from=node_modules\get-proxy to=release-build\win-unpacked\resources\app\node_modules\get-proxy filesCount=3
+  • identified module  dep=get-ready from=node_modules\get-ready to=release-build\win-unpacked\resources\app\node_modules\get-ready filesCount=4
+  • identified module  dep=get-stream from=node_modules\bin-wrapper\node_modules\get-stream to=release-build\win-unpacked\resources\app\node_modules\get-stream filesCount=4
+  • identified module  dep=glob from=node_modules\glob to=release-build\win-unpacked\resources\app\node_modules\glob filesCount=20
+  • identified module  dep=global-agent from=node_modules\global-agent to=release-build\win-unpacked\resources\app\node_modules\global-agent filesCount=54
+  • identified module  dep=globalthis from=node_modules\globalthis to=release-build\win-unpacked\resources\app\node_modules\globalthis filesCount=9
+  • identified module  dep=gopd from=node_modules\gopd to=release-build\win-unpacked\resources\app\node_modules\gopd filesCount=5
+  • identified module  dep=got from=node_modules\got to=release-build\win-unpacked\resources\app\node_modules\got filesCount=3
+  • identified module  dep=graceful-fs from=node_modules\graceful-fs to=release-build\win-unpacked\resources\app\node_modules\graceful-fs filesCount=6
+  • identified module  dep=guid-typescript from=node_modules\guid-typescript to=release-build\win-unpacked\resources\app\node_modules\guid-typescript filesCount=2
+  • identified module  dep=has-property-descriptors from=node_modules\has-property-descriptors to=release-build\win-unpacked\resources\app\node_modules\has-property-descriptors filesCount=4
+  • identified module  dep=has-symbol-support-x from=node_modules\has-symbol-support-x to=release-build\win-unpacked\resources\app\node_modules\has-symbol-support-x filesCount=11
+  • identified module  dep=has-symbols from=node_modules\has-symbols to=release-build\win-unpacked\resources\app\node_modules\has-symbols filesCount=6
+  • identified module  dep=has-to-string-tag-x from=node_modules\has-to-string-tag-x to=release-build\win-unpacked\resources\app\node_modules\has-to-string-tag-x filesCount=11
+  • identified module  dep=has-tostringtag from=node_modules\has-tostringtag to=release-build\win-unpacked\resources\app\node_modules\has-tostringtag filesCount=6
+  • identified module  dep=hasown from=node_modules\hasown to=release-build\win-unpacked\resources\app\node_modules\hasown filesCount=6
+  • identified module  dep=html-parse-stringify from=node_modules\html-parse-stringify to=release-build\win-unpacked\resources\app\node_modules\html-parse-stringify filesCount=8
+  • identified module  dep=http-cache-semantics from=node_modules\http-cache-semantics to=release-build\win-unpacked\resources\app\node_modules\http-cache-semantics filesCount=2
+  • identified module  dep=http-errors from=node_modules\http-errors to=release-build\win-unpacked\resources\app\node_modules\http-errors filesCount=4
+  • identified module  dep=humanize-ms from=node_modules\humanize-ms to=release-build\win-unpacked\resources\app\node_modules\humanize-ms filesCount=4
+  • identified module  dep=i18next from=node_modules\i18next to=release-build\win-unpacked\resources\app\node_modules\i18next filesCount=10
+  • identified module  dep=iconv-lite from=node_modules\iconv-lite to=release-build\win-unpacked\resources\app\node_modules\iconv-lite filesCount=24
+  • identified module  dep=ieee754 from=node_modules\ieee754 to=release-build\win-unpacked\resources\app\node_modules\ieee754 filesCount=3
+  • identified module  dep=immediate from=node_modules\immediate to=release-build\win-unpacked\resources\app\node_modules\immediate filesCount=6
+  • identified module  dep=import-lazy from=node_modules\import-lazy to=release-build\win-unpacked\resources\app\node_modules\import-lazy filesCount=3
+  • identified module  dep=inherits from=node_modules\inherits to=release-build\win-unpacked\resources\app\node_modules\inherits filesCount=4
+  • identified module  dep=ini from=node_modules\ini to=release-build\win-unpacked\resources\app\node_modules\ini filesCount=3
+  • identified module  dep=into-stream from=node_modules\into-stream to=release-build\win-unpacked\resources\app\node_modules\into-stream filesCount=3
+  • identified module  dep=ipaddr.js from=node_modules\ipaddr.js to=release-build\win-unpacked\resources\app\node_modules\ipaddr.js filesCount=4
+  • identified module  dep=is-callable from=node_modules\is-callable to=release-build\win-unpacked\resources\app\node_modules\is-callable filesCount=5
+  • identified module  dep=is-class-hotfix from=node_modules\is-class-hotfix to=release-build\win-unpacked\resources\app\node_modules\is-class-hotfix filesCount=5
+  • identified module  dep=is-extendable from=node_modules\is-extendable to=release-build\win-unpacked\resources\app\node_modules\is-extendable filesCount=3
+  • identified module  dep=is-fullwidth-code-point from=node_modules\is-fullwidth-code-point to=release-build\win-unpacked\resources\app\node_modules\is-fullwidth-code-point filesCount=3
+  • identified module  dep=is-natural-number from=node_modules\is-natural-number to=release-build\win-unpacked\resources\app\node_modules\is-natural-number filesCount=4
+  • identified module  dep=is-object from=node_modules\is-object to=release-build\win-unpacked\resources\app\node_modules\is-object filesCount=6
+  • identified module  dep=is-plain-obj from=node_modules\is-plain-obj to=release-build\win-unpacked\resources\app\node_modules\is-plain-obj filesCount=3
+  • identified module  dep=is-promise from=node_modules\is-promise to=release-build\win-unpacked\resources\app\node_modules\is-promise filesCount=4
+  • identified module  dep=is-retry-allowed from=node_modules\is-retry-allowed to=release-build\win-unpacked\resources\app\node_modules\is-retry-allowed filesCount=3
+  • identified module  dep=is-stream from=node_modules\bin-version\node_modules\is-stream to=release-build\win-unpacked\resources\app\node_modules\is-stream filesCount=3
+  • identified module  dep=is-type-of from=node_modules\is-type-of to=release-build\win-unpacked\resources\app\node_modules\is-type-of filesCount=3
+  • identified module  dep=is-typed-array from=node_modules\is-typed-array to=release-build\win-unpacked\resources\app\node_modules\is-typed-array filesCount=6
+  • identified module  dep=isarray from=node_modules\isarray to=release-build\win-unpacked\resources\app\node_modules\isarray filesCount=5
+  • identified module  dep=isexe from=node_modules\isexe to=release-build\win-unpacked\resources\app\node_modules\isexe filesCount=5
+  • identified module  dep=isstream from=node_modules\isstream to=release-build\win-unpacked\resources\app\node_modules\isstream filesCount=4
+  • identified module  dep=isurl from=node_modules\isurl to=release-build\win-unpacked\resources\app\node_modules\isurl filesCount=3
+  • identified module  dep=jackspeak from=node_modules\jackspeak to=release-build\win-unpacked\resources\app\node_modules\jackspeak filesCount=8
+  • identified module  dep=jpegtran-bin from=node_modules\jpegtran-bin to=release-build\win-unpacked\resources\app\node_modules\jpegtran-bin filesCount=9
+  • identified module  dep=js-base64 from=node_modules\js-base64 to=release-build\win-unpacked\resources\app\node_modules\js-base64 filesCount=4
+  • identified module  dep=js-tokens from=node_modules\js-tokens to=release-build\win-unpacked\resources\app\node_modules\js-tokens filesCount=3
+  • identified module  dep=js-yaml from=node_modules\js-yaml to=release-build\win-unpacked\resources\app\node_modules\js-yaml filesCount=32
+  • identified module  dep=json-buffer from=node_modules\json-buffer to=release-build\win-unpacked\resources\app\node_modules\json-buffer filesCount=3
+  • identified module  dep=json-stringify-safe from=node_modules\json-stringify-safe to=release-build\win-unpacked\resources\app\node_modules\json-stringify-safe filesCount=4
+  • identified module  dep=jsonfile from=node_modules\jsonfile to=release-build\win-unpacked\resources\app\node_modules\jsonfile filesCount=4
+  • identified module  dep=jstoxml from=node_modules\jstoxml to=release-build\win-unpacked\resources\app\node_modules\jstoxml filesCount=8
+  • identified module  dep=jszip from=node_modules\jszip to=release-build\win-unpacked\resources\app\node_modules\jszip filesCount=48
+  • identified module  dep=keyv from=node_modules\keyv to=release-build\win-unpacked\resources\app\node_modules\keyv filesCount=3
+  • identified module  dep=lazy-val from=node_modules\lazy-val to=release-build\win-unpacked\resources\app\node_modules\lazy-val filesCount=2
+  • identified module  dep=lazystream from=node_modules\lazystream to=release-build\win-unpacked\resources\app\node_modules\lazystream filesCount=3
+  • identified module  dep=libheif-js from=node_modules\libheif-js to=release-build\win-unpacked\resources\app\node_modules\libheif-js filesCount=12
+  • identified module  dep=lie from=node_modules\lie to=release-build\win-unpacked\resources\app\node_modules\lie filesCount=9
+  • identified module  dep=lodash from=node_modules\lodash to=release-build\win-unpacked\resources\app\node_modules\lodash filesCount=1050
+  • identified module  dep=lodash.escaperegexp from=node_modules\lodash.escaperegexp to=release-build\win-unpacked\resources\app\node_modules\lodash.escaperegexp filesCount=3
+  • identified module  dep=lodash.isequal from=node_modules\lodash.isequal to=release-build\win-unpacked\resources\app\node_modules\lodash.isequal filesCount=3
+  • identified module  dep=long from=node_modules\long to=release-build\win-unpacked\resources\app\node_modules\long filesCount=5
+  • identified module  dep=loose-envify from=node_modules\loose-envify to=release-build\win-unpacked\resources\app\node_modules\loose-envify filesCount=7
+  • identified module  dep=lowercase-keys from=node_modules\lowercase-keys to=release-build\win-unpacked\resources\app\node_modules\lowercase-keys filesCount=3
+  • identified module  dep=lru-cache from=node_modules\lru-cache to=release-build\win-unpacked\resources\app\node_modules\lru-cache filesCount=8
+  • identified module  dep=make-dir from=node_modules\make-dir to=release-build\win-unpacked\resources\app\node_modules\make-dir filesCount=3
+  • identified module  dep=matcher from=node_modules\matcher to=release-build\win-unpacked\resources\app\node_modules\matcher filesCount=3
+  • identified module  dep=escape-string-regexp from=node_modules\matcher\node_modules\escape-string-regexp to=release-build\win-unpacked\resources\app\node_modules\matcher\node_modules\escape-string-regexp filesCount=3
+  • identified module  dep=math-intrinsics from=node_modules\math-intrinsics to=release-build\win-unpacked\resources\app\node_modules\math-intrinsics filesCount=18
+  • identified module  dep=media-typer from=node_modules\media-typer to=release-build\win-unpacked\resources\app\node_modules\media-typer filesCount=4
+  • identified module  dep=merge-descriptors from=node_modules\ali-oss\node_modules\merge-descriptors to=release-build\win-unpacked\resources\app\node_modules\merge-descriptors filesCount=4
+  • identified module  dep=mime from=node_modules\mime to=release-build\win-unpacked\resources\app\node_modules\mime filesCount=8
+  • identified module  dep=mime-db from=node_modules\mime-db to=release-build\win-unpacked\resources\app\node_modules\mime-db filesCount=5
+  • identified module  dep=mime-types from=node_modules\mime-types to=release-build\win-unpacked\resources\app\node_modules\mime-types filesCount=5
+  • identified module  dep=mimic-response from=node_modules\mimic-response to=release-build\win-unpacked\resources\app\node_modules\mimic-response filesCount=3
+  • identified module  dep=minimatch from=node_modules\minimatch to=release-build\win-unpacked\resources\app\node_modules\minimatch filesCount=16
+  • identified module  dep=minimist from=node_modules\minimist to=release-build\win-unpacked\resources\app\node_modules\minimist filesCount=4
+  • identified module  dep=minipass from=node_modules\minipass to=release-build\win-unpacked\resources\app\node_modules\minipass filesCount=6
+  • identified module  dep=minizlib from=node_modules\minizlib to=release-build\win-unpacked\resources\app\node_modules\minizlib filesCount=8
+  • identified module  dep=mkdirp from=node_modules\mkdirp to=release-build\win-unpacked\resources\app\node_modules\mkdirp filesCount=5
+  • identified module  dep=ms from=node_modules\ms to=release-build\win-unpacked\resources\app\node_modules\ms filesCount=3
+  • identified module  dep=mz from=node_modules\mz to=release-build\win-unpacked\resources\app\node_modules\mz filesCount=10
+  • identified module  dep=negotiator from=node_modules\negotiator to=release-build\win-unpacked\resources\app\node_modules\negotiator filesCount=8
+  • identified module  dep=nice-try from=node_modules\nice-try to=release-build\win-unpacked\resources\app\node_modules\nice-try filesCount=3
+  • identified module  dep=node-hex from=node_modules\node-hex to=release-build\win-unpacked\resources\app\node_modules\node-hex filesCount=3
+  • identified module  dep=normalize-path from=node_modules\normalize-path to=release-build\win-unpacked\resources\app\node_modules\normalize-path filesCount=3
+  • identified module  dep=normalize-url from=node_modules\normalize-url to=release-build\win-unpacked\resources\app\node_modules\normalize-url filesCount=3
+  • identified module  dep=sort-keys from=node_modules\normalize-url\node_modules\sort-keys to=release-build\win-unpacked\resources\app\node_modules\normalize-url\node_modules\sort-keys filesCount=3
+  • identified module  dep=npm-conf from=node_modules\npm-conf to=release-build\win-unpacked\resources\app\node_modules\npm-conf filesCount=8
+  • identified module  dep=npm-run-path from=node_modules\npm-run-path to=release-build\win-unpacked\resources\app\node_modules\npm-run-path filesCount=3
+  • identified module  dep=object-assign from=node_modules\object-assign to=release-build\win-unpacked\resources\app\node_modules\object-assign filesCount=3
+  • identified module  dep=object-inspect from=node_modules\object-inspect to=release-build\win-unpacked\resources\app\node_modules\object-inspect filesCount=7
+  • identified module  dep=object-keys from=node_modules\object-keys to=release-build\win-unpacked\resources\app\node_modules\object-keys filesCount=6
+  • identified module  dep=on-finished from=node_modules\on-finished to=release-build\win-unpacked\resources\app\node_modules\on-finished filesCount=4
+  • identified module  dep=once from=node_modules\once to=release-build\win-unpacked\resources\app\node_modules\once filesCount=3
+  • identified module  dep=onnxruntime-common from=node_modules\onnxruntime-common to=release-build\win-unpacked\resources\app\node_modules\onnxruntime-common filesCount=66
+  • identified module  dep=onnxruntime-node from=node_modules\onnxruntime-node to=release-build\win-unpacked\resources\app\node_modules\onnxruntime-node filesCount=31
+  • identified module  dep=onnxruntime-web from=node_modules\onnxruntime-web to=release-build\win-unpacked\resources\app\node_modules\onnxruntime-web filesCount=0
+  • identified module  dep=onnxruntime-common from=node_modules\onnxruntime-web\node_modules\onnxruntime-common to=release-build\win-unpacked\resources\app\node_modules\onnxruntime-web\node_modules\onnxruntime-common filesCount=0
+  • identified module  dep=os-filter-obj from=node_modules\os-filter-obj to=release-build\win-unpacked\resources\app\node_modules\os-filter-obj filesCount=3
+  • identified module  dep=os-name from=node_modules\os-name to=release-build\win-unpacked\resources\app\node_modules\os-name filesCount=3
+  • identified module  dep=osx-release from=node_modules\osx-release to=release-build\win-unpacked\resources\app\node_modules\osx-release filesCount=4
+  • identified module  dep=p-cancelable from=node_modules\p-cancelable to=release-build\win-unpacked\resources\app\node_modules\p-cancelable filesCount=3
+  • identified module  dep=p-event from=node_modules\p-event to=release-build\win-unpacked\resources\app\node_modules\p-event filesCount=3
+  • identified module  dep=p-finally from=node_modules\p-finally to=release-build\win-unpacked\resources\app\node_modules\p-finally filesCount=3
+  • identified module  dep=p-is-promise from=node_modules\p-is-promise to=release-build\win-unpacked\resources\app\node_modules\p-is-promise filesCount=3
+  • identified module  dep=p-map-series from=node_modules\p-map-series to=release-build\win-unpacked\resources\app\node_modules\p-map-series filesCount=3
+  • identified module  dep=p-reduce from=node_modules\p-reduce to=release-build\win-unpacked\resources\app\node_modules\p-reduce filesCount=3
+  • identified module  dep=p-timeout from=node_modules\p-timeout to=release-build\win-unpacked\resources\app\node_modules\p-timeout filesCount=3
+  • identified module  dep=package-json-from-dist from=node_modules\package-json-from-dist to=release-build\win-unpacked\resources\app\node_modules\package-json-from-dist filesCount=6
+  • identified module  dep=pako from=node_modules\pako to=release-build\win-unpacked\resources\app\node_modules\pako filesCount=25
+  • identified module  dep=parseurl from=node_modules\parseurl to=release-build\win-unpacked\resources\app\node_modules\parseurl filesCount=4
+  • identified module  dep=path-key from=node_modules\bin-version\node_modules\path-key to=release-build\win-unpacked\resources\app\node_modules\path-key filesCount=3
+  • identified module  dep=path-scurry from=node_modules\path-scurry to=release-build\win-unpacked\resources\app\node_modules\path-scurry filesCount=6
+  • identified module  dep=lru-cache from=node_modules\path-scurry\node_modules\lru-cache to=release-build\win-unpacked\resources\app\node_modules\path-scurry\node_modules\lru-cache filesCount=8
+  • identified module  dep=path-to-regexp from=node_modules\path-to-regexp to=release-build\win-unpacked\resources\app\node_modules\path-to-regexp filesCount=3
+  • identified module  dep=pause-stream from=node_modules\pause-stream to=release-build\win-unpacked\resources\app\node_modules\pause-stream filesCount=3
+  • identified module  dep=pend from=node_modules\pend to=release-build\win-unpacked\resources\app\node_modules\pend filesCount=4
+  • identified module  dep=pify from=node_modules\bin-wrapper\node_modules\download\node_modules\pify to=release-build\win-unpacked\resources\app\node_modules\pify filesCount=3
+  • identified module  dep=pinkie from=node_modules\pinkie to=release-build\win-unpacked\resources\app\node_modules\pinkie filesCount=3
+  • identified module  dep=pinkie-promise from=node_modules\pinkie-promise to=release-build\win-unpacked\resources\app\node_modules\pinkie-promise filesCount=3
+  • identified module  dep=platform from=node_modules\platform to=release-build\win-unpacked\resources\app\node_modules\platform filesCount=3
+  • identified module  dep=possible-typed-array-names from=node_modules\possible-typed-array-names to=release-build\win-unpacked\resources\app\node_modules\possible-typed-array-names filesCount=4
+  • identified module  dep=prepend-http from=node_modules\bin-wrapper\node_modules\prepend-http to=release-build\win-unpacked\resources\app\node_modules\prepend-http filesCount=3
+  • identified module  dep=printj from=node_modules\printj to=release-build\win-unpacked\resources\app\node_modules\printj filesCount=9
+  • identified module  dep=process from=node_modules\process to=release-build\win-unpacked\resources\app\node_modules\process filesCount=5
+  • identified module  dep=process-nextick-args from=node_modules\process-nextick-args to=release-build\win-unpacked\resources\app\node_modules\process-nextick-args filesCount=3
+  • identified module  dep=proto-list from=node_modules\proto-list to=release-build\win-unpacked\resources\app\node_modules\proto-list filesCount=3
+  • identified module  dep=protobufjs from=node_modules\protobufjs to=release-build\win-unpacked\resources\app\node_modules\protobufjs filesCount=68
+  • identified module  dep=proxy-addr from=node_modules\proxy-addr to=release-build\win-unpacked\resources\app\node_modules\proxy-addr filesCount=4
+  • identified module  dep=pseudomap from=node_modules\pseudomap to=release-build\win-unpacked\resources\app\node_modules\pseudomap filesCount=4
+  • identified module  dep=pump from=node_modules\pump to=release-build\win-unpacked\resources\app\node_modules\pump filesCount=7
+  • identified module  dep=qs from=node_modules\qs to=release-build\win-unpacked\resources\app\node_modules\qs filesCount=11
+  • identified module  dep=query-string from=node_modules\query-string to=release-build\win-unpacked\resources\app\node_modules\query-string filesCount=3
+  • identified module  dep=range-parser from=node_modules\range-parser to=release-build\win-unpacked\resources\app\node_modules\range-parser filesCount=4
+  • identified module  dep=raw-body from=node_modules\raw-body to=release-build\win-unpacked\resources\app\node_modules\raw-body filesCount=3
+  • identified module  dep=react from=node_modules\react to=release-build\win-unpacked\resources\app\node_modules\react filesCount=0
+  • identified module  dep=react-dom from=node_modules\react-dom to=release-build\win-unpacked\resources\app\node_modules\react-dom filesCount=0
+  • identified module  dep=react-i18next from=node_modules\react-i18next to=release-build\win-unpacked\resources\app\node_modules\react-i18next filesCount=82
+  • identified module  dep=readable-stream from=node_modules\jszip\node_modules\readable-stream to=release-build\win-unpacked\resources\app\node_modules\readable-stream filesCount=22
+  • identified module  dep=safe-buffer from=node_modules\jszip\node_modules\safe-buffer to=release-build\win-unpacked\resources\app\node_modules\readable-stream\node_modules\safe-buffer filesCount=3
+  • identified module  dep=readdir-glob from=node_modules\readdir-glob to=release-build\win-unpacked\resources\app\node_modules\readdir-glob filesCount=3
+  • identified module  dep=minimatch from=node_modules\readdir-glob\node_modules\minimatch to=release-build\win-unpacked\resources\app\node_modules\readdir-glob\node_modules\minimatch filesCount=4
+  • identified module  dep=responselike from=node_modules\responselike to=release-build\win-unpacked\resources\app\node_modules\responselike filesCount=3
+  • identified module  dep=roarr from=node_modules\roarr to=release-build\win-unpacked\resources\app\node_modules\roarr filesCount=18
+  • identified module  dep=router from=node_modules\router to=release-build\win-unpacked\resources\app\node_modules\router filesCount=6
+  • identified module  dep=safe-buffer from=node_modules\safe-buffer to=release-build\win-unpacked\resources\app\node_modules\safe-buffer filesCount=3
+  • identified module  dep=safer-buffer from=node_modules\safer-buffer to=release-build\win-unpacked\resources\app\node_modules\safer-buffer filesCount=6
+  • identified module  dep=sax from=node_modules\sax to=release-build\win-unpacked\resources\app\node_modules\sax filesCount=3
+  • identified module  dep=scheduler from=node_modules\scheduler to=release-build\win-unpacked\resources\app\node_modules\scheduler filesCount=0
+  • identified module  dep=sdk-base from=node_modules\sdk-base to=release-build\win-unpacked\resources\app\node_modules\sdk-base filesCount=3
+  • identified module  dep=seek-bzip from=node_modules\seek-bzip to=release-build\win-unpacked\resources\app\node_modules\seek-bzip filesCount=8
+  • identified module  dep=semver from=node_modules\semver to=release-build\win-unpacked\resources\app\node_modules\semver filesCount=51
+  • identified module  dep=semver-compare from=node_modules\semver-compare to=release-build\win-unpacked\resources\app\node_modules\semver-compare filesCount=3
+  • identified module  dep=semver-regex from=node_modules\semver-regex to=release-build\win-unpacked\resources\app\node_modules\semver-regex filesCount=3
+  • identified module  dep=semver-truncate from=node_modules\semver-truncate to=release-build\win-unpacked\resources\app\node_modules\semver-truncate filesCount=3
+  • identified module  dep=semver from=node_modules\bin-version-check\node_modules\semver to=release-build\win-unpacked\resources\app\node_modules\semver-truncate\node_modules\semver filesCount=5
+  • identified module  dep=send from=node_modules\send to=release-build\win-unpacked\resources\app\node_modules\send filesCount=3
+  • identified module  dep=serialize-error from=node_modules\serialize-error to=release-build\win-unpacked\resources\app\node_modules\serialize-error filesCount=3
+  • identified module  dep=serve-static from=node_modules\serve-static to=release-build\win-unpacked\resources\app\node_modules\serve-static filesCount=3
+  • identified module  dep=set-function-length from=node_modules\set-function-length to=release-build\win-unpacked\resources\app\node_modules\set-function-length filesCount=6
+  • identified module  dep=setimmediate from=node_modules\setimmediate to=release-build\win-unpacked\resources\app\node_modules\setimmediate filesCount=3
+  • identified module  dep=setprototypeof from=node_modules\setprototypeof to=release-build\win-unpacked\resources\app\node_modules\setprototypeof filesCount=3
+  • identified module  dep=sharp from=node_modules\sharp to=release-build\win-unpacked\resources\app\node_modules\sharp filesCount=23
+  • identified module  dep=shebang-command from=node_modules\bin-version\node_modules\shebang-command to=release-build\win-unpacked\resources\app\node_modules\shebang-command filesCount=3
+  • identified module  dep=shebang-regex from=node_modules\bin-version\node_modules\shebang-regex to=release-build\win-unpacked\resources\app\node_modules\shebang-command\node_modules\shebang-regex filesCount=3
+  • identified module  dep=shebang-regex from=node_modules\shebang-regex to=release-build\win-unpacked\resources\app\node_modules\shebang-regex filesCount=3
+  • identified module  dep=side-channel from=node_modules\side-channel to=release-build\win-unpacked\resources\app\node_modules\side-channel filesCount=6
+  • identified module  dep=side-channel-list from=node_modules\side-channel\node_modules\side-channel-list to=release-build\win-unpacked\resources\app\node_modules\side-channel\node_modules\side-channel-list filesCount=6
+  • identified module  dep=side-channel-list from=node_modules\side-channel-list to=release-build\win-unpacked\resources\app\node_modules\side-channel-list filesCount=6
+  • identified module  dep=side-channel-map from=node_modules\side-channel-map to=release-build\win-unpacked\resources\app\node_modules\side-channel-map filesCount=6
+  • identified module  dep=side-channel-weakmap from=node_modules\side-channel-weakmap to=release-build\win-unpacked\resources\app\node_modules\side-channel-weakmap filesCount=6
+  • identified module  dep=signal-exit from=node_modules\bin-version\node_modules\signal-exit to=release-build\win-unpacked\resources\app\node_modules\signal-exit filesCount=4
+  • identified module  dep=sort-keys from=node_modules\sort-keys to=release-build\win-unpacked\resources\app\node_modules\sort-keys filesCount=3
+  • identified module  dep=sort-keys-length from=node_modules\sort-keys-length to=release-build\win-unpacked\resources\app\node_modules\sort-keys-length filesCount=3
+  • identified module  dep=sprintf-js from=node_modules\sprintf-js to=release-build\win-unpacked\resources\app\node_modules\sprintf-js filesCount=7
+  • identified module  dep=ssf from=node_modules\ssf to=release-build\win-unpacked\resources\app\node_modules\ssf filesCount=5
+  • identified module  dep=statuses from=node_modules\statuses to=release-build\win-unpacked\resources\app\node_modules\statuses filesCount=5
+  • identified module  dep=stream-http from=node_modules\stream-http to=release-build\win-unpacked\resources\app\node_modules\stream-http filesCount=8
+  • identified module  dep=stream-wormhole from=node_modules\stream-wormhole to=release-build\win-unpacked\resources\app\node_modules\stream-wormhole filesCount=4
+  • identified module  dep=streamx from=node_modules\streamx to=release-build\win-unpacked\resources\app\node_modules\streamx filesCount=4
+  • identified module  dep=strict-uri-encode from=node_modules\strict-uri-encode to=release-build\win-unpacked\resources\app\node_modules\strict-uri-encode filesCount=3
+  • identified module  dep=string_decoder from=node_modules\jszip\node_modules\string_decoder to=release-build\win-unpacked\resources\app\node_modules\string_decoder filesCount=3
+  • identified module  dep=safe-buffer from=node_modules\jszip\node_modules\safe-buffer to=release-build\win-unpacked\resources\app\node_modules\string_decoder\node_modules\safe-buffer filesCount=3
+  • identified module  dep=string-width from=node_modules\string-width to=release-build\win-unpacked\resources\app\node_modules\string-width filesCount=3
+  • identified module  dep=ansi-regex from=node_modules\ansi-regex to=release-build\win-unpacked\resources\app\node_modules\string-width\node_modules\ansi-regex filesCount=3
+  • identified module  dep=emoji-regex from=node_modules\emoji-regex to=release-build\win-unpacked\resources\app\node_modules\string-width\node_modules\emoji-regex filesCount=8
+  • identified module  dep=strip-ansi from=node_modules\strip-ansi to=release-build\win-unpacked\resources\app\node_modules\string-width\node_modules\strip-ansi filesCount=3
+  • identified module  dep=string-width-cjs from=node_modules\string-width-cjs to=release-build\win-unpacked\resources\app\node_modules\string-width-cjs filesCount=3
+  • identified module  dep=strip-ansi from=node_modules\wrap-ansi-cjs\node_modules\strip-ansi to=release-build\win-unpacked\resources\app\node_modules\strip-ansi filesCount=3
+  • identified module  dep=strip-ansi-cjs from=node_modules\strip-ansi-cjs to=release-build\win-unpacked\resources\app\node_modules\strip-ansi-cjs filesCount=3
+  • identified module  dep=strip-dirs from=node_modules\strip-dirs to=release-build\win-unpacked\resources\app\node_modules\strip-dirs filesCount=3
+  • identified module  dep=strip-eof from=node_modules\strip-eof to=release-build\win-unpacked\resources\app\node_modules\strip-eof filesCount=3
+  • identified module  dep=strip-outer from=node_modules\strip-outer to=release-build\win-unpacked\resources\app\node_modules\strip-outer filesCount=3
+  • identified module  dep=tar from=node_modules\tar to=release-build\win-unpacked\resources\app\node_modules\tar filesCount=66
+  • identified module  dep=tar-stream from=node_modules\tar-stream to=release-build\win-unpacked\resources\app\node_modules\tar-stream filesCount=7
+  • identified module  dep=teex from=node_modules\teex to=release-build\win-unpacked\resources\app\node_modules\teex filesCount=5
+  • identified module  dep=temp-dir from=node_modules\temp-dir to=release-build\win-unpacked\resources\app\node_modules\temp-dir filesCount=3
+  • identified module  dep=tempfile from=node_modules\tempfile to=release-build\win-unpacked\resources\app\node_modules\tempfile filesCount=3
+  • identified module  dep=text-decoder from=node_modules\text-decoder to=release-build\win-unpacked\resources\app\node_modules\text-decoder filesCount=5
+  • identified module  dep=thenify from=node_modules\thenify to=release-build\win-unpacked\resources\app\node_modules\thenify filesCount=4
+  • identified module  dep=thenify-all from=node_modules\thenify-all to=release-build\win-unpacked\resources\app\node_modules\thenify-all filesCount=4
+  • identified module  dep=through from=node_modules\through to=release-build\win-unpacked\resources\app\node_modules\through filesCount=4
+  • identified module  dep=timed-out from=node_modules\timed-out to=release-build\win-unpacked\resources\app\node_modules\timed-out filesCount=3
+  • identified module  dep=tiny-typed-emitter from=node_modules\tiny-typed-emitter to=release-build\win-unpacked\resources\app\node_modules\tiny-typed-emitter filesCount=3
+  • identified module  dep=to-arraybuffer from=node_modules\to-arraybuffer to=release-build\win-unpacked\resources\app\node_modules\to-arraybuffer filesCount=5
+  • identified module  dep=to-buffer from=node_modules\to-buffer to=release-build\win-unpacked\resources\app\node_modules\to-buffer filesCount=3
+  • identified module  dep=isarray from=node_modules\to-buffer\node_modules\isarray to=release-build\win-unpacked\resources\app\node_modules\to-buffer\node_modules\isarray filesCount=3
+  • identified module  dep=toidentifier from=node_modules\toidentifier to=release-build\win-unpacked\resources\app\node_modules\toidentifier filesCount=4
+  • identified module  dep=trim-repeated from=node_modules\trim-repeated to=release-build\win-unpacked\resources\app\node_modules\trim-repeated filesCount=3
+  • identified module  dep=ts-custom-error from=node_modules\ts-custom-error to=release-build\win-unpacked\resources\app\node_modules\ts-custom-error filesCount=7
+  • identified module  dep=tunnel-agent from=node_modules\tunnel-agent to=release-build\win-unpacked\resources\app\node_modules\tunnel-agent filesCount=3
+  • identified module  dep=type-fest from=node_modules\type-fest to=release-build\win-unpacked\resources\app\node_modules\type-fest filesCount=2
+  • identified module  dep=type-is from=node_modules\type-is to=release-build\win-unpacked\resources\app\node_modules\type-is filesCount=4
+  • identified module  dep=typed-array-buffer from=node_modules\typed-array-buffer to=release-build\win-unpacked\resources\app\node_modules\typed-array-buffer filesCount=5
+  • identified module  dep=unbzip2-stream from=node_modules\unbzip2-stream to=release-build\win-unpacked\resources\app\node_modules\unbzip2-stream filesCount=6
+  • identified module  dep=buffer from=node_modules\unbzip2-stream\node_modules\buffer to=release-build\win-unpacked\resources\app\node_modules\unbzip2-stream\node_modules\buffer filesCount=4
+  • identified module  dep=undici-types from=node_modules\undici-types to=release-build\win-unpacked\resources\app\node_modules\undici-types filesCount=2
+  • identified module  dep=unescape from=node_modules\unescape to=release-build\win-unpacked\resources\app\node_modules\unescape filesCount=3
+  • identified module  dep=universalify from=node_modules\universalify to=release-build\win-unpacked\resources\app\node_modules\universalify filesCount=3
+  • identified module  dep=unpipe from=node_modules\unpipe to=release-build\win-unpacked\resources\app\node_modules\unpipe filesCount=4
+  • identified module  dep=url-parse-lax from=node_modules\url-parse-lax to=release-build\win-unpacked\resources\app\node_modules\url-parse-lax filesCount=3
+  • identified module  dep=prepend-http from=node_modules\prepend-http to=release-build\win-unpacked\resources\app\node_modules\url-parse-lax\node_modules\prepend-http filesCount=3
+  • identified module  dep=url-to-options from=node_modules\url-to-options to=release-build\win-unpacked\resources\app\node_modules\url-to-options filesCount=3
+  • identified module  dep=urllib from=node_modules\urllib to=release-build\win-unpacked\resources\app\node_modules\urllib filesCount=9
+  • identified module  dep=content-type from=node_modules\content-type to=release-build\win-unpacked\resources\app\node_modules\urllib\node_modules\content-type filesCount=4
+  • identified module  dep=iconv-lite from=node_modules\urllib\node_modules\iconv-lite to=release-build\win-unpacked\resources\app\node_modules\urllib\node_modules\iconv-lite filesCount=23
+  • identified module  dep=statuses from=node_modules\urllib\node_modules\statuses to=release-build\win-unpacked\resources\app\node_modules\urllib\node_modules\statuses filesCount=5
+  • identified module  dep=util-deprecate from=node_modules\util-deprecate to=release-build\win-unpacked\resources\app\node_modules\util-deprecate filesCount=5
+  • identified module  dep=utility from=node_modules\utility to=release-build\win-unpacked\resources\app\node_modules\utility filesCount=14
+  • identified module  dep=uuid from=node_modules\uuid to=release-build\win-unpacked\resources\app\node_modules\uuid filesCount=17
+  • identified module  dep=vary from=node_modules\vary to=release-build\win-unpacked\resources\app\node_modules\vary filesCount=4
+  • identified module  dep=which from=node_modules\bin-version\node_modules\which to=release-build\win-unpacked\resources\app\node_modules\which filesCount=4
+  • identified module  dep=which-typed-array from=node_modules\which-typed-array to=release-build\win-unpacked\resources\app\node_modules\which-typed-array filesCount=6
+  • identified module  dep=win-release from=node_modules\win-release to=release-build\win-unpacked\resources\app\node_modules\win-release filesCount=3
+  • identified module  dep=semver from=node_modules\win-release\node_modules\semver to=release-build\win-unpacked\resources\app\node_modules\win-release\node_modules\semver filesCount=5
+  • identified module  dep=wmf from=node_modules\wmf to=release-build\win-unpacked\resources\app\node_modules\wmf filesCount=4
+  • identified module  dep=word from=node_modules\word to=release-build\win-unpacked\resources\app\node_modules\word filesCount=4
+  • identified module  dep=wrap-ansi from=node_modules\wrap-ansi to=release-build\win-unpacked\resources\app\node_modules\wrap-ansi filesCount=3
+  • identified module  dep=ansi-regex from=node_modules\ansi-regex to=release-build\win-unpacked\resources\app\node_modules\wrap-ansi\node_modules\ansi-regex filesCount=3
+  • identified module  dep=ansi-styles from=node_modules\wrap-ansi\node_modules\ansi-styles to=release-build\win-unpacked\resources\app\node_modules\wrap-ansi\node_modules\ansi-styles filesCount=3
+  • identified module  dep=strip-ansi from=node_modules\strip-ansi to=release-build\win-unpacked\resources\app\node_modules\wrap-ansi\node_modules\strip-ansi filesCount=3
+  • identified module  dep=wrap-ansi-cjs from=node_modules\wrap-ansi-cjs to=release-build\win-unpacked\resources\app\node_modules\wrap-ansi-cjs filesCount=3
+  • identified module  dep=string-width from=node_modules\wrap-ansi-cjs\node_modules\string-width to=release-build\win-unpacked\resources\app\node_modules\wrap-ansi-cjs\node_modules\string-width filesCount=3
+  • identified module  dep=wrappy from=node_modules\wrappy to=release-build\win-unpacked\resources\app\node_modules\wrappy filesCount=3
+  • identified module  dep=xlsx-js-style from=node_modules\xlsx-js-style to=release-build\win-unpacked\resources\app\node_modules\xlsx-js-style filesCount=10
+  • identified module  dep=commander from=node_modules\xlsx-js-style\node_modules\commander to=release-build\win-unpacked\resources\app\node_modules\xlsx-js-style\node_modules\commander filesCount=3
+  • identified module  dep=xml2js from=node_modules\xml2js to=release-build\win-unpacked\resources\app\node_modules\xml2js filesCount=9
+  • identified module  dep=xmlbuilder from=node_modules\xml2js\node_modules\xmlbuilder to=release-build\win-unpacked\resources\app\node_modules\xmlbuilder filesCount=41
+  • identified module  dep=xtend from=node_modules\xtend to=release-build\win-unpacked\resources\app\node_modules\xtend filesCount=5
+  • identified module  dep=yallist from=node_modules\yallist to=release-build\win-unpacked\resources\app\node_modules\yallist filesCount=6
+  • identified module  dep=yauzl from=node_modules\yauzl to=release-build\win-unpacked\resources\app\node_modules\yauzl filesCount=3
+  • identified module  dep=buffer-crc32 from=node_modules\yauzl\node_modules\buffer-crc32 to=release-build\win-unpacked\resources\app\node_modules\yauzl\node_modules\buffer-crc32 filesCount=3
+  • identified module  dep=zip-stream from=node_modules\zip-stream to=release-build\win-unpacked\resources\app\node_modules\zip-stream filesCount=3
+  • identified module  dep=readable-stream from=node_modules\readable-stream to=release-build\win-unpacked\resources\app\node_modules\zip-stream\node_modules\readable-stream filesCount=34
+  • identified module  dep=string_decoder from=node_modules\string_decoder to=release-build\win-unpacked\resources\app\node_modules\zip-stream\node_modules\string_decoder filesCount=3
+  • not packed into asar archive  file=node_modules\@img\sharp-win32-x64\lib\libvips-42.dll reason=contains executable code
+  • not packed into asar archive  file=node_modules\jpegtran-bin\vendor\jpegtran.exe reason=contains executable code
+  • not packed into asar archive  file=node_modules\onnxruntime-node\bin\napi-v3\darwin\arm64\libonnxruntime.1.21.0.dylib reason=contains executable code
+  • updating asar integrity executable resource  executablePath=release-build\win-unpacked\youyoutuku.exe
+  • copying files using pattern  matcher=from: D:\a\youyouvault\youyouvault\assets\samples, to: D:\a\youyouvault\youyouvault\release-build\win-unpacked\resources\samples, patterns: **/*
+  • copying         src=D:\a\youyouvault\youyouvault\assets\samples destination=D:\a\youyouvault\youyouvault\release-build\win-unpacked\resources\samples
+[after-pack] win32/x64：onnxruntime 裁掉 3 个无关平台目录，并清理 4 个纯前端包
+[after-pack] app.asar 53.7 MB
+[after-pack] 语言包裁掉 51 个（保留简体/繁体中文与英文）
+  • signing with signtool.exe  path=release-build\win-unpacked\youyoutuku.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+resource-edit&sign: 0s 311ms
+  • signing with signtool.exe  path=release-build\win-unpacked\resources\app.asar.unpacked\node_modules\jpegtran-bin\vendor\jpegtran.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • no event listeners found  event=afterSign
+  • building        target=nsis file=release-build\TuKu-Setup-1.7.0.exe archs=x64 oneClick=false perMachine=false
+  • no event listeners found  event=artifactBuildStarted
+  • using cached artifact - cache valid  file=nsis-3.0.4.1.7z path=C:\Users\runneradmin\AppData\Local\electron-builder\Cache\nsis-3.0.4.1\nsis-3.0.4.1-w8az6
+  • signing with signtool.exe  path=release-build\win-unpacked\resources\elevate.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • using cached artifact - cache valid  file=7zip-win-x64.tar.gz path=C:\Users\runneradmin\AppData\Local\electron-builder\Cache\7zip@1.0.0\7zip-win-x64-1nrf7
+  • executing       file=C:\Users\runneradmin\AppData\Local\electron-builder\Cache\7zip@1.0.0\7zip-win-x64-1nrf7\bin\7za.exe args=a -bd -mx=9 -md=1m -mtc=off -ms=off -mtm=off -mta=off D:\a\youyouvault\youyouvault\release-build\tuku-gallery-1.7.0-x64.nsis.7z . -xr!*.avi -xr!*.mov -xr!*.m4v -xr!*.mp4 -xr!*.m4p -xr!*.qt -xr!*.mkv -xr!*.webm -xr!*.vmdk cwd=D:\a\youyouvault\youyouvault\release-build\win-unpacked
+nsis package, x64: 36s 279ms
+  • using cached artifact - cache valid  file=nsis-resources-3.4.1.7z path=C:\Users\runneradmin\AppData\Local\electron-builder\Cache\nsis-resources-3.4.1\nsis-resources-3.4.1-2pori
+  • spawning        command=C:\Users\runneradmin\AppData\Local\electron-builder\Cache\nsis-3.0.4.1\nsis-3.0.4.1-w8az6\Bin\makensis.exe -WX -INPUTCHARSET UTF8 -DAPP_ID=com.youyou.tuku.visual -DAPP_GUID=4366a0d4-983f-5086-950f-59cf5671284d -DUNINSTALL_APP_KEY=4366a0d4-983f-5086-950f-59cf5671284d -DPRODUCT_NAME=youyoutuku -DPRODUCT_FILENAME=youyoutuku -DAPP_FILENAME=youyoutuku -DAPP_DESCRIPTION=通用本地图片管理工具 — pHash 去重 / 暗色图片库 -DVERSION=1.7.0 -DPROJECT_DIR=D:\a\youyouvault\youyouvault -DBUILD_RESOURCES_DIR=D:\a\youyouvault\youyouvault\build -DAPP_PACKAGE_NAME=tuku-gallery -DMUI_ICON=D:\a\youyouvault\youyouvault\build\icon.ico -DMUI_UNICON=D:\a\youyouvault\youyouvault\build\icon.ico -DAPP_64=D:\a\youyouvault\youyouvault\release-build\tuku-gallery-1.7.0-x64.nsis.7z -DAPP_64_NAME=tuku-gallery-1.7.0-x64.nsis.7z -DAPP_64_HASH=6889AC3B62C9789D33FFFA40620FB5B30CB907CAB6BE356DE2A6B016F2A42F3649ACD56A26EDD51EA5076534D64E41B4EF6E3338F91B6BF39C7D86E01A977629 -DAPP_64_UNPACKED_SIZE=451520 -DCOMPANY_NAME=优优图库 -DAPP_INSTALLER_STORE_FILE=tuku-gallery-updater\installer.exe -DCOMPRESSION_METHOD=7z -DMULTIUSER_INSTALLMODE_ALLOW_ELEVATION -DINSTALL_MODE_PER_ALL_USERS_REQUIRED -DallowToChangeInstallationDirectory -DSHORTCUT_NAME=优优图库 -DUNINSTALL_DISPLAY_NAME=优优图库 -DMUI_WELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp -DMUI_UNWELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp -DUNINSTALLER_ICON=D:\a\youyouvault\youyouvault\build\icon.ico -DESTIMATED_SIZE=451519 -DCOMPRESS=auto -DBUILD_UNINSTALLER -DUNINSTALLER_OUT_FILE=D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.__uninstaller.exe -XOutFile "D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.exe" -XVIProductVersion 1.7.0.0 -XVIAddVersionKey /LANG=1033 ProductName "youyoutuku" -XVIAddVersionKey /LANG=1033 ProductVersion "1.7.0" -XVIAddVersionKey /LANG=1033 LegalCopyright "Copyright © 2026 优优图库" -XVIAddVersionKey /LANG=1033 FileDescription "通用本地图片管理工具 — pHash 去重 / 暗色图片库" -XVIAddVersionKey /LANG=1033 FileVersion "1.7.0" -XVIAddVersionKey /LANG=1033 CompanyName "优优图库" -XUnicode true -XSetCompressor zlib - cwd=D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\templates\nsis
+Command line defined: "APP_ID=com.youyou.tuku.visual"
+Command line defined: "APP_GUID=4366a0d4-983f-5086-950f-59cf5671284d"
+Command line defined: "UNINSTALL_APP_KEY=4366a0d4-983f-5086-950f-59cf5671284d"
+Command line defined: "PRODUCT_NAME=youyoutuku"
+Command line defined: "PRODUCT_FILENAME=youyoutuku"
+Command line defined: "APP_FILENAME=youyoutuku"
+Command line defined: "APP_DESCRIPTION=?????????? � pHash ?? / ?????"
+Command line defined: "VERSION=1.7.0"
+Command line defined: "PROJECT_DIR=D:\a\youyouvault\youyouvault"
+Command line defined: "BUILD_RESOURCES_DIR=D:\a\youyouvault\youyouvault\build"
+Command line defined: "APP_PACKAGE_NAME=tuku-gallery"
+Command line defined: "MUI_ICON=D:\a\youyouvault\youyouvault\build\icon.ico"
+Command line defined: "MUI_UNICON=D:\a\youyouvault\youyouvault\build\icon.ico"
+Command line defined: "APP_64=D:\a\youyouvault\youyouvault\release-build\tuku-gallery-1.7.0-x64.nsis.7z"
+Command line defined: "APP_64_NAME=tuku-gallery-1.7.0-x64.nsis.7z"
+Command line defined: "APP_64_HASH=6889AC3B62C9789D33FFFA40620FB5B30CB907CAB6BE356DE2A6B016F2A42F3649ACD56A26EDD51EA5076534D64E41B4EF6E3338F91B6BF39C7D86E01A977629"
+Command line defined: "APP_64_UNPACKED_SIZE=451520"
+Command line defined: "COMPANY_NAME=????"
+Command line defined: "APP_INSTALLER_STORE_FILE=tuku-gallery-updater\installer.exe"
+Command line defined: "COMPRESSION_METHOD=7z"
+Command line defined: "MULTIUSER_INSTALLMODE_ALLOW_ELEVATION"
+Command line defined: "INSTALL_MODE_PER_ALL_USERS_REQUIRED"
+Command line defined: "allowToChangeInstallationDirectory"
+Command line defined: "SHORTCUT_NAME=????"
+Command line defined: "UNINSTALL_DISPLAY_NAME=????"
+Command line defined: "MUI_WELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "MUI_UNWELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "UNINSTALLER_ICON=D:\a\youyouvault\youyouvault\build\icon.ico"
+Command line defined: "ESTIMATED_SIZE=451519"
+Command line defined: "COMPRESS=auto"
+Command line defined: "BUILD_UNINSTALLER"
+Command line defined: "UNINSTALLER_OUT_FILE=D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.__uninstaller.exe"
+Processing config: C:\Users\runneradmin\AppData\Local\electron-builder\Cache\nsis-3.0.4.1\nsis-3.0.4.1-w8az6\nsisconf.nsh
+Processing script file: "<stdin>" (UTF8)
+
+Processed 1 file, 10 command line commands, writing output (x86-unicode):
+
+Output: "D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.exe"
+Install: 0 pages (0 bytes), 1 section (16408 bytes), 31 instructions (868 bytes), 2929 strings (24008 bytes), 26 language tables (4316 bytes).
+Uninstall: 4 pages (320 bytes), 1 section (16408 bytes), 2105 instructions (58940 bytes), 8559 strings (110220 bytes), 26 language tables (8788 bytes).
+
+Using zlib compression.
+
+EXE header size:               57856 / 39424 bytes
+Install code:                   9808 / 46000 bytes
+Install data:                      0 / 8 bytes
+Uninstall code+data:          125905 / 127335 bytes
+CRC (0xFEE357F2):                  4 / 4 bytes
+
+Total size:                   193573 / 212771 bytes (90.9%)
+  • executing       file=D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.exe args= env={
+  "__COMPAT_LAYER": "RunAsInvoker"
+}
+  • executed        file=D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.exe
+  • signing with signtool.exe  path=release-build\TuKu-Setup-1.7.0.__uninstaller.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • spawning        command=C:\Users\runneradmin\AppData\Local\electron-builder\Cache\nsis-3.0.4.1\nsis-3.0.4.1-w8az6\Bin\makensis.exe -WX -INPUTCHARSET UTF8 -DAPP_ID=com.youyou.tuku.visual -DAPP_GUID=4366a0d4-983f-5086-950f-59cf5671284d -DUNINSTALL_APP_KEY=4366a0d4-983f-5086-950f-59cf5671284d -DPRODUCT_NAME=youyoutuku -DPRODUCT_FILENAME=youyoutuku -DAPP_FILENAME=youyoutuku -DAPP_DESCRIPTION=通用本地图片管理工具 — pHash 去重 / 暗色图片库 -DVERSION=1.7.0 -DPROJECT_DIR=D:\a\youyouvault\youyouvault -DBUILD_RESOURCES_DIR=D:\a\youyouvault\youyouvault\build -DAPP_PACKAGE_NAME=tuku-gallery -DMUI_ICON=D:\a\youyouvault\youyouvault\build\icon.ico -DMUI_UNICON=D:\a\youyouvault\youyouvault\build\icon.ico -DAPP_64=D:\a\youyouvault\youyouvault\release-build\tuku-gallery-1.7.0-x64.nsis.7z -DAPP_64_NAME=tuku-gallery-1.7.0-x64.nsis.7z -DAPP_64_HASH=6889AC3B62C9789D33FFFA40620FB5B30CB907CAB6BE356DE2A6B016F2A42F3649ACD56A26EDD51EA5076534D64E41B4EF6E3338F91B6BF39C7D86E01A977629 -DAPP_64_UNPACKED_SIZE=451520 -DCOMPANY_NAME=优优图库 -DAPP_INSTALLER_STORE_FILE=tuku-gallery-updater\installer.exe -DCOMPRESSION_METHOD=7z -DMULTIUSER_INSTALLMODE_ALLOW_ELEVATION -DINSTALL_MODE_PER_ALL_USERS_REQUIRED -DallowToChangeInstallationDirectory -DSHORTCUT_NAME=优优图库 -DUNINSTALL_DISPLAY_NAME=优优图库 -DMUI_WELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp -DMUI_UNWELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp -DUNINSTALLER_ICON=D:\a\youyouvault\youyouvault\build\icon.ico -DESTIMATED_SIZE=451519 -DCOMPRESS=auto -DUNINSTALLER_OUT_FILE=D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.__uninstaller.exe -XOutFile "D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.exe" -XVIProductVersion 1.7.0.0 -XVIAddVersionKey /LANG=1033 ProductName "youyoutuku" -XVIAddVersionKey /LANG=1033 ProductVersion "1.7.0" -XVIAddVersionKey /LANG=1033 LegalCopyright "Copyright © 2026 优优图库" -XVIAddVersionKey /LANG=1033 FileDescription "通用本地图片管理工具 — pHash 去重 / 暗色图片库" -XVIAddVersionKey /LANG=1033 FileVersion "1.7.0" -XVIAddVersionKey /LANG=1033 CompanyName "优优图库" -XUnicode true -XSetCompressor zlib - cwd=D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\templates\nsis
+Command line defined: "APP_ID=com.youyou.tuku.visual"
+Command line defined: "APP_GUID=4366a0d4-983f-5086-950f-59cf5671284d"
+Command line defined: "UNINSTALL_APP_KEY=4366a0d4-983f-5086-950f-59cf5671284d"
+Command line defined: "PRODUCT_NAME=youyoutuku"
+Command line defined: "PRODUCT_FILENAME=youyoutuku"
+Command line defined: "APP_FILENAME=youyoutuku"
+Command line defined: "APP_DESCRIPTION=?????????? � pHash ?? / ?????"
+Command line defined: "VERSION=1.7.0"
+Command line defined: "PROJECT_DIR=D:\a\youyouvault\youyouvault"
+Command line defined: "BUILD_RESOURCES_DIR=D:\a\youyouvault\youyouvault\build"
+Command line defined: "APP_PACKAGE_NAME=tuku-gallery"
+Command line defined: "MUI_ICON=D:\a\youyouvault\youyouvault\build\icon.ico"
+Command line defined: "MUI_UNICON=D:\a\youyouvault\youyouvault\build\icon.ico"
+Command line defined: "APP_64=D:\a\youyouvault\youyouvault\release-build\tuku-gallery-1.7.0-x64.nsis.7z"
+Command line defined: "APP_64_NAME=tuku-gallery-1.7.0-x64.nsis.7z"
+Command line defined: "APP_64_HASH=6889AC3B62C9789D33FFFA40620FB5B30CB907CAB6BE356DE2A6B016F2A42F3649ACD56A26EDD51EA5076534D64E41B4EF6E3338F91B6BF39C7D86E01A977629"
+Command line defined: "APP_64_UNPACKED_SIZE=451520"
+Command line defined: "COMPANY_NAME=????"
+Command line defined: "APP_INSTALLER_STORE_FILE=tuku-gallery-updater\installer.exe"
+Command line defined: "COMPRESSION_METHOD=7z"
+Command line defined: "MULTIUSER_INSTALLMODE_ALLOW_ELEVATION"
+Command line defined: "INSTALL_MODE_PER_ALL_USERS_REQUIRED"
+Command line defined: "allowToChangeInstallationDirectory"
+Command line defined: "SHORTCUT_NAME=????"
+Command line defined: "UNINSTALL_DISPLAY_NAME=????"
+Command line defined: "MUI_WELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "MUI_UNWELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "UNINSTALLER_ICON=D:\a\youyouvault\youyouvault\build\icon.ico"
+Command line defined: "ESTIMATED_SIZE=451519"
+Command line defined: "COMPRESS=auto"
+Command line defined: "UNINSTALLER_OUT_FILE=D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.__uninstaller.exe"
+Processing config: C:\Users\runneradmin\AppData\Local\electron-builder\Cache\nsis-3.0.4.1\nsis-3.0.4.1-w8az6\nsisconf.nsh
+Processing script file: "<stdin>" (UTF8)
+
+Processed 1 file, 10 command line commands, writing output (x86-unicode):
+
+Output: "D:\a\youyouvault\youyouvault\release-build\TuKu-Setup-1.7.0.exe"
+Install: 4 pages (256 bytes), 1 section (16408 bytes), 2283 instructions (63924 bytes), 10270 strings (123438 bytes), 26 language tables (9412 bytes).
+
+Using zlib compression.
+
+EXE header size:               59904 / 39424 bytes
+Install code:                  48137 / 213902 bytes
+Install data:              138780030 / 139225478 bytes
+CRC (0x8BF3899D):                  4 / 4 bytes
+
+Total size:                138888075 / 139478808 bytes (99.5%)
+  • signing with signtool.exe  path=release-build\TuKu-Setup-1.7.0.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • building block map  blockMapFile=release-build\TuKu-Setup-1.7.0.exe.blockmap
+  • no event listeners found  event=artifactBuildCompleted
+  • no event listeners found  event=artifactBuildCompleted
+  • async task error  error=GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+  • async task error  error=GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+  ⨯ Cannot cleanup: 
+
+Error #1 --------------------------------------------------------------------------------
+Error: GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+    at new GitHubPublisher (D:\a\youyouvault\youyouvault\node_modules\electron-publish\src\gitHubPublisher.ts:55:15)
+    at createPublisher (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:347:14)
+    at PublishManager.getOrCreatePublisher (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:233:19)
+    at PublishManager.scheduleUpload (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:163:23)
+    at PublishManager.artifactCreatedWithoutExplicitPublishConfig (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:213:9)
+
+Error #2 --------------------------------------------------------------------------------
+Error: GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+    at new GitHubPublisher (D:\a\youyouvault\youyouvault\node_modules\electron-publish\src\gitHubPublisher.ts:55:15)
+    at createPublisher (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:347:14)
+    at PublishManager.getOrCreatePublisher (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:233:19)
+    at PublishManager.scheduleUpload (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:163:23)
+    at PublishManager.artifactCreatedWithoutExplicitPublishConfig (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:213:9)  failedTask=build stackTrace=Error: Cannot cleanup: 
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      Error #1 --------------------------------------------------------------------------------
+Error: GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+    at new GitHubPublisher (D:\a\youyouvault\youyouvault\node_modules\electron-publish\src\gitHubPublisher.ts:55:15)
+    at createPublisher (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:347:14)
+    at PublishManager.getOrCreatePublisher (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:233:19)
+    at PublishManager.scheduleUpload (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:163:23)
+    at PublishManager.artifactCreatedWithoutExplicitPublishConfig (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:213:9)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      Error #2 --------------------------------------------------------------------------------
+Error: GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"
+    at new GitHubPublisher (D:\a\youyouvault\youyouvault\node_modules\electron-publish\src\gitHubPublisher.ts:55:15)
+    at createPublisher (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:347:14)
+    at PublishManager.getOrCreatePublisher (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:233:19)
+    at PublishManager.scheduleUpload (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:163:23)
+    at PublishManager.artifactCreatedWithoutExplicitPublishConfig (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:213:9)
+    at throwError (D:\a\youyouvault\youyouvault\node_modules\builder-util\src\asyncTaskManager.ts:88:11)
+    at checkErrors (D:\a\youyouvault\youyouvault\node_modules\builder-util\src\asyncTaskManager.ts:53:9)
+    at AsyncTaskManager.awaitTasks (D:\a\youyouvault\youyouvault\node_modules\builder-util\src\asyncTaskManager.ts:58:5)
+    at PublishManager.awaitTasks (D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\publish\PublishManager.ts:247:28)
+    at D:\a\youyouvault\youyouvault\node_modules\app-builder-lib\src\index.ts:151:32
+    at executeFinally (D:\a\youyouvault\youyouvault\node_modules\builder-util\src\promise.ts:23:9)
+[secure] 已还原源码
+file:///D:/a/youyouvault/youyouvault/scripts/build-secure.mjs:213
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`打包失败，退出码 ${code}`))));
+                                                                ^
+
+Error: 打包失败，退出码 1
+    at ChildProcess.<anonymous> (file:///D:/a/youyouvault/youyouvault/scripts/build-secure.mjs:213:65)
+    at ChildProcess.emit (node:events:519:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+
+Node.js v22.23.5
