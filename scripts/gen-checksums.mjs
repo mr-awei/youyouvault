@@ -13,6 +13,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
+/** 产物所在目录：dist:secure 在 win-unpacked 被占用时会改用系统临时目录，由它注入 */
+const SRC_DIR = process.env.TUKU_BUILD_DIR || path.join(ROOT, 'release-build');
+/** 清单固定写到 release-build：CI 与文档里的路径不用跟着输出目录变 */
 const OUT_DIR = path.join(ROOT, 'release-build');
 const OUT = path.join(OUT_DIR, 'SHA256SUMS.txt');
 
@@ -44,7 +47,7 @@ function fmtSize(bytes) {
 }
 
 const files = [];
-for (const entry of fs.readdirSync(OUT_DIR, { withFileTypes: true })) {
+for (const entry of fs.readdirSync(SRC_DIR, { withFileTypes: true })) {
   if (!entry.isFile()) continue;
   if (SKIP_DIRS.has(entry.name)) continue;
   if (!WANTED.some((re) => re.test(entry.name))) continue;
@@ -61,7 +64,7 @@ if (!files.length) {
 
 const rows = [];
 for (const name of files) {
-  const abs = path.join(OUT_DIR, name);
+  const abs = path.join(SRC_DIR, name);
   const size = fs.statSync(abs).size;
   const hash = await sha256File(abs);
   rows.push({ name, size, hash });

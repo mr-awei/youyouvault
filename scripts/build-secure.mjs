@@ -136,8 +136,10 @@ function restore() {
     const src = path.join(backupDir, target);
     const dst = path.join(ROOT, target);
     if (!fs.existsSync(src)) continue;
-    fs.rmSync(dst, { recursive: true, force: true });
-    fs.cpSync(src, dst, { recursive: true });
+    // 不先删目录：备份是混淆前目录的完整副本，直接覆盖就够了。
+    // 反过来「先 rmSync 整目录再拷」有两个坑——Windows 上目录常被 IDE / 杀软锁住，
+    // 且批量删除很容易被安全策略拦下，一旦失败源码就停在混淆状态。
+    fs.cpSync(src, dst, { recursive: true, force: true });
   }
   console.log('[secure] 已还原源码');
 }
@@ -197,8 +199,9 @@ function collectArtifacts(outputDir) {
 
 function runBuild(outputDir) {
   return new Promise((resolve, reject) => {
-    const args = ['run', 'dist', '--', '--publish', 'never'];
-    if (outputDir) args.push(`--config.directories.output=${outputDir.replace(/\\/g, '/')}`);
+    // 参数不要挂在这里：npm 会把它们追加到 dist 脚本链的末尾（落到 release-notes 上）。
+    // publish 与输出目录由 scripts/eb.mjs 读 TUKU_BUILD_DIR 处理。
+    const args = ['run', 'dist'];
     // Windows 下 npm 是 .cmd，Node 18.20+ 禁止无 shell 直接 spawn（EINVAL）。
     // 优先用 node 直接执行 npm-cli.js，找不到再退回 shell。
     const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
@@ -207,7 +210,9 @@ function runBuild(outputDir) {
     const child = spawn(cmd, useCli ? [npmCli, ...args] : args, {
       cwd: ROOT,
       stdio: 'inherit',
-      env: process.env,
+      // 产物换了目录（win-unpacked 被占用时的备用目录）后，dist 里算 SHA256 / 写说明
+      // 的那两步要知道去哪儿取文件；否则它们会在 release-build 里找空并失败
+      env: outputDir ? { ...process.env, TUKU_BUILD_DIR: outputDir } : process.env,
       shell: useCli ? false : true,
     });
     child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`打包失败，退出码 ${code}`))));

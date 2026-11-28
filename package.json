@@ -28,7 +28,7 @@
     "desktop:hmr": "electron . --dev-url=http://localhost:5173",
     "mcp": "node server/mcp-server.mjs",
     "import": "node server/scripts/import-local.js",
-    "dist": "vite build && node scripts/gen-integrity.mjs && electron-builder && node scripts/gen-checksums.mjs && node scripts/release-notes.mjs",
+    "dist": "vite build && node scripts/gen-integrity.mjs && node scripts/eb.mjs && node scripts/gen-checksums.mjs && node scripts/release-notes.mjs",
     "dist:secure": "node scripts/build-secure.mjs",
     "obfuscate:restore": "node scripts/restore-obfuscated.mjs",
     "dist:dir": "vite build && node scripts/gen-integrity.mjs && electron-builder --dir",
