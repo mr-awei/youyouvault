@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { applyProxy } from '../network.js';
+import { assertWritableDir } from '../lib/safe-path.js';
 import * as lib from '../library.js';
 import {
   addImagesToFolder,
@@ -71,8 +72,19 @@ export function register(app, ctx) {
   app.put(
     '/api/settings',
     asyncRoute(async (req, res) => {
+      const body = req.body || {};
+      // storageDir 会被 resolveStorageDir 直接 mkdirSync，必须和「新建资源库」走同一条闸：
+      // 否则 PUT {"storageDir":"…\\Startup"} 就能把后续导入的文件投到开机启动目录
+      const rawStorage = body.storageDir === undefined ? '' : String(body.storageDir || '').trim();
+      if (rawStorage) {
+        try {
+          assertWritableDir(rawStorage, '素材文件夹');
+        } catch (err) {
+          return res.status(400).json({ error: err?.message || String(err) });
+        }
+      }
       const prev = getSettings();
-      const next = saveSettings(req.body || {});
+      const next = saveSettings(body);
       if (next.storageDir) lib.resolveStorageDir(next);
       await applyProxy();
       watchStorageDir(); // 素材文件夹变了就切换监听目标

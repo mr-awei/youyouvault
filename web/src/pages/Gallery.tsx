@@ -266,13 +266,24 @@ function Gallery(props: Props) {
   itemsRef.current = props.items;
   const warmVisible = useCallback((ids: number[]) => {
     if (!ids.length) return;
-    api.warmPreviews(ids).catch(quiet);
-    const byId = new Map(itemsRef.current.map((it) => [it.id, it]));
-    for (const id of ids.slice(0, 60)) {
-      const it = byId.get(id);
-      // 服务端刚用一次批量 warm 插过队了，这里只负责把字节拉进浏览器缓存
-      if (it) downloadPreview(it);
-    }
+    // 服务端插队只排「最近会点开的」那一小批：以前按一屏 60 张排，后台队列被塞满，
+    // 真正点开的那张反而排在后面等。
+    api.warmPreviews(ids.slice(0, 24)).catch(quiet);
+    // 浏览器侧预热限制在 12 张，且等主线程空闲再做。60 张 1920 预览 = 20~30MB，
+    // 会和「正在滚动的列表」抢带宽与解码线程，越滑越卡；用户真要看的那张由
+    // preview-prefetch 的悬停意图单独预热，命中率不靠这里的“全量预下载”。
+    const top = ids.slice(0, 12);
+    const run = () => {
+      const byId = new Map(itemsRef.current.map((it) => [it.id, it]));
+      for (const id of top) {
+        const it = byId.get(id);
+        if (it) downloadPreview(it);
+      }
+    };
+    const idle = (window as unknown as { requestIdleCallback?: (fn: () => void, o?: { timeout: number }) => void })
+      .requestIdleCallback;
+    if (typeof idle === 'function') idle(run, { timeout: 2000 });
+    else setTimeout(run, 400);
   }, []);
   const [missingDismissed, setMissingDismissed] = useState(false);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);

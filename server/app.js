@@ -14,6 +14,7 @@ import * as clip from './clip.js';
 import { importLocalImages, watchStorageDir, invalidateMissingCache } from './importer.js';
 import { sweepThumbTemp } from './bulk-import.js';
 import { prefetchPreviews } from './lib/preview-queue.js';
+import { startPerfGuard } from './lib/perf-guard.js';
 import { openFolder, revealFile } from './desktop.js';
 import * as kb from './kb.js';
 import * as search from './search.js';
@@ -1039,6 +1040,9 @@ export function buildApp({ desktop = false } = {}) {
 
 /** 启动 HTTP 服务，返回 { server, port } */
 export function startServer(port = PORT, options = {}) {
+  // 性能护城河：采样 CPU/内存，动态调整图像处理并发（含 sharp 线程池），
+  // 让「多核空着」和「把机器跑卡」两种情况都不发生
+  startPerfGuard();
   const app = buildApp(options);
   return new Promise((resolve, reject) => {
     const server = app.listen(port, '127.0.0.1', () => {

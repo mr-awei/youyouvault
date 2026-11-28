@@ -61,3 +61,9 @@ docs/.verify-stats.json
 
 # 授权管理工具的构建中间目录
 tools/license-admin/dist/
+
+# 本机调试 / 诊断草稿（含临时库，不要进仓库）
+tmp/
+
+# 打包时按产物重新生成的文件清单：dev 下缺失只会让自检跳过，提交它只会制造无意义 diff
+electron/integrity-manifest.json

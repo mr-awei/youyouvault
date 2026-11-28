@@ -96,19 +96,36 @@ export function buildOssImageKey(dir, sku, hash, ext) {
   return [OSS_IMAGE_PREFIX, day, skuDir, `${hash}.${suffix}`].filter(Boolean).join('/');
 }
 
+const IDEMPOTENT_METHOD = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * 这次失败能不能安全重试。
+ *
+ * GET 随便重；POST/PUT/PATCH 只有当「连接根本没建立」时才重（ECONNREFUSED 之类）——
+ * 请求已经发出去却超时的情况，服务端很可能已经处理完只是响应没回来，
+ * 再发一次就会重复登记 OSS 记录、重复追加 ossIds。
+ */
+function safeToRetry(err, method) {
+  if (IDEMPOTENT_METHOD.has(method)) return true;
+  const code = String(err?.cause?.code || err?.code || '');
+  return ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH'].includes(code);
+}
+
 /**
  * 带一次重试的 fetch。
  * SIT 环境偶尔会出现 10 秒连接超时（同一地址 curl 正常），重试一次基本能过；
  * 每次都用新的 AbortSignal，避免第一次超时后信号已中止。
  */
 async function fetchRetry(url, init, timeoutMs = 20000, attempts = 2) {
+  const method = String(init?.method || 'GET').toUpperCase();
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try {
       return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
     } catch (err) {
       lastErr = err;
-      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 800));
+      if (i >= attempts - 1 || !safeToRetry(err, method)) break;
+      await new Promise((r) => setTimeout(r, 800));
     }
   }
   throw lastErr;

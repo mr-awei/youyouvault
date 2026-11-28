@@ -221,6 +221,11 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   /** 编号前：每个产品的图片、用户自己挑的前 5 张（key = 产品文件夹） */
   const [numberFiles, setNumberFiles] = useState<Record<string, string[]>>({});
   const [numberPicks, setNumberPicks] = useState<Record<string, string[]>>({});
+  /** 上一轮编号 / 入库的失败个数：>0 时该步骤不算完成，别让「一半成功」被当成整批做完 */
+  const [numberFailed, setNumberFailed] = useState(0);
+  const [importFailed, setImportFailed] = useState(0);
+  /** 编号串行锁：state 更新是异步的，连点时只有 ref 拦得住 */
+  const numberBusyRef = useRef(false);
   /** 正在读图片清单：读的过程中别急着报「读不到图片」 */
   const [numberReading, setNumberReading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -500,13 +505,18 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     setNumberPicks({});
     setNumberReading(false);
     setPickerOpen(false);
+    setNumberFailed(0);
     setImported(null);
+    setImportFailed(0);
     setImportSkipped(false);
     setUploadSkipped(false);
     setUploads({});
     setUploadProgress(null);
     setUploadedOk(false);
     setReported(false);
+    // 裁切台是独立弹层，不关掉的话它还挂着上一批的路径，保存会写回已经不存在的目录
+    setCropStudioOpen(false);
+    setCropStudioItems([]);
   };
 
   /**
@@ -1070,7 +1080,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
           .map((it) => `${it.code}（${it.notSquare.length} 张）`)
           .join('、');
         onToast(
-          `有 ${bad} 张图不是 1:1，必须是正方形：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。已打开批量裁切台，可逐张调整；也可点「自动居中裁剪」一键处理。`,
+          `有 ${bad} 张图不是 1:1 或读不到尺寸：${detail}${items.filter((it) => it.notSquare.length).length > 3 ? ' 等' : ''}。已打开批量裁切台，可逐张调整；也可点「自动居中裁剪」一键处理（HEIC 会自动转成 jpg）。`,
           'error'
         );
         // 检查出不合格图片就自动打开裁切台；已经开着时不要重复弹
@@ -1118,6 +1128,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     let syntheticId = -1;
     for (const r of bad) {
       for (const f of r.notSquare) {
+        // 读不到尺寸的图没有可用比例，扔进裁切台只会显示成 0×0 的坏框；
+        // 这类图要在资源管理器里手动处理（HEIC 走「自动居中裁剪」可解码后裁）
+        if (f.unknown || !f.width || !f.height) continue;
         items.push({
           id: syntheticId--,
           title: `${r.code}/${f.file}`,
@@ -1256,14 +1269,25 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
   };
 
   /** 第 6 步：图片编号，编号直接作为最终文件名 */
-  const runNumber = async () => {
+  const runNumberFlow = async () => {
     if (!outputFolders.length) {
       onToast('还没有创建文件夹', 'error');
       return;
     }
     // 每次编号前都重读一遍清单：用户可能刚在资源管理器里改名/删图，
-    // 拿旧清单去编号会让选中的文件名对不上磁盘，最后按拍摄顺序乱编
-    const { files, failed: unreadable } = await ensureNumberFiles();
+    // 拿旧清单去编号会让选中的文件名对不上磁盘，最后按拍摄顺序乱编。
+    // 读盘这几秒也要锁住按钮，否则连点两次会对同一批文件并发改名。
+    setApplyMode('number-read');
+    let read: Awaited<ReturnType<typeof ensureNumberFiles>>;
+    try {
+      read = await ensureNumberFiles();
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+      return;
+    } finally {
+      setApplyMode(null);
+    }
+    const { files, failed: unreadable } = read;
     // 空文件夹编号什么也不会发生：直接跳过，别让它混进「已编号」
     const targets = outputFolders.filter((f) => (files[f.folder] || []).length > 0);
     if (!targets.length) {
@@ -1333,6 +1357,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setReported(false);
       const total = res.results.reduce((n, r) => n + r.files.length, 0);
       const failed = res.results.reduce((n, r) => n + r.errors.length, 0);
+      // 有失败就不算「编号完成」：步骤条保持未完成，用户能看见并重试，
+      // 否则一半目录还是原文件名，后面入库/上传会按错的顺序走
+      setNumberFailed(failed);
       const skipped = outputFolders.length - targets.length;
       const skippedNote = skipped
         ? `；跳过 ${skipped} 个空文件夹${unreadable.length ? `（其中 ${unreadable.length} 个读不到）` : ''}`
@@ -1347,6 +1374,20 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       onToast((err as Error).message, 'error');
     } finally {
       setApplyMode(null);
+    }
+  };
+
+  /**
+   * 编号入口：整段串行化。applyMode 是 state，同一帧里连点两次照样都能进，
+   * 一旦并发就是两轮 rename 交叉改同一批文件（顺序错乱甚至丢图）。
+   */
+  const runNumber = async () => {
+    if (numberBusyRef.current) return;
+    numberBusyRef.current = true;
+    try {
+      await runNumberFlow();
+    } finally {
+      numberBusyRef.current = false;
     }
   };
 
@@ -1401,6 +1442,8 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
       setReported(false);
       onLibraryChanged();
       const failed = result.results.reduce((n, r) => n + r.importErrors.length, 0);
+      // 部分失败同样不算完成：缺的图后面没人会补，步骤条绿了就等于在骗人
+      setImportFailed(failed);
       onToast(
         failed
           ? `入库完成：新登记 ${result.importedTotal} 张，${failed} 个错误`
@@ -1584,8 +1627,12 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     : scanReportRows.length
       ? scanReportRows
       : folderReportRows;
+  // 两批并存：第 4 步已经建好一批（编号/入库/上传都走它），报表又选了另一批。
+  // 这是有意保留的能力（报表可能报另一批的工时），但必须明确提示，否则两份成果对不上还没人知道。
+  const reportMixedSources = !!applied && manualReportRows.length > 0;
 
-  const shootDate = date || new Date().toISOString().slice(0, 10);
+  // 清空日期输入时别退回 UTC：本地 0~8 点在 toISOString 里还是前一天
+  const shootDate = date || localToday();
   const outputDateDir =
     applied?.dateDir ||
     (rootDir.trim()
@@ -1623,8 +1670,9 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
     // 有不是 1:1 的图就停在这一步：用户手动裁完再检查一次即可继续
     // 没有 eBay 组时这一步无事可做，直接算完成，别让用户卡在「检查 1:1」
     ratio: !ebayFolders.length || (!!ratios && ratios.every((it) => it.notSquare.length === 0)),
-    number: !!numbered,
-    import: !!imported || importSkipped,
+    // 有失败不算完成：编号/入库里任何一张出错，都要停在原步让用户处理
+    number: !!numbered && numberFailed === 0,
+    import: (!!imported && importFailed === 0) || importSkipped,
     upload: uploadedOk || uploadSkipped,
     report: reported,
   };
@@ -3094,7 +3142,7 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
               {currentKey === 'ratio' &&
                 (ratios
                   ? notSquareTotal
-                    ? `有 ${notSquareTotal} 张图不是 1:1，必须为正方形。`
+                    ? `有 ${notSquareTotal} 张图不是 1:1 或读不到尺寸（HEIC 也在内），必须处理成正方形。`
                     : ebayFolders.length
                       ? '勾选的图都是 1:1，可以继续编号。'
                       : '没有勾选任何文件夹，跳过 1:1 检查。'
@@ -3125,6 +3173,13 @@ export default function BarcodeSplit({ onToast, folderId, activeFolder, activeLi
                 (manualDir
                   ? `按已选文件夹（${manualFolders.length} 个）生成 工作日报-${shootDate}.xlsx；文件夹截图来自 ${manualDir}。`
                   : `生成 工作日报-${shootDate}.xlsx，时长列留空。`)}
+              {currentKey === 'report' && reportMixedSources && (
+                <span style={{ color: 'var(--warn, #d08b2c)' }}>
+                  {' '}
+                  注意：报表/截图用的是「已选文件夹」这一批，编号/入库/上传用的是第 4 步创建的
+                  {outputFolders.length} 个文件夹，两者不是同一批，别把两批结果混在一起核对。
+                </span>
+              )}
             </div>
 
             {cropReport && cropReport.some((it) => it.cropped.length) && (

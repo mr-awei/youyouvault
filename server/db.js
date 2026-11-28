@@ -172,21 +172,32 @@ let savepointSeq = 0;
  * SAVEPOINT 在事务内外都合法：最外层 RELEASE 即提交，内层 ROLLBACK TO 只回滚自己，
  * 所以既能正确嵌套，也不会因为「判断嵌套」失败而静默丢事务。
  */
+let transactionDepth = 0;
+
 export function withTransaction(fn) {
+  const outer = transactionDepth === 0;
   const name = `tuku_sp_${(savepointSeq = (savepointSeq + 1) % 1e9)}`;
-  db.exec(`SAVEPOINT ${name}`);
+  // 最外层用 BEGIN IMMEDIATE 直接拿写锁：deferred 事务要等第一次写才升级锁，
+  // 双进程（Electron 主进程 + node server）共用同一个库时，升级失败会在 COMMIT
+  // 阶段抛 SQLITE_BUSY，那时改动已经写了，报错却像是「什么都没做」。
+  db.exec(outer ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${name}`);
+  transactionDepth++;
   try {
-    const result = fn();
-    db.exec(`RELEASE ${name}`);
-    return result;
-  } catch (err) {
     try {
-      db.exec(`ROLLBACK TO ${name}`);
-      db.exec(`RELEASE ${name}`);
-    } catch {
-      /* 连接失效或 SQLite 已自动回滚：忽略，保留原始错误 */
+      const result = fn();
+      db.exec(outer ? 'COMMIT' : `RELEASE ${name}`);
+      return result;
+    } catch (err) {
+      try {
+        db.exec(outer ? 'ROLLBACK' : `ROLLBACK TO ${name}`);
+        if (!outer) db.exec(`RELEASE ${name}`);
+      } catch {
+        /* 连接失效或 SQLite 已自动回滚：忽略，保留原始错误 */
+      }
+      throw err;
     }
-    throw err;
+  } finally {
+    transactionDepth--;
   }
 }
 

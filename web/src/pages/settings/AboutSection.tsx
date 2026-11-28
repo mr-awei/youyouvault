@@ -259,7 +259,7 @@ export default function AboutSection({ settings, patch, onToast, onOpenTutorial 
     }
   };
 
-  const openDir = async (key: 'userData' | 'logs' | 'crashDumps') => {
+  const openDir = async (key: 'userData' | 'logs' | 'crashDumps' | 'install') => {
     if (!desktop?.openAppDir) {
       onToast(i18n.t('k63508a02'), 'error');
       return;
@@ -413,6 +413,19 @@ export default function AboutSection({ settings, patch, onToast, onOpenTutorial 
             <option value="manual">{i18n.t('k50b126e9')}</option>
           </select>
         </div>
+
+        {/* 没买代码签名证书，安装/下载时被拦是常事：先把话说明白，别让用户以为中了木马 */}
+        <div className="settings-subhead">{i18n.t('k3df9fa40')}</div>
+        <div className="hint" style={{ lineHeight: 1.9, margin: '4px 0 8px' }}>
+          {i18n.t('k7f613bd5')}
+        </div>
+        <button
+          className="btn sm ghost"
+          disabled={!desktop?.openAppDir}
+          onClick={() => void openDir('install')}
+        >
+          {i18n.t('k4d5dfb6e')}
+        </button>
       </Card>
 
       <Card

@@ -25,6 +25,17 @@ const BACKUP_ROOT = path.join(ROOT, '.obfuscate-backup');
 /** 授权验签相关的文件额外做字符串加密、控制流混淆，抬高静态分析成本 */
 const SENSITIVE = new Set(['server/lib/license.js', 'server/lib/license-core.js']);
 
+/**
+ * 混淆参数刻意保持了克制：没买代码签名证书，产物本身就缺少可信来源背书，
+ * 而 360(QVM) / 火绒 / Defender 的启发式对「字符串全量编码 + 自校验 + 控制流平坦化」
+ * 这套组合极其敏感 —— 这正是典型的加壳木马画像，容易被直接判毒。
+ *
+ * 现在只做轻量压缩（标识符重命名 + 字符串数组打散 + 少量字符串拆分），
+ * 授权逻辑仍然看不出业务含义，但不会再长成杀软眼里的样本形状：
+ * - selfDefending：注入自校验/格式化检测，误报率最高的单项，关掉
+ * - stringArrayEncoding(base64)：整体编码字符串是加壳特征，关掉
+ * - controlFlowFlattening：控制在低阈值，保留一点结构混淆
+ */
 const OBFUSCATOR_OPTIONS = {
   target: 'node',
   sourceType: 'module',
@@ -33,15 +44,15 @@ const OBFUSCATOR_OPTIONS = {
   identifierNamesGenerator: 'hexadecimal',
   renameGlobals: false,
   stringArray: true,
-  stringArrayThreshold: 0.9,
-  stringArrayEncoding: ['base64'],
+  stringArrayThreshold: 0.75,
+  stringArrayEncoding: [],
   stringArrayRotate: true,
   stringArrayShuffle: true,
   splitStrings: true,
-  splitStringsChunkLength: 12,
-  selfDefending: true,
+  splitStringsChunkLength: 16,
+  selfDefending: false,
   controlFlowFlattening: true,
-  controlFlowFlatteningThreshold: 0.35,
+  controlFlowFlatteningThreshold: 0.15,
   deadCodeInjection: false,
   debugProtection: false,
   unicodeEscapeSequence: false,

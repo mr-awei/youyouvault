@@ -427,8 +427,10 @@ export default function Lightbox({
       preloaded.push(pv);
     }
     return () => {
-      // src='' 会中止尚未完成的请求（Chrome/Electron 有效），已缓存的不受影响
-      for (const img of preloaded) img.src = '';
+      // 不要用 src='' 取消在途预取：相邻窗口高度重叠（切一张有 5/6 是同一批），
+      // 取消等于把下了一半的字节扔掉，下一轮再从头下 —— 连按方向键反而越翻越慢。
+      // 这些 Image 不挂 DOM，最多被 GC 回收；同源 6 连接天然限制并发。
+      preloaded.length = 0;
     };
   }, [index, items]);
 

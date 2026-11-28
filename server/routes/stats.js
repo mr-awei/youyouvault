@@ -549,7 +549,8 @@ export function register(app, ctx) {
   app.post(
     '/api/library/purge-missing',
     asyncRoute(async (_req, res) => {
-      res.json({ ok: true, removed: purgeMissing() });
+      // 第一次点只做登记（pending），确认确实不在磁盘上之后才会真删
+      res.json({ ok: true, ...purgeMissing() });
     })
   );
 

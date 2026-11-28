@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { LEGACY_DIRS } from './config.js';
+import { LEGACY_DIRS, DATA_DIR } from './config.js';
 import { db, getSettings, getLibraryGeneration, getActiveLibrary, withTransaction } from './db.js';
 import { ingest, resyncImageMeta, removePhash } from './library.js';
 import * as clip from './clip.js';
@@ -420,17 +420,55 @@ export function getMissingCached(maxAgeMs = 60_000) {
  * 已删除的 id —— 后续查重会拿这些幽灵 id 与新图比较，把刚导入的同一张图判成
  * 「重复」并连文件一起删掉。所以删除行之后必须同步摘索引、删缩略图。
  */
+const PENDING_PURGE_FILE = path.join(DATA_DIR, 'purge-pending.json');
+/** 两次「确认缺失」之间至少隔这么久才真删：外接盘休眠/网盘未挂载会让整库瞬间「消失」 */
+const PURGE_CONFIRM_MS = 60 * 1000;
+
+function readPendingPurge() {
+  try {
+    const obj = JSON.parse(fs.readFileSync(PENDING_PURGE_FILE, 'utf8'));
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePendingPurge(map) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(PENDING_PURGE_FILE, JSON.stringify(map), 'utf8');
+  } catch {
+    /* 写不了就退化成「永不自动清理」，比误删一整库元数据安全 */
+  }
+}
+
+/**
+ * @returns {{removed:number, pending:number}}
+ */
 export function purgeMissing() {
   const missing = findMissing();
-  if (!missing.length) {
+  const prev = readPendingPurge();
+  const now = Date.now();
+  const confirmed = [];
+  /** 本轮仍然缺失、且还没到确认时间的路径 → 首次发现时间 */
+  const next = {};
+  for (const row of missing) {
+    const seen = Number(prev[row.abs_path] || 0);
+    // 第一次发现只登记不删：盘掉线/未挂载时一次误清就把标签、备注、文件夹归属
+    // 全删了，原图回来也补不回来。隔一段时间再点，才认为「确实不在了」。
+    if (seen && now - seen >= PURGE_CONFIRM_MS) confirmed.push(row);
+    else next[row.abs_path] = seen || now;
+  }
+  writePendingPurge(next); // 文件回来的路径自然从登记表里消失
+  if (!confirmed.length) {
     invalidateMissingCache();
-    return 0;
+    return { removed: 0, pending: Object.keys(next).length };
   }
   const del = db.prepare('DELETE FROM images WHERE id = ?');
   withTransaction(() => {
-    for (const row of missing) del.run(row.id);
+    for (const row of confirmed) del.run(row.id);
   });
-  for (const row of missing) {
+  for (const row of confirmed) {
     if (row.thumb) {
       try {
         fs.rmSync(row.thumb, { force: true });
@@ -443,7 +481,7 @@ export function purgeMissing() {
     invalidateQuality(row.id);
   }
   invalidateMissingCache();
-  return missing.length;
+  return { removed: confirmed.length, pending: Object.keys(next).length };
 }
 
 /**

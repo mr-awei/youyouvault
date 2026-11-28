@@ -117,13 +117,15 @@ export function createHotfix({
   /**
    * 启动前调用一次（早于服务进程 fork）。
    * 顺带做三件必须在这里做的事：坏包销账、pending 换入、current 校验。
-   * @returns {{mode:'builtin'|'overlay', seq:number, serverEntry:string, webOverlay:string, env:Record<string,string>, manifest:any, note:string}}
+   * @returns {{mode:'builtin'|'overlay', seq:number, promotedSeq:number, serverEntry:string, webOverlay:string, env:Record<string,string>, manifest:any, note:string}}
    */
   const boot = () => {
     /** @type {any} */
     const out = {
       mode: 'builtin',
       seq: 0,
+      /** 本次启动刚换入的序号（0 = 没换）：调用方据此在启动完成后提示一次 */
+      promotedSeq: 0,
       serverEntry: builtinEntry(appRoot),
       webOverlay: '',
       env: { TUKU_APP_ROOT: appRoot },
@@ -145,8 +147,13 @@ export function createHotfix({
       writeState(st);
     }
 
-    // 2) 已下载未生效的包：这里换入（「下次启动生效」就是在这一步落地）
-    if (st.pending) promote(st);
+    // 2) 已下载未生效的包：这里换入（「下次启动生效」就是在这一步落地）。
+    //    换入即生效，全程不需要用户确认；换入成功才记一笔，供启动完成后提示一次。
+    if (st.pending) {
+      const want = Number(st.pending.seq) || 0;
+      promote(st);
+      if (want && Number(readState().active?.seq) === want) out.promotedSeq = want;
+    }
 
     // 3) 校验生效中的包，任何一项不符都当坏包
     if (st.active && fs.existsSync(dir.current)) {
@@ -426,6 +433,13 @@ export function createHotfix({
     return { applied: readState().active?.seq === seq, seq };
   };
 
+  /**
+   * 完整性修复用：重新下载「当前生效的那一个 seq」的包。
+   * check() 默认会跳过 <= lastSeq 的包（防重复下载），这里把提示值压低一位，
+   * 让它愿意重下同一份 —— 文件被安全软件删掉时，需要的正是「把同一版再补一遍」。
+   */
+  const repair = () => check({ lastSeqHint: Math.max(0, (Number(readState().active?.seq) || 0) - 1) });
+
   const state = () => {
     const st = readState();
     return {
@@ -438,7 +452,7 @@ export function createHotfix({
     };
   };
 
-  return { boot, markReady, fallbackToBuiltin, check, importZip, applyPending, state, dir };
+  return { boot, markReady, fallbackToBuiltin, check, importZip, applyPending, state, repair, dir };
 }
 
 /**

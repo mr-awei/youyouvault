@@ -2,9 +2,11 @@
 /**
  * 热更的 IPC 与后台静默检查。
  *
- * 交互原则（和强制更新那套保持一致）：**默认不打扰**。
- * 下载完只发一条自绘提示窗，真正的「现在生效」按钮在设置 → 关于，
- * 用户不点就等下次启动 —— 热更不该在用户剪图剪到一半时自己重启服务。
+ * 交互原则：**下载与换入全程静默，不需要用户点任何按钮或确认**。
+ * 后台检查到新版就自动下载（默认 next），下次启动时由 boot() 自动换入，
+ * 换入成功后只在启动完成后提示一次（见 main.js）。
+ * 只有设置里改成「下载完立刻生效」时才会当场重启本地服务，并给一次结果反馈 ——
+ * 热更不该在用户剪图剪到一半时自己重启。
  */
 import { app, dialog } from 'electron';
 import { getSettingsSnapshot } from '../settings-cache.js';
@@ -53,14 +55,16 @@ async function runCheck({ manual }) {
     const res = await hotfix().check();
     if (!res.updated) return res;
     const mode = prefs.hotfixApply || 'next';
+    // 默认（next）下载完一声不响：换入发生在下次启动，成功后才提示一次（见 main.js）。
+    // 只有选了「下载完立刻生效」才当场切版本，这时候给一次结果反馈。
     if (mode === 'now') {
-      showToastBanner('热更已就绪', `#${res.seq} 正在生效，界面稍后自动刷新`);
       const applied = await applyHotfixNow();
-      if (!applied.applied) {
-        showToastBanner('热更已下载', `#${res.seq} 将在下次启动生效${applied.error ? `（${applied.error}）` : ''}`);
+      if (applied.applied) {
+        showToastBanner(`已更新到 #${res.seq}`, res.notes || '界面与服务脚本已切换到新版本');
+      } else {
+        // 当场生效失败不打扰用户：包还在本地，下次启动会再试一次
+        console.warn('[hotfix] 立即生效失败：', applied.error || '未知原因');
       }
-    } else {
-      showToastBanner('热更已下载', `#${res.seq} 下次启动生效，可在「设置 → 关于」立即生效`);
     }
     return res;
   } catch (err) {

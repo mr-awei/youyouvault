@@ -62,7 +62,9 @@ export function hasLocalBaseline(st) {
 /** 本机数据指纹：用于判断「上次发布之后本地是否又改过」 */
 export function fingerprintOf(snapshot) {
   const s = snapshot || {};
-  return [s.images ?? 0, s.maxImage ?? 0, s.maxOp ?? 0, s.folders ?? 0].join(':');
+  // 第五位是「内容摘要」：只改备注/标签/清单时行数与 MAX(id) 都不变，
+  // 旧的四元组会把这类改动判成「没变化」，导致同步盘永远停在旧快照。
+  return [s.images ?? 0, s.maxImage ?? 0, s.maxOp ?? 0, s.folders ?? 0, s.content ?? 0].join(':');
 }
 
 /**

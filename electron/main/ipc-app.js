@@ -156,14 +156,18 @@ export function registerAppIpc() {
     return shell.openPath(dir);
   });
 
-  /* 「关于」页的三个目录按钮：只接受枚举名，路径在主进程里解析。
+  /* 「关于」页的目录按钮：只接受枚举名，路径在主进程里解析。
    * 不走 open-folder 是因为那条通道按库目录白名单限制，程序数据目录本来就不在白名单里，
-   * 而放开白名单又等于给渲染层任意打开本机目录的能力。 */
+   * 而放开白名单又等于给渲染层任意打开本机目录的能力。
+   * install 是安装目录：文件被 360/火绒误隔离时，用户要把它整目录加进信任列表。 */
   handleIpc('open-app-dir', async (_e, key) => {
     const dirs = {
       userData: app.getPath('userData'),
       logs: getLogDir(),
       crashDumps: app.getPath('crashDumps'),
+      // 打包后 getAppPath() 是 ...\resources\app.asar，资源管理器里进不去，
+      // 所以取 exe 所在目录；开发模式没有 exe 目录，退回项目根
+      install: app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath(),
     };
     const dir = dirs[String(key || '')];
     if (!dir) return '未知的目录类型';

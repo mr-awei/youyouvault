@@ -34,6 +34,7 @@ import { showSplash, closeSplash } from './main/splash.js';
 import { closeToast, showToastBanner } from './main/toast.js';
 import { createTray } from './main/tray.js';
 import { registerHotfixIpc, startHotfixCheck, stopHotfixCheck } from './main/hotfix-ipc.js';
+import { registerIntegrityIpc, startIntegrityCheck, stopIntegrityCheck } from './main/integrity-ipc.js';
 import {
   registerUpdateIpc,
   startBackgroundUpdateCheck,
@@ -300,11 +301,29 @@ app
     registerAppIpc();
     registerUpdateIpc();
     registerHotfixIpc();
+    registerIntegrityIpc();
 
     wireUpdateLifecycle();
 
     await createWindow();
     closeSplash();
+
+    // 完整性自检：30 秒后第一次（不抢首屏），之后每 6 小时；发现文件被安全软件
+    // 隔离会自动走热更包静默补齐
+    startIntegrityCheck();
+
+    // 热更：下载与换入全程静默（默认下次启动自动生效），只有真正换入成功才提示这一次，
+    // 让用户知道「这次打开已经是新版本」；没换入就一个字都不说
+    if (ctx.hotfixApplied) {
+      const applied = ctx.hotfixApplied;
+      ctx.hotfixApplied = null;
+      setTimeout(() => {
+        showToastBanner(
+          `已自动更新到 #${applied.seq}`,
+          applied.notes || '本次启动已使用新的界面与服务脚本'
+        );
+      }, 2500);
+    }
 
     // 「用图库打开」：双击关联文件、把文件拖到 exe 上都走这里
     const startupFiles = pickImagePathsFromArgv(process.argv);
@@ -361,6 +380,7 @@ app.on('will-quit', (e) => {
   e.preventDefault();
   unregisterGlobalShortcuts();
   stopHotfixCheck();
+  stopIntegrityCheck();
   closeToast();
   // 日志缓冲可能还有最后几行：退出前同步落一次
   try {

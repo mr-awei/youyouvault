@@ -61,6 +61,10 @@ contextBridge.exposeInMainWorld('desktopAPI', {
   hotfixCheck: () => ipcRenderer.invoke('hotfix-check'),
   hotfixApply: () => ipcRenderer.invoke('hotfix-apply'),
   hotfixImport: () => ipcRenderer.invoke('hotfix-import'),
+  // 软件完整性自检：状态 / 立即校验 / 尝试修复（发现文件被安全软件隔离时用）
+  integrityState: () => ipcRenderer.invoke('integrity-state'),
+  integrityVerify: () => ipcRenderer.invoke('integrity-verify'),
+  integrityRepair: () => ipcRenderer.invoke('integrity-repair'),
   // 应用内更新（electron-updater，仅安装版可用）
   updateCheck: () => ipcRenderer.invoke('update-check'),
   updateDownload: () => ipcRenderer.invoke('update-download'),

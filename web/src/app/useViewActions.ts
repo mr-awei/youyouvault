@@ -186,7 +186,13 @@ export function useViewActions({
     if (!(await confirmDialog(i18n.t('kb757ec32', { p0: missingCount })))) return;
     try {
       const res = await api.purgeMissing();
-      showToast(i18n.t('kaa83c02c', { p0: res.removed }));
+      // 首次清理只登记不删：外接盘掉线/网盘未挂载时整库会「同时消失」，
+      // 直接删就把标签备注一起没了。隔一分钟再点才真删。
+      showToast(
+        !res.removed && res.pending
+          ? `已标记 ${res.pending} 条为「疑似缺失」，确认文件真的不在了再点一次清理（约 1 分钟后）`
+          : i18n.t('kaa83c02c', { p0: res.removed })
+      );
     } catch (err) {
       showToast((err as Error).message);
     }

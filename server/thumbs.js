@@ -121,7 +121,7 @@ export function existingPreviewPath(id, notBeforeMs) {
   return isCacheFresh(old, notBeforeMs) ? old : '';
 }
 
-export async function ensurePreview(id, absPath) {
+export async function ensurePreview(id, absPath, known = null) {
   // 只有位图 / GIF / 可从文件里抽预览的设计稿与 RAW 才走 sharp。
   // PDF / Office / 音视频 / 字体等没有可生成的位图，直接返回 null：
   // 以前这里对 xlsx 调 sharp，每次都会打一条 “unsupported image format”，日志被刷爆。
@@ -146,10 +146,14 @@ export async function ensurePreview(id, absPath) {
       await fsp.rename(tmp, target);
       return target;
     }
-    // 长边按源图 1/3 取：解码阶段就能降采样，比固定 1920 快一倍多（见 previewEdgeFor）
-    const meta = await sharp(absPath, { failOn: 'none' })
-      .metadata()
-      .catch(() => null);
+    // 长边按源图 1/3 取：解码阶段就能降采样，比固定 1920 快一倍多（见 previewEdgeFor）。
+    // 路由手里已经有 row.width/height 时直接用，省掉一次文件打开 + demux（冷路径 20~60ms）。
+    const meta =
+      known && Number(known.width) > 0 && Number(known.height) > 0
+        ? known
+        : await sharp(absPath, { failOn: 'none' })
+            .metadata()
+            .catch(() => null);
     const edge = previewEdgeFor(meta?.width, meta?.height);
     await sharp(absPath, { failOn: 'none' })
       .rotate() // 按 EXIF 摆正，和浏览器显示原图的方向一致

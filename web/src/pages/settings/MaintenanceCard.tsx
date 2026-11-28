@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api, desktop, formatSize, quiet } from '../../api';
+import type { IntegrityState } from '../../api/types';
 import { confirmDialog } from '../../components/Dialogs';
 import Card from './Card';
 import i18n from '../../i18n';
@@ -58,6 +59,11 @@ async function cleanRowOrphansFlow(
  */
 export default function MaintenanceCard({ onLibraryChanged, onToast }: Props) {
   const [status, setStatus] = useState<Status | null>(null);
+  /** 实时性能快照：4s 轮询一次，够看出「现在是在加速还是在降档」，又不至于自己变成负担 */
+  const [perf, setPerf] = useState<Awaited<ReturnType<typeof api.perf>> | null>(null);
+  /** 软件完整性：文件被安全软件隔离时看这里（缺失/损坏清单 + 一键修复） */
+  const [integrity, setIntegrity] = useState<IntegrityState | null>(null);
+  const [integrityBusy, setIntegrityBusy] = useState<'' | 'verify' | 'repair'>('');
   const [busy, setBusy] = useState('');
   const [missing, setMissing] = useState<{ count: number; ids: number[] } | null>(null);
   const [clip, setClip] = useState<{
@@ -83,6 +89,34 @@ export default function MaintenanceCard({ onLibraryChanged, onToast }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // 性能快照轮询：只在设置页打开时跑，4s 一次足够看出升降档
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      api
+        .perf()
+        .then((p) => {
+          if (alive) setPerf(p);
+        })
+        .catch(quiet);
+    };
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  // 完整性只读上次结果（不重新扫盘）：进设置页不该顺手背一次几万文件的磁盘校验
+  useEffect(() => {
+    const p = desktop?.integrityState?.();
+    if (!p) return;
+    p.then((r) => {
+      if (r?.state) setIntegrity(r.state);
+    }).catch(quiet);
+  }, []);
 
   /** 统一包一层忙碌态，避免同一动作被连点两次 */
   const run = async (tag: string, fn: () => Promise<unknown>) => {
@@ -295,13 +329,69 @@ export default function MaintenanceCard({ onLibraryChanged, onToast }: Props) {
     });
   };
 
+  /** 立即校验：真读一遍磁盘，只在用户主动点击时跑，别拿去轮询 */
+  const verifyIntegrity = async () => {
+    if (integrityBusy) return;
+    setIntegrityBusy('verify');
+    try {
+      const r = await desktop?.integrityVerify?.();
+      if (r?.state) setIntegrity(r.state);
+      const bad = (r?.state?.missing.length ?? 0) + (r?.state?.corrupted.length ?? 0);
+      onToast(
+        bad ? i18n.t('k3072867e', { p0: bad }) : i18n.t('k735ce80d'),
+        bad ? 'error' : 'info',
+      );
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setIntegrityBusy('');
+    }
+  };
+
+  /**
+   * 一键修复：走热更通道补文件。补包要联网下载，所以先讲清「下什么、不执行什么」，
+   * 别让用户以为点了就会静默跑 exe —— 那正是安全软件最敏感的行为。
+   */
+  const repairIntegrity = async () => {
+    if (integrityBusy) return;
+    const bad = (integrity?.missing.length ?? 0) + (integrity?.corrupted.length ?? 0);
+    if (bad) {
+      const ok = await confirmDialog(i18n.t('k93865951', { p0: bad }), {
+        detail: i18n.t('k98dda1b6'),
+      });
+      if (!ok) return;
+    }
+    setIntegrityBusy('repair');
+    try {
+      const r = await desktop?.integrityRepair?.();
+      if (r?.state) setIntegrity(r.state);
+      const fix = r?.fix;
+      onToast(fix?.note || i18n.t('k5f24644e'), fix && fix.ok === false ? 'error' : 'info');
+    } catch (err) {
+      onToast((err as Error).message, 'error');
+    } finally {
+      setIntegrityBusy('');
+    }
+  };
+
   const busyTitle = busy ? i18n.t('k2cbab215') : undefined;
+  const integrityBad = (integrity?.missing.length ?? 0) + (integrity?.corrupted.length ?? 0);
 
   return (
     <Card
       title={i18n.t('k3bf2da95')}
       desc={i18n.t('kd6d3f5e1')}
     >
+      {perf && (
+        <div className="hint" style={{ marginBottom: 10 }}>
+          性能自适应：整机 CPU {perf.sysPct}% · 本进程 {perf.cpuPct}% · 空闲内存 {perf.memFreePct}% · 图像并发{' '}
+          {perf.budget}/{perf.max}（预览 {perf.image.preview} · 缩略图 {perf.image.thumb}）
+          {perf.level === 'hot' ? ' · 已降档，优先保证界面流畅' : ''}
+          {perf.thumbs.pending + perf.previews.pending > 0
+            ? ` · 待处理 ${perf.thumbs.pending + perf.previews.pending} 张`
+            : ''}
+        </div>
+      )}
       {status ? (
         <div className="maint-grid">
           <div>
@@ -469,6 +559,72 @@ export default function MaintenanceCard({ onLibraryChanged, onToast }: Props) {
           </button>
         </div>
       </div>
+
+      {/* 软件完整性：文件被安全软件隔离 / 写坏时，用户自己能看见并补回 */}
+      {desktop?.integrityState && (
+        <div className="maint-missing" style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.9 }}>
+            <b style={{ color: 'var(--text)' }}>{i18n.t('ka1860fad')}</b>
+            {i18n.t('k2683a2bd')}
+            {integrity
+              ? integrity.reason
+                ? ` · ${integrity.reason}`
+                : ` · ${i18n.t('ke55cb2e9', { p0: integrity.checked })}${
+                    integrity.ok
+                      ? ''
+                      : ` · ${i18n.t('k8fbc57d5', { p0: integrity.missing.length, p1: integrity.corrupted.length })}`
+                  }${integrity.at ? ` · ${new Date(integrity.at).toLocaleString()}` : ''}`
+              : ` · ${i18n.t('ke35206c6')}`}
+          </div>
+          {integrityBad > 0 && (
+            <div className="hint" style={{ marginTop: 8 }}>
+              {[...(integrity?.missing ?? []), ...(integrity?.corrupted ?? [])]
+                .slice(0, 3)
+                .map((f) => (
+                  <div key={f.path} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {f.path}
+                  </div>
+                ))}
+              {integrityBad > 3 && <div>…</div>}
+            </div>
+          )}
+          {integrityBad > 0 && (
+            <div className="hint" style={{ marginTop: 6, lineHeight: 1.8 }}>
+              {i18n.t('k1ea9c48e')}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            <button
+              className="btn sm"
+              disabled={!!integrityBusy || !!busy}
+              title={i18n.t('k2683a2bd')}
+              onClick={() => void verifyIntegrity()}
+            >
+              {integrityBusy === 'verify' ? i18n.t('k80feea71') : i18n.t('kaddea366')}
+            </button>
+            <button
+              className="btn sm primary"
+              disabled={!!integrityBusy || !!busy || !integrityBad}
+              title={integrityBad ? i18n.t('k3072867e', { p0: integrityBad }) : i18n.t('k5f24644e')}
+              onClick={() => void repairIntegrity()}
+            >
+              {integrityBusy === 'repair' ? i18n.t('kc7b81d19') : i18n.t('k14d92338')}
+            </button>
+            {/* 被安全软件隔离时，用户得先能看见安装目录才谈得上加信任 */}
+            <button
+              className="btn sm ghost"
+              disabled={!desktop?.openAppDir}
+              title={i18n.t('k1ea9c48e')}
+              onClick={async () => {
+                const err = await desktop?.openAppDir?.('install');
+                if (err) onToast(err, 'error');
+              }}
+            >
+              {i18n.t('k4d5dfb6e')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="maint-missing" style={{ marginTop: 12 }}>
         <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.9 }}>

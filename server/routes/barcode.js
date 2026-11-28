@@ -13,10 +13,13 @@ import { db, getActiveLibrary, getLibraryGeneration } from '../db.js';
 import { ensureFolderUnderParent, linkImageToFolder } from '../folders.js';
 import { ingest, setTags } from '../library.js';
 import { assertWritableDir } from '../lib/safe-path.js';
+import { decodeHeifFile, heifSharp } from '../lib/heif.js';
 import { naturalCompare, naturalSort, safeCodeName, scanDir, ScanCancelledError } from '../lib/barcode-split.js';
 import { suggestDateFolder } from '../lib/barcode-naming.js';
 
 const RASTER = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif']);
+/** sharp 自带 libheif 只有 AV1 解码，HEVC（iPhone 的 HEIC）必须走 WASM */
+const HEIC_EXT = new Set(['.heic', '.heif']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -247,12 +250,48 @@ async function listSubfolders(dir) {
  * 手机竖拍常见 EXIF 方向 5–8，元数据里的宽高是反的，必须交换后再判断 1:1。
  */
 async function imageSize(abs) {
-  const meta = await sharp(abs, { failOn: 'none' }).metadata();
-  let width = Number(meta.width || 0);
-  let height = Number(meta.height || 0);
-  const orientation = Number(meta.orientation || 1);
-  if (orientation >= 5 && orientation <= 8) [width, height] = [height, width];
-  return { width, height };
+  try {
+    const meta = await sharp(abs, { failOn: 'none' }).metadata();
+    let width = Number(meta.width || 0);
+    let height = Number(meta.height || 0);
+    const orientation = Number(meta.orientation || 1);
+    if (orientation >= 5 && orientation <= 8) [width, height] = [height, width];
+    if (width && height) return { width, height };
+  } catch {
+    /* 交给下面的 HEIF 兜底：iPhone 的 HEIC 在 sharp 里根本没有解码器 */
+  }
+  const heif = await decodeHeifFile(abs);
+  if (heif?.width && heif.height) return { width: heif.width, height: heif.height };
+  return { width: 0, height: 0 };
+}
+
+/**
+ * 裁剪并原地覆盖。HEIC 单独走一条路：sharp 编不出 HEVC，写回 .heic 必失败，
+ * 所以用 WASM 解码后落成同名 .jpg（后续编号/入库/上传都认 jpg）。
+ * @returns {Promise<string>} 最终文件名（可能是换了扩展名的 jpg）
+ */
+async function cropAndReplace(abs, left, top, width, height, tag) {
+  const ext = path.extname(abs).toLowerCase();
+  const dir = path.dirname(abs);
+  if (HEIC_EXT.has(ext)) {
+    const img = await heifSharp(abs);
+    if (!img) throw new Error('HEIC 解码失败，请手动裁剪这张图');
+    const out = path.join(dir, `${path.basename(abs, path.extname(abs))}.jpg`);
+    const tmp = path.join(dir, `.crop-${Date.now()}-${tag}.jpg`);
+    try {
+      await img.extract({ left, top, width, height }).jpeg({ quality: 92 }).toFile(tmp);
+      await fsp.rm(abs, { force: true });
+      await fsp.rename(tmp, out);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true });
+      throw err;
+    }
+    return path.basename(out);
+  }
+  const tmp = path.join(dir, `.crop-${Date.now()}-${tag}${ext}`);
+  await sharp(abs, { failOn: 'none' }).rotate().extract({ left, top, width, height }).toFile(tmp);
+  await replaceImage(tmp, abs);
+  return path.basename(abs);
 }
 
 /** 允许子目录的相对路径（a/b/1.jpg）：递归列出的图片要能原样回读 */
@@ -712,7 +751,9 @@ export function register(app, ctx) {
           }
           try {
             const { width, height } = await imageSize(abs);
-            if (!width || !height) errors.push({ file: String(name), error: '读不到图片尺寸' });
+            // 读不到尺寸不能算「通过」：HEIC 以前就是这样被静默放行的，
+            // 到点裁剪才必然失败。归进未通过，让用户在检查这一步就看到。
+            if (!width || !height) notSquare.push({ file: String(name), width: 0, height: 0, unknown: true });
             else if (width !== height) notSquare.push({ file: String(name), width, height });
           } catch (err) {
             errors.push({ file: String(name), error: err instanceof Error ? err.message : String(err) });
@@ -769,14 +810,8 @@ export function register(app, ctx) {
             if (width === side && height === side) continue;
             const left = Math.floor((width - side) / 2);
             const top = Math.floor((height - side) / 2);
-            const ext = path.extname(abs).toLowerCase();
-            const tmp = path.join(dir, `.crop-${Date.now()}-${cropped.length}${ext}`);
-            await sharp(abs, { failOn: 'none' })
-              .rotate()
-              .extract({ left, top, width: side, height: side })
-              .toFile(tmp);
-            await replaceImage(tmp, abs);
-            cropped.push(String(name));
+            const finalName = await cropAndReplace(abs, left, top, side, side, cropped.length);
+            cropped.push(finalName);
           } catch (err) {
             errors.push({ file: String(name), error: err instanceof Error ? err.message : String(err) });
           }
@@ -822,14 +857,9 @@ export function register(app, ctx) {
           const top = Math.round(y * height);
           const cw = Math.max(1, Math.min(width - left, Math.round(w * width)));
           const ch = Math.max(1, Math.min(height - top, Math.round(h * height)));
-          const ext = path.extname(abs).toLowerCase();
-          const tmp = path.join(dir, `.crop-${Date.now()}-${items.length}${ext}`);
-          await sharp(abs, { failOn: 'none' })
-            .rotate()
-            .extract({ left, top, width: cw, height: ch })
-            .toFile(tmp);
-          await replaceImage(tmp, abs);
-          items.push({ code, file, cropped: true, width: cw, height: ch });
+          // HEIC 会被落成同名 .jpg，所以返回的是最终文件名
+          const finalName = await cropAndReplace(abs, left, top, cw, ch, items.length);
+          items.push({ code, file: finalName, cropped: true, width: cw, height: ch });
         } catch (err) {
           items.push({ code, file, cropped: false, error: err instanceof Error ? err.message : String(err) });
         }
@@ -938,6 +968,8 @@ export function register(app, ctx) {
         }
         const errors = [];
         const temps = [];
+        /** 已经改成最终名的目标文件：失败回滚时得先删掉，否则还原会覆盖成旧图 */
+        const done = [];
         const stamp = Date.now();
         // 两段式改名：先全部改成临时名，避免 1.jpg 已存在时互相覆盖。
         // 源里可能有多级子目录：最终都落到编码夹根（1.jpg…N.jpg），保证入库/上传的顺序唯一可靠
@@ -950,13 +982,24 @@ export function register(app, ctx) {
           }
           for (let i = 0; i < temps.length; i++) {
             const target = `${i + 1}${path.extname(temps[i].name).toLowerCase()}`;
-            await fsp.rename(temps[i].tmp, path.join(dir, target));
+            const abs = path.join(dir, target);
+            await fsp.rename(temps[i].tmp, abs);
+            done.push(abs);
             temps[i].tmp = '';
           }
           // 图片都提到根了，把空出来的子目录清掉，别在输出里留下空壳
           await pruneEmptyDirs(dir);
         } catch (err) {
           errors.push({ file: '', error: err instanceof Error ? err.message : String(err) });
+          // 先删掉本次已经落成的最终名（1.jpg…）：它们就是这次改名造出来的，
+          // 不删的话下面把原名还原回去时，`1.jpg → 1.jpg` 会把刚写好的新图盖成旧图
+          for (const abs of done) {
+            try {
+              await fsp.rm(abs, { force: true });
+            } catch {
+              /* 删不掉就继续，至少临时文件还能还原 */
+            }
+          }
           // 尽力恢复：还没落到最终名的临时文件改回原名
           for (const t of temps) {
             if (!t.tmp) continue;

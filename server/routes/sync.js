@@ -13,6 +13,7 @@ import { DATA_DIR } from '../config.js';
 import { db } from '../db.js';
 import { getActiveLibrary } from '../libraries.js';
 import { backupLibrary, restoreLibrary } from '../lib/transfer.js';
+import { assertWritableDir } from '../lib/safe-path.js';
 import {
   SYNC_FORMAT,
   SYNC_VERSION,
@@ -69,7 +70,33 @@ function localFingerprint() {
   } catch {
     /* 旧库可能还没有文件夹表 */
   }
-  return fingerprintOf({ images: Number(a.c || 0), maxImage: Number(a.m || 0), maxOp: ops, folders });
+  // 内容摘要：备注/标签/收藏、清单、文件夹名这些改动都不会写 op_log，
+  // 只看行数与前缀会判成「未变化」，发布直接返回 0 字节。
+  let content;
+  try {
+    const img = db
+      .prepare(
+        'SELECT COALESCE(SUM(LENGTH(title) + LENGTH(tags) + LENGTH(keyword) + favorite), 0) AS s FROM images'
+      )
+      .get();
+    const pl = db
+      .prepare("SELECT COUNT(*) AS c, COALESCE(MAX(updated_at), '') AS m FROM playlists")
+      .get();
+    const fd = db
+      .prepare("SELECT COUNT(*) AS c, COALESCE(MAX(updated_at), '') AS m FROM folders")
+      .get();
+    content = [Number(img?.s || 0), Number(pl?.c || 0), String(pl?.m || ''), Number(fd?.c || 0), String(fd?.m || '')].join('/');
+  } catch {
+    /* 旧库缺表：退回旧口径，至少不会因为读不到而发布失败 */
+    content = 'legacy';
+  }
+  return fingerprintOf({
+    images: Number(a.c || 0),
+    maxImage: Number(a.m || 0),
+    maxOp: ops,
+    folders,
+    content,
+  });
 }
 
 /**
@@ -145,17 +172,22 @@ export function register(app, ctx) {
         writeState({ ...st, syncDir: '' });
         return res.json({ ok: true, enabled: false, note: '已关闭同步（同步文件夹里的快照保留）' });
       }
-      if (!path.isAbsolute(raw) || raw.includes('..')) {
-        return res.status(400).json({ error: '同步文件夹必须是绝对路径' });
+      // 和导入/备份走同一道闸：光判「绝对路径 + 不含 ..」不足以挡住
+      // C:\Windows\System32、启动目录这类地方 —— 发布时我们要往里写 gallery.db
+      let dir;
+      try {
+        dir = assertWritableDir(raw, '同步文件夹');
+      } catch (err) {
+        return res.status(400).json({ error: err?.message || String(err) });
       }
       try {
-        fs.mkdirSync(raw, { recursive: true });
-        fs.accessSync(raw, fs.constants.W_OK);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.accessSync(dir, fs.constants.W_OK);
       } catch (err) {
         return res.status(400).json({ error: `同步文件夹不可写：${err?.message || err}` });
       }
-      writeState({ ...st, syncDir: raw });
-      res.json({ ok: true, enabled: true, syncDir: raw });
+      writeState({ ...st, syncDir: dir });
+      res.json({ ok: true, enabled: true, syncDir: dir });
     })
   );
 

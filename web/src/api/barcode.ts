@@ -91,8 +91,8 @@ export interface BarcodeRatioItemResult {
   code: string;
   dir: string;
   total: number;
-  /** 不是 1:1 的图片；eBay 必须为 1:1 */
-  notSquare: { file: string; width: number; height: number }[];
+  /** 不是 1:1 的图片；eBay 必须为 1:1。unknown=true 表示读不到尺寸（如 HEIC 解码失败） */
+  notSquare: { file: string; width: number; height: number; unknown?: boolean }[];
   errors: { file: string; error: string }[];
 }
 

@@ -3,6 +3,11 @@
 import * as lib from '../library.js';
 import { db, withTransaction } from '../db.js';
 
+/** 只有唯一约束冲突才是「同名清单」，其余错误（BUSY / 磁盘满）要如实透出 */
+function isUniqueError(err) {
+  return /UNIQUE constraint failed/i.test(String(err?.message || ''));
+}
+
 export function register(app, ctx) {
   const { asyncRoute } = ctx;
 
@@ -20,18 +25,20 @@ export function register(app, ctx) {
   app.post(
     '/api/playlists',
     asyncRoute(async (req, res) => {
-      const name = String(req.body?.name || '').trim();
+      const name = String(req.body?.name || '').trim().slice(0, 200);
       if (!name) return res.status(400).json({ error: '清单名称不能为空' });
       const now = new Date().toISOString();
       try {
         db.prepare('INSERT INTO playlists(name, description, created_at, updated_at) VALUES (?, ?, ?, ?)').run(
           name,
-          String(req.body?.description || ''),
+          String(req.body?.description || '').slice(0, 2000),
           now,
           now
         );
-      } catch {
-        return res.status(400).json({ error: '已存在同名清单' });
+      } catch (err) {
+        // 只有唯一约束才是「同名」；磁盘满 / 数据库 BUSY 也报同名会把用户引到改名的错路上
+        if (isUniqueError(err)) return res.status(400).json({ error: '已存在同名清单' });
+        return res.status(500).json({ error: `新建清单失败：${err?.message || err}` });
       }
       res.json({ ok: true, playlists: listPlaylists() });
     })
@@ -45,7 +52,7 @@ export function register(app, ctx) {
         return res.status(404).json({ error: '清单不存在' });
       }
       if (req.body?.name !== undefined) {
-        const name = String(req.body.name).trim();
+        const name = String(req.body.name).trim().slice(0, 200);
         // 空名会让侧栏出现一条看不见的清单，和新建接口一样拒掉
         if (!name) return res.status(400).json({ error: '清单名称不能为空' });
         try {
@@ -54,13 +61,14 @@ export function register(app, ctx) {
             new Date().toISOString(),
             id
           );
-        } catch {
-          return res.status(400).json({ error: '已存在同名清单' });
+        } catch (err) {
+          if (isUniqueError(err)) return res.status(400).json({ error: '已存在同名清单' });
+          return res.status(500).json({ error: `重命名失败：${err?.message || err}` });
         }
       }
       if (req.body?.description !== undefined) {
         db.prepare('UPDATE playlists SET description = ?, updated_at = ? WHERE id = ?').run(
-          String(req.body.description),
+          String(req.body.description).slice(0, 2000),
           new Date().toISOString(),
           id
         );

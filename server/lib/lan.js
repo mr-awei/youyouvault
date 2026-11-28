@@ -762,6 +762,16 @@ export function buildLanApp(tokenOrGetter) {
     })
   );
 
+  /**
+   * 单图接口也要过隐私锁：列表里被过滤掉的素材，不能靠猜 id 从 thumb/preview/file 取回来。
+   * 与列表共用 hiddenImagesClause，保证「列表看不到 = 单图也取不到」。
+   */
+  const lanVisibleImage = (id) => {
+    const hidden = hiddenImagesClause();
+    const sql = `SELECT 1 AS ok FROM images WHERE id = ?${hidden ? ` AND ${hidden.sql}` : ''}`;
+    return !!db.prepare(sql).get(id, ...(hidden ? hidden.params : []));
+  };
+
   // 只读浏览：分页列表 + 缩略图。两边都套隐私锁与堆叠口径，和桌面端一致。
   app.get('/api/lan/images', (req, res) => {
     try {
@@ -802,6 +812,8 @@ export function buildLanApp(tokenOrGetter) {
     if (!Number.isFinite(id)) return res.status(400).json({ error: '素材 id 无效' });
     // 只读链接不能靠猜 id 拿到范围外的缩略图：列表和单图必须用同一道闸
     if (!shareAllowsImage(req.lanShare, id)) return res.status(403).json({ error: '该素材不在此分享链接范围内' });
+    // 隐私夹里的素材对外部访客不可见：列表已过滤，单图接口不能靠猜 id 绕回来
+    if (!lanVisibleImage(id)) return res.status(404).json({ error: '素材不存在' });
     const row = lib.getImage(id);
     if (!row) return res.status(404).json({ error: '素材不存在' });
     // 有非破坏操作链：分享出去也要看到成品构图，不能给原图缩略图
@@ -852,6 +864,8 @@ export function buildLanApp(tokenOrGetter) {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: '素材 id 无效' });
     if (!shareAllowsImage(req.lanShare, id)) return res.status(403).json({ error: '该素材不在此分享链接范围内' });
+    // 隐私夹里的素材对外部访客不可见：列表已过滤，单图接口不能靠猜 id 绕回来
+    if (!lanVisibleImage(id)) return res.status(404).json({ error: '素材不存在' });
     const row = lib.getImage(id);
     if (!row || !fs.existsSync(row.abs_path)) return res.status(404).json({ error: '素材不存在' });
     if (Number(row.edit_ops_count) > 0) {
@@ -863,7 +877,7 @@ export function buildLanApp(tokenOrGetter) {
       }
     }
     const hit = existingPreviewPath(id, mtimeOf(row.abs_path));
-    const file = hit || (await ensurePreview(id, row.abs_path));
+    const file = hit || (await ensurePreview(id, row.abs_path, row));
     if (!file || !fs.existsSync(file)) return res.status(404).json({ error: '预览生成失败' });
     res.set('Cache-Control', 'private, max-age=3600');
     return res.sendFile(path.resolve(file), { dotfiles: 'allow' }, (err) => {
@@ -876,6 +890,8 @@ export function buildLanApp(tokenOrGetter) {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: '素材 id 无效' });
     if (!shareAllowsImage(req.lanShare, id)) return res.status(403).json({ error: '该素材不在此分享链接范围内' });
+    // 隐私夹里的素材对外部访客不可见：列表已过滤，单图接口不能靠猜 id 绕回来
+    if (!lanVisibleImage(id)) return res.status(404).json({ error: '素材不存在' });
     if (req.lanShare && req.lanShare.allowDownload === false) {
       return res.status(403).json({ error: '这个分享链接不允许下载原图' });
     }

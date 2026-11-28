@@ -87,6 +87,17 @@ export interface HotfixState {
   apply: 'next' | 'now' | 'manual';
 }
 
+/** 完整性自检结果：missing/corrupted 只列前 20 条，够定位问题即可 */
+export interface IntegrityState {
+  ok: boolean;
+  version: string;
+  checked: number;
+  missing: { path: string }[];
+  corrupted: { path: string; reason?: string }[];
+  at: string;
+  reason?: string;
+}
+
 export interface DesktopAPI {
   isDesktop: boolean;
   pickFolder: () => Promise<string | null>;
@@ -95,6 +106,14 @@ export interface DesktopAPI {
   hotfixCheck?: () => Promise<{ ok: boolean; updated: boolean; seq?: number; notes?: string; error?: string }>;
   hotfixApply?: () => Promise<{ applied: boolean; seq?: number; error?: string }>;
   hotfixImport?: () => Promise<{ ok: boolean; seq?: number; notes?: string; error?: string }>;
+  /** 软件完整性自检：读缓存 / 立即校验 / 尝试修复（文件被安全软件隔离时） */
+  integrityState?: () => Promise<{ ok: boolean; state: IntegrityState | null }>;
+  integrityVerify?: () => Promise<{ ok: boolean; state: IntegrityState | null }>;
+  integrityRepair?: () => Promise<{
+    ok: boolean;
+    fix: { ok: boolean; mode: 'hotfix' | 'installer' | 'none'; seq?: number; note: string };
+    state: IntegrityState | null;
+  }>;
   openFolder: (path: string) => Promise<string | null>;
   /** 打开崩溃转储目录（桌面端） */
   openCrashDir?: () => Promise<string>;
@@ -102,8 +121,8 @@ export interface DesktopAPI {
   openLogDir?: () => Promise<string>;
   /** 导出诊断包（日志 + 环境 + 崩溃清单，密钥已打码） */
   exportDiagnostics?: () => Promise<{ ok: boolean; path?: string; bytes?: number; canceled?: boolean; error?: string }>;
-  /** 打开程序自己的目录：userData / logs / crashDumps（路径在主进程解析，渲染层只给名字） */
-  openAppDir?: (key: 'userData' | 'logs' | 'crashDumps') => Promise<string>;
+  /** 打开程序自己的目录：userData / logs / crashDumps / install（路径在主进程解析，渲染层只给名字） */
+  openAppDir?: (key: 'userData' | 'logs' | 'crashDumps' | 'install') => Promise<string>;
   revealFile: (path: string) => Promise<boolean>;
   download: (url: string) => Promise<boolean>;
   /** 多窗口浏览：再开一个窗口看同一份图库 */

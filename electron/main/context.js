@@ -37,6 +37,7 @@
  * @property {Record<string, string>} registeredHotkeys 已成功注册的全局快捷键（键名 → 加速键）
  * @property {Record<string, string>} failedHotkeys 候选键全被占用的（键名 → 试过的候选键串）
  * @property {boolean} shellImporting 「用图库打开」正在导入
+* @property {{ seq: number, notes: string } | null} hotfixApplied 本次启动刚换入的热更（启动完成后提示一次）
  */
 
 /** @type {AppCtx} */
@@ -72,4 +73,6 @@ export const ctx = {
   failedHotkeys: {},
 
   shellImporting: false,
+
+  hotfixApplied: null,
 };

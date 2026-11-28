@@ -19,6 +19,7 @@ import sharp from 'sharp';
 import { db, getSettings } from '../db.js';
 import { thumbBucketDir, ensureThumbDirFor } from '../thumbs.js';
 import { logOp } from '../oplog.js';
+import { imageBudget } from './perf-guard.js';
 import { cropRaw, effectiveSize, rotateRaw } from './nd-geometry.js';
 
 // 纯几何运算放在 nd-geometry.js（可直接单测），这里转出手给路由/导出复用
@@ -309,11 +310,60 @@ export async function renderOps(row, ops, opts = {}) {
   return { data: r.data, width: r.info.width, height: r.info.height };
 }
 
+/* --------------------- 渲染并发闸门 + 同图去重 --------------------- */
+
+/**
+ * 一张带编辑链的图，缩略图/预览/大图三档会被同时请求（列表 + 灯箱预取）。
+ * 以前是三个独立的全尺寸解码，且没有并发上限 —— 一屏 120 张能直接开满 CPU。
+ * 现在：同一 (id, kind) 的并发请求合并成一次，总量按 perf-guard 的预算限流。
+ */
+const inflightDerived = new Map();
+const waitingSlots = [];
+let renderingSlots = 0;
+
+function acquireSlot() {
+  if (renderingSlots < imageBudget().derived) {
+    renderingSlots++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => waitingSlots.push(resolve));
+}
+
+function releaseSlot() {
+  const next = waitingSlots.shift();
+  // 直接把名额交接给等待者，renderingSlots 保持不变
+  if (next) next();
+  else renderingSlots = Math.max(0, renderingSlots - 1);
+}
+
 /**
  * 按需生成派生图并返回路径；没有操作链或渲染失败返回 ''（调用方回落到原图）。
  * @param {'thumb'|'preview'|'full'} kind
  */
-export async function ensureDerived(row, kind, attempt = 0) {
+export async function ensureDerived(row, kind) {
+  const id = Number(row?.id);
+  if (!id || !row?.abs_path) return '';
+  const key = `${id}:${kind}`;
+  const running = inflightDerived.get(key);
+  if (running) return running;
+  const task = (async () => {
+    await acquireSlot();
+    try {
+      return await renderDerived(row, kind, 0);
+    } finally {
+      releaseSlot();
+    }
+  })();
+  inflightDerived.set(key, task);
+  try {
+    return await task;
+  } finally {
+    inflightDerived.delete(key);
+  }
+}
+
+/** 真正的渲染；版本竞争重试走自己，不能回到 ensureDerived（否则会等自己死锁） */
+async function renderDerived(row, kind, attempt = 0) {
   const id = Number(row?.id);
   if (!id || !row?.abs_path) return '';
   const format = kind === 'full' ? sourceFormat(row) : 'jpeg';
@@ -339,7 +389,7 @@ export async function ensureDerived(row, kind, attempt = 0) {
   if (!data) return '';
   // 渲染期间操作链又被改了（连续点撤销/追加）：这次结果已经过期，丢掉重来
   if (opsVersion(id) !== ver) {
-    if (attempt < 2) return ensureDerived(row, kind, attempt + 1);
+    if (attempt < 2) return renderDerived(row, kind, attempt + 1);
     return '';
   }
   await ensureThumbDirFor(id);

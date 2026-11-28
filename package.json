@@ -1,10 +1,12 @@
 {
   "name": "tuku-gallery",
   "productName": "youyoutuku",
-  "version": "1.6.4",
+  "version": "1.7.0",
   "private": true,
   "description": "通用本地图片管理工具 — pHash 去重 / 暗色图片库",
-  "author": "图库",
+  "author": {
+    "name": "优优图库"
+  },
   "main": "electron/main.js",
   "type": "module",
   "_comment_mirror": "打包二进制走 npmmirror：GitHub Releases 在部分网络会超时/重置/504。npm 会以 npm_package_config_<key> 注入脚本，@electron/get 与 electron-builder 都能读到。",
@@ -26,10 +28,12 @@
     "desktop:hmr": "electron . --dev-url=http://localhost:5173",
     "mcp": "node server/mcp-server.mjs",
     "import": "node server/scripts/import-local.js",
-    "dist": "vite build && electron-builder",
+    "dist": "vite build && node scripts/gen-integrity.mjs && electron-builder && node scripts/gen-checksums.mjs && node scripts/release-notes.mjs",
     "dist:secure": "node scripts/build-secure.mjs",
     "obfuscate:restore": "node scripts/restore-obfuscated.mjs",
-    "dist:dir": "vite build && electron-builder --dir",
+    "dist:dir": "vite build && node scripts/gen-integrity.mjs && electron-builder --dir",
+    "checksums": "node scripts/gen-checksums.mjs",
+    "notes": "node scripts/release-notes.mjs",
     "license:admin": "node tools/license-admin/server.mjs",
     "license:admin:app": "electron tools/license-admin",
     "license:admin:dist": "node scripts/build-license-admin.mjs",
@@ -97,6 +101,7 @@
   "build": {
     "appId": "com.youyou.tuku.visual",
     "productName": "youyoutuku",
+    "copyright": "Copyright © 2026 优优图库",
     "directories": {
       "output": "release-build",
       "buildResources": "build"
@@ -162,6 +167,7 @@
         }
       ],
       "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
       "signtoolOptions": {
         "signingHashAlgorithms": [
           "sha256"
@@ -193,6 +199,9 @@
       "createStartMenuShortcut": true,
       "shortcutName": "优优图库",
       "uninstallDisplayName": "优优图库",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false,
       "artifactName": "TuKu-Setup-${version}.exe"
     }
   }

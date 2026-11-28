@@ -1,6 +1,7 @@
 // @ts-check
 import { getLibraryGeneration } from '../db.js';
 import * as lib from '../library.js';
+import { imageBudget } from './perf-guard.js';
 
 /**
  * 缩略图后台补全队列。
@@ -14,7 +15,11 @@ import * as lib from '../library.js';
  * 限并发 2 是刻意的：后台补图是「以后会更好」的工作，不该跟用户正在看的东西抢 CPU。
  */
 
-const MAX_CONCURRENT = 2;
+/**
+ * 后台补图并发由 perf-guard 动态给（空闲多开、CPU 热了自动降到 1）。
+ * 这里只留一个硬上限兜底，防止极端机器开出太多 libvips 线程。
+ */
+const MAX_CONCURRENT_CAP = 4;
 /** 用户正在看的卡片可以插队同步生成，但也要有上限，否则一次一屏又能打满 */
 const MAX_SYNC = 3;
 
@@ -104,7 +109,8 @@ async function generate(id) {
 }
 
 function pump() {
-  while (running < MAX_CONCURRENT && queue.length) {
+  const cap = Math.min(MAX_CONCURRENT_CAP, imageBudget().thumb);
+  while (running < cap && queue.length) {
     const id = queue.shift();
     queued.delete(id);
     running++;

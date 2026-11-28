@@ -233,7 +233,7 @@ export function register(app, ctx) {
       let job = previewInflight.get(id);
       if (!job) {
         noteForegroundStart();
-        job = ensurePreview(id, row.abs_path).finally(() => {
+        job = ensurePreview(id, row.abs_path, row).finally(() => {
           previewInflight.delete(id);
           noteForegroundEnd();
         });

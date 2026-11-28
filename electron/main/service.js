@@ -150,6 +150,15 @@ export async function bootService() {
     const parts = [decision.webOverlay ? 'web' : '', decision.env.TUKU_HOTFIX_ENTRY ? 'server' : ''].filter(Boolean);
     console.info(`[hotfix] 启用热更 #${decision.seq}（${parts.join(' + ') || '仅清单'}）`);
   }
+  // 本次启动刚把上次下载的包换进来：这里窗口还没出来，先记下，等启动完成后提示一次。
+  // 下载、换入全程静默，用户不需要点任何按钮。
+  if (decision.promotedSeq) {
+    ctx.hotfixApplied = {
+      seq: Number(decision.promotedSeq),
+      notes: String(decision.manifest?.notes || ''),
+    };
+    console.info(`[hotfix] 本次启动已静默换入 #${decision.promotedSeq}`);
+  }
 
   try {
     const info = await startHost(decision);

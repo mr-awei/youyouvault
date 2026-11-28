@@ -11,6 +11,8 @@ import * as lib from '../library.js';
 import { getMissingCached, importLocalImages, readImportJob } from '../importer.js';
 import { existingThumbPath } from '../thumbs.js';
 import { thumbQueueStats, retryFailedThumbs, retryFailedThumb, clearThumbFailures } from '../lib/thumb-queue.js';
+import { previewQueueStats } from '../lib/preview-queue.js';
+import { imageBudget, perfSnapshot } from '../lib/perf-guard.js';
 import { thumbMissingCount } from '../lib/thumb-rebuild.js';
 import { computePHash } from '../phash.js';
 import { probeMedia } from '../lib/media-probe.js';
@@ -517,6 +519,20 @@ export function register(app, ctx) {
   app.get('/api/thumbs/status', (_req, res) => {
     const q = thumbQueueStats();
     res.json({ ok: true, ...q, missing: thumbMissingCount() });
+  });
+
+  /**
+   * 实时性能快照：CPU / 空闲内存 / 当前并发预算，以及两条图像队列的积压。
+   * 设置页与诊断面板用它说明「为什么现在快/慢」，也方便用户确认软件没有把机器吃满。
+   */
+  app.get('/api/perf', (_req, res) => {
+    res.json({
+      ok: true,
+      ...perfSnapshot(),
+      image: imageBudget(),
+      thumbs: thumbQueueStats(),
+      previews: previewQueueStats(),
+    });
   });
 
   // 不传 id = 全量重试；传 id = 只重试这一张（面板失败明细里的逐条按钮）

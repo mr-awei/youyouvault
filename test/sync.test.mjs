@@ -70,10 +70,12 @@ test('同步基线：只拉取过也算有基线，全新机器不报冲突', ()
   assert.equal(hasLocalBaseline({}), false);
 });
 
-test('本机指纹：四元组变化都会被识别', () => {
-  const a = fingerprintOf({ images: 12, maxImage: 12, maxOp: 4, folders: 2 });
-  assert.equal(a, '12:12:4:2');
-  assert.notEqual(a, fingerprintOf({ images: 12, maxImage: 12, maxOp: 5, folders: 2 }));
-  assert.notEqual(a, fingerprintOf({ images: 13, maxImage: 13, maxOp: 4, folders: 2 }));
-  assert.equal(fingerprintOf({}), '0:0:0:0');
+test('本机指纹：行数 / 撤销栈 / 内容摘要变化都会被识别', () => {
+  const a = fingerprintOf({ images: 12, maxImage: 12, maxOp: 4, folders: 2, content: 100 });
+  assert.equal(a, '12:12:4:2:100');
+  assert.notEqual(a, fingerprintOf({ images: 12, maxImage: 12, maxOp: 5, folders: 2, content: 100 }));
+  assert.notEqual(a, fingerprintOf({ images: 13, maxImage: 13, maxOp: 4, folders: 2, content: 100 }));
+  // 只改备注/标签：前四位一模一样，只有内容摘要能区分
+  assert.notEqual(a, fingerprintOf({ images: 12, maxImage: 12, maxOp: 4, folders: 2, content: 101 }));
+  assert.equal(fingerprintOf({}), '0:0:0:0:0');
 });

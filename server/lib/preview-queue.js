@@ -3,6 +3,7 @@ import { getLibraryGeneration } from '../db.js';
 import * as lib from '../library.js';
 import { ensurePreview, existingPreviewPath } from '../thumbs.js';
 import { kindOfPath } from './media-kind.js';
+import { imageBudget } from './perf-guard.js';
 
 /**
  * 预览图（灯箱大图）后台预取队列。
@@ -16,11 +17,11 @@ import { kindOfPath } from './media-kind.js';
  */
 
 /**
- * 并发 2：单张 150~500ms，一页 120 张串行要 20~60 秒，用户点到「还没轮到」的图
- * 就是那 1~2 秒模糊的来源。两路并发在 SSD + 多核上不会互相拖慢（libvips 本来
- * 就多线程），整页预取时间直接减半；再高就会和前台请求抢 CPU，得不偿失。
+ * 并发不再写死：由 perf-guard 按机器实时余力给出（见 imageBudget()）。
+ * 空闲时多开几路把整页预取提前做完，CPU 一热就自动降到 1 路让路。
+ * 这里的 CAP 只是兜底，防止极端机器上开得太猛。
  */
-const MAX_CONCURRENT = 2;
+const MAX_CONCURRENT_CAP = 4;
 /** 队列上限：一页 120 张最多，再多也没意义（用户根本翻不到那么快） */
 const MAX_PENDING = 160;
 
@@ -75,13 +76,14 @@ async function generate(id) {
   const row = lib.getImage(id);
   if (!row || !row.abs_path || !isPreviewable(row)) return '';
   if (getLibraryGeneration() !== gen) return '';
-  return ensurePreview(id, row.abs_path);
+  return ensurePreview(id, row.abs_path, row);
 }
 
 function pump() {
   // 前台在跑就等它跑完：noteForegroundEnd 里会再叫一次
   if (fg > 0) return;
-  while (running < MAX_CONCURRENT && queue.length) {
+  const cap = Math.min(MAX_CONCURRENT_CAP, imageBudget().preview);
+  while (running < cap && queue.length) {
     const id = queue.shift();
     queued.delete(id);
     running++;

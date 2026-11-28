@@ -107,7 +107,11 @@ export function apiAuth(req, res, next) {
     }
     return next();
   }
-  if (isSameOrigin(req)) return next();
+  // 同源豁免只留给读请求。Sec-Fetch-Site 只是一个普通请求头，任何本机脚本
+  // （curl -H 'Sec-Fetch-Site: none'）都能带上，拿它当写操作的通行证等于把令牌机制作废；
+  // 读接口保留豁免，是为了浏览器首屏 / <img> / SSE 这些不方便加头的场景。
+  const isRead = QUERY_TOKEN_METHODS.has(String(req.method || 'GET').toUpperCase());
+  if (isRead && isSameOrigin(req)) return next();
   // 端口探测用：无敏感信息，允许匿名
   if (req.path === '/api/health') return next();
   return res.status(401).json({ error: '未授权：缺少或无效的 API 令牌' });

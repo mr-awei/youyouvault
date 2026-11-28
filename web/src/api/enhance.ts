@@ -152,7 +152,27 @@ export const enhanceAPI = {
       method: 'POST',
     }),
   missingFiles: () => request<{ count: number; ids: number[] }>('/api/library/missing'),
-  purgeMissing: () => request<{ ok: boolean; removed: number }>('/api/library/purge-missing', { method: 'POST' }),
+  /** 实时性能快照：并发预算与 CPU/内存占用（设置页展示，用于说明「没把机器吃满」） */
+  perf: () =>
+    request<{
+      ok: boolean;
+      cpuPct: number;
+      /** 整机 CPU 占用（0~100） */
+      sysPct: number;
+      memFreePct: number;
+      cores: number;
+      budget: number;
+      max: number;
+      level: 'cool' | 'warm' | 'hot';
+      image: { preview: number; thumb: number; derived: number; total: number };
+      thumbs: { pending: number; running: number };
+      previews: { pending: number; running: number; fg: number };
+    }>('/api/perf'),
+  /** 第一次调用只登记 pending，确认文件确实不在（隔一会儿再点）才真删 */
+  purgeMissing: () =>
+    request<{ ok: boolean; removed: number; pending?: number }>('/api/library/purge-missing', {
+      method: 'POST',
+    }),
   relocateMissing: () =>
     request<{ ok: boolean; relocated: number; remaining: number; unreadable: number }>(
       '/api/library/relocate-missing',
