@@ -62,15 +62,27 @@ function changelog() {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-    const log = execFileSync('git', ['log', '--no-merges', '--pretty=format:- %s', `${prev}..HEAD`], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      maxBuffer: 4 * 1024 * 1024,
-    }).trim();
+    const log = execFileSync(
+      'git',
+      ['log', '--no-merges', '--pretty=format:%s%x01%b%x02', `${prev}..HEAD`],
+      { cwd: ROOT, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
+    ).trim();
     if (!log) return '';
-    const lines = log.split(/\r?\n/);
+    // 标题一行，提交正文里的「- 条目」缩进成子项：发版说明比一串 commit 标题好读得多
+    // %x01 分隔标题与正文、%x02 分隔提交 —— 少一个分隔符，正文第一段就会被当成下一条标题
+    const lines = [];
+    for (const block of log.split('\u0002')) {
+      const [subjectRaw, bodyRaw = ''] = block.split('\u0001');
+      const subject = (subjectRaw || '').trim();
+      if (!subject) continue;
+      lines.push(`- ${subject}`);
+      for (const line of bodyRaw.split(/\r?\n/)) {
+        const text = line.trim();
+        if (text.startsWith('- ')) lines.push(`  ${text}`);
+      }
+    }
     const clipped = lines.slice(0, 40);
-    return `\n### 本次更新（${prev} → ${refName}）\n\n${clipped.join('\n')}${lines.length > 40 ? `\n- … 另有 ${lines.length - 40} 条提交，见 commit 记录` : ''}\n`;
+    return `\n### 本次更新（${prev} → ${refName}）\n\n${clipped.join('\n')}${lines.length > 40 ? `\n- … 另有 ${lines.length - 40} 条变动，见 commit 记录` : ''}\n`;
   } catch {
     return '';
   }
